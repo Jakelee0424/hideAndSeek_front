@@ -2,6 +2,8 @@
 // 퍼즐 UI 오버레이: 자물쇠 다이얼 + 힌트. openId가 있으면 표시.
 import { useEffect, useState } from "react";
 import { findInteractable, useInteraction } from "@/game/interactables";
+import { sendSolve } from "@/net/stompClient";
+import { useGameStore } from "@/store/gameStore";
 
 export default function PuzzleOverlay() {
   const openId = useInteraction((s) => s.openId);
@@ -42,6 +44,8 @@ export default function PuzzleOverlay() {
 
   function submit() {
     if (digits.join("") === data!.puzzle?.code) {
+      // 서버에 해결 알림(방 전체 동기화) + 로컬 즉시 반영(오프라인에서도 동작)
+      sendSolve(useGameStore.getState().roomId, data!.id);
       markSolved(data!.id);
     } else {
       setError(true);

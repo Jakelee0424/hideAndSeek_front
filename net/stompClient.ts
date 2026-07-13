@@ -67,6 +67,15 @@ export function sendInput(roomId: string, input: InputMessage): void {
   }
 }
 
+export function sendSolve(roomId: string, objectId: string): void {
+  if (client?.connected) {
+    client.publish({
+      destination: `/app/rooms/${roomId}/solve`,
+      body: JSON.stringify({ objectId }),
+    });
+  }
+}
+
 export function disconnect(): void {
   client?.deactivate();
   client = null;

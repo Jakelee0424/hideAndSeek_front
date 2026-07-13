@@ -22,6 +22,13 @@ export interface PlayerState {
 export interface WorldSnapshot {
   tick: number;
   players: PlayerState[];
+  /** 이 방에서 해결된 퍼즐 오브젝트 id(협동 동기화) */
+  solvedIds: string[];
+}
+
+/** 클라 → 서버: 퍼즐 해결 알림 */
+export interface SolveMessage {
+  objectId: string;
 }
 
 /** 클라 → 서버: 입장 */

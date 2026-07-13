@@ -52,6 +52,8 @@ interface InteractionStore {
   open: (id: string) => void;
   close: () => void;
   markSolved: (id: string) => void;
+  /** 서버 스냅샷의 solvedIds를 병합(협동). 실제로 늘어날 때만 갱신. */
+  syncSolved: (ids: string[]) => void;
 }
 
 export const useInteraction = create<InteractionStore>((set, get) => ({
@@ -66,4 +68,13 @@ export const useInteraction = create<InteractionStore>((set, get) => ({
   close: () => set({ openId: null }),
   markSolved: (id) =>
     set((s) => ({ solved: { ...s.solved, [id]: true }, openId: null })),
+
+  syncSolved: (ids) => {
+    const cur = get().solved;
+    const missing = ids.filter((id) => !cur[id]);
+    if (missing.length === 0) return; // 변화 없으면 리렌더 안 함
+    const next = { ...cur };
+    for (const id of missing) next[id] = true;
+    set({ solved: next });
+  },
 }));

@@ -1,6 +1,7 @@
 // stompClient + gameStore + worldState 를 묶는 세션 오케스트레이션.
 // UI는 joinRoom / leaveRoom 만 호출한다.
 import { useGameStore } from "@/store/gameStore";
+import { useInteraction } from "@/game/interactables";
 import { worldState } from "./worldState";
 import * as stomp from "./stompClient";
 
@@ -19,6 +20,8 @@ export function joinRoom(roomId: string, nick: string): string {
         const nicks: Record<string, string> = {};
         for (const p of snap.players) nicks[p.id] = p.nick;
         useGameStore.getState().syncPlayers(ids, nicks);
+        // 퍼즐 해결 상태 협동 동기화
+        if (snap.solvedIds) useInteraction.getState().syncSolved(snap.solvedIds);
       },
     },
   );
