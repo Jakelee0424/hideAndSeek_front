@@ -1,8 +1,13 @@
 "use client";
 // 상호작용 오브젝트 1개. 근접(nearId) 시 발광 하이라이트, 해결(solved) 시 색 변경.
-import { useMemo } from "react";
+// 문은 해결 시 경첩을 기준으로 부드럽게 열린다(useFrame 보간).
+import { useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
+import * as THREE from "three";
 import { useInteraction, type Interactable as InteractableData } from "./interactables";
+
+const DOOR_OPEN_ANGLE = -1.5; // 열렸을 때 경첩 회전(rad)
 
 const COLOR: Record<string, string> = {
   lockbox: "#b45309",
@@ -29,6 +34,19 @@ export default function Interactable({ data }: { data: InteractableData }) {
   const base = COLOR[data.type] ?? "#888";
   const color = solved ? "#22c55e" : base;
   const isDoor = data.type === "door";
+  const hinge = useRef<THREE.Group>(null);
+
+  // 문 열림 모션: 목표 각도로 부드럽게 감쇠 보간
+  useFrame((_, dt) => {
+    if (!isDoor || !hinge.current) return;
+    const target = solved ? DOOR_OPEN_ANGLE : 0;
+    hinge.current.rotation.y = THREE.MathUtils.damp(
+      hinge.current.rotation.y,
+      target,
+      4,
+      dt,
+    );
+  });
 
   const mat = (
     <meshStandardMaterial
@@ -44,10 +62,7 @@ export default function Interactable({ data }: { data: InteractableData }) {
     <group position={data.position}>
       {isDoor ? (
         // 왼쪽 모서리를 경첩으로: 해결(solved) 시 열림
-        <group
-          position={[-0.8, 0, 0]}
-          rotation={[0, solved ? -1.2 : 0, 0]}
-        >
+        <group ref={hinge} position={[-0.8, 0, 0]}>
           <mesh position={[0.8, 0, 0]} castShadow receiveShadow>
             {geo}
             {mat}
