@@ -28,19 +28,37 @@ export default function Interactable({ data }: { data: InteractableData }) {
 
   const base = COLOR[data.type] ?? "#888";
   const color = solved ? "#22c55e" : base;
+  const isDoor = data.type === "door";
+
+  const mat = (
+    <meshStandardMaterial
+      color={color}
+      emissive={near ? "#fde68a" : "#000000"}
+      emissiveIntensity={near ? 0.6 : 0}
+      metalness={0.2}
+      roughness={0.6}
+    />
+  );
 
   return (
     <group position={data.position}>
-      <mesh castShadow receiveShadow>
-        {geo}
-        <meshStandardMaterial
-          color={color}
-          emissive={near ? "#fde68a" : "#000000"}
-          emissiveIntensity={near ? 0.6 : 0}
-          metalness={0.2}
-          roughness={0.6}
-        />
-      </mesh>
+      {isDoor ? (
+        // 왼쪽 모서리를 경첩으로: 해결(solved) 시 열림
+        <group
+          position={[-0.8, 0, 0]}
+          rotation={[0, solved ? -1.2 : 0, 0]}
+        >
+          <mesh position={[0.8, 0, 0]} castShadow receiveShadow>
+            {geo}
+            {mat}
+          </mesh>
+        </group>
+      ) : (
+        <mesh castShadow receiveShadow>
+          {geo}
+          {mat}
+        </mesh>
+      )}
 
       {near && (
         <Html center distanceFactor={10} position={[0, 1.3, 0]}>

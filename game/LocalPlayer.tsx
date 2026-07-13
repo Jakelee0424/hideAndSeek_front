@@ -16,6 +16,7 @@ import {
   INTERACT_RANGE,
   useInteraction,
 } from "./interactables";
+import { resolveCollision } from "./collision";
 
 const SPEED = 6; // m/s
 const CAM_OFFSET = new THREE.Vector3(0, 6, 9);
@@ -63,6 +64,12 @@ export default function LocalPlayer() {
       g.position.x += dx * SPEED * dt;
       g.position.z += dz * SPEED * dt;
       g.rotation.y = Math.atan2(dx, dz);
+
+      // 벽/장애물 충돌 해석(서버와 동일 로직). 문은 해결 시 통과.
+      const solved = useInteraction.getState().solved;
+      const [rx, rz] = resolveCollision(g.position.x, g.position.z, solved);
+      g.position.x = rx;
+      g.position.z = rz;
     }
 
     // idle/walk 전환은 상태가 바뀔 때만 setState
