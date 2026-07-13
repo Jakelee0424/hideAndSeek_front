@@ -1,4 +1,5 @@
 "use client";
+import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import GameMap from "./Map";
 import LocalPlayer from "./LocalPlayer";
@@ -23,8 +24,10 @@ export default function Scene() {
         shadow-camera-bottom={-15}
       />
       <GameMap />
-      <LocalPlayer />
-      <RemotePlayers />
+      <Suspense fallback={null}>
+        <LocalPlayer />
+        <RemotePlayers />
+      </Suspense>
     </Canvas>
   );
 }

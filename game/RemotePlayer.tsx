@@ -1,10 +1,11 @@
 "use client";
-// 원격 플레이어: 서버 스냅샷 목표값(worldState)으로 매 프레임 보간(lerp/slerp).
-// 애니메이션 상태(idle/walk)는 위치 변화량으로 추정 → 걸을 때 바운스.
-import { useRef } from "react";
+// 원격 플레이어: 서버 스냅샷 목표값(worldState)으로 매 프레임 보간(lerp).
+// GLB 캐릭터 + idle/walk는 "보간된 실제 이동 속도"로 판정(스냅샷 간 깜빡임 방지).
+import { useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { worldState } from "@/net/worldState";
+import Character, { type AnimState } from "./Character";
 
 export default function RemotePlayer({
   id,
@@ -13,48 +14,43 @@ export default function RemotePlayer({
   id: string;
   nick: string;
 }) {
-  const ref = useRef<THREE.Mesh>(null);
-  const prev = useRef({ x: 0, z: 0 });
-  const walkPhase = useRef(0);
+  const ref = useRef<THREE.Group>(null);
+  const gPrev = useRef({ x: 0, z: 0 });
+  const wasMoving = useRef(false);
+  const [anim, setAnim] = useState<AnimState>("idle");
 
   useFrame((_, dt) => {
-    const mesh = ref.current;
+    const g = ref.current;
     const entry = worldState.get(id);
-    if (!mesh || !entry) return;
+    if (!g || !entry) return;
 
     const t = entry.target;
     const alpha = 1 - Math.pow(0.001, dt); // 프레임레이트 독립 damping
 
-    // 이동 속도 추정(idle/walk 판정)
-    const moved = Math.hypot(t.position.x - prev.current.x, t.position.z - prev.current.z);
-    const moving = moved > 0.002;
-    prev.current.x = t.position.x;
-    prev.current.z = t.position.z;
+    g.position.x = THREE.MathUtils.lerp(g.position.x, t.position.x, alpha);
+    g.position.z = THREE.MathUtils.lerp(g.position.z, t.position.z, alpha);
+    g.position.y = 0; // 바닥 고정(캐릭터 피트가 y=0)
+    g.rotation.y = lerpAngle(g.rotation.y, t.rotationY, alpha);
 
-    // 서버 y(=스폰 0.5)를 기준으로, 걸을 때만 바운스를 더한다(로컬 플레이어와 동일 기준).
-    mesh.position.lerp(
-      _target.set(
-        t.position.x,
-        t.position.y + (moving ? bounce((walkPhase.current += dt * 12)) : 0),
-        t.position.z,
-      ),
-      alpha,
+    // 보간된 위치의 프레임당 이동량으로 walk 판정
+    const moved = Math.hypot(
+      g.position.x - gPrev.current.x,
+      g.position.z - gPrev.current.z,
     );
-    mesh.rotation.y = lerpAngle(mesh.rotation.y, t.rotationY, alpha);
+    gPrev.current.x = g.position.x;
+    gPrev.current.z = g.position.z;
+    const moving = moved > 0.0015;
+    if (moving !== wasMoving.current) {
+      wasMoving.current = moving;
+      setAnim(moving ? "walk" : "idle");
+    }
   });
 
   return (
-    <mesh ref={ref} castShadow>
-      <capsuleGeometry args={[0.4, 0.8, 8, 16]} />
-      <meshStandardMaterial color="#f472b6" />
-    </mesh>
+    <group ref={ref}>
+      <Character anim={anim} ringColor="#f472b6" nick={nick} />
+    </group>
   );
-}
-
-const _target = new THREE.Vector3();
-
-function bounce(phase: number): number {
-  return Math.abs(Math.sin(phase)) * 0.08;
 }
 
 function lerpAngle(a: number, b: number, t: number): number {

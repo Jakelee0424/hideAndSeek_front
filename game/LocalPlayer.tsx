@@ -1,14 +1,14 @@
 "use client";
 // 로컬 플레이어 컨트롤러:
 //  - WASD 이동(즉시 반영, client-side prediction) + 3인칭 팔로우 카메라
-//  - 애니메이션 상태(idle/walk): 지금은 바운스로 표현. GLTF 캐릭터가 오면
-//    useAnimations(gltf)로 clip을 animState에 따라 재생하도록 교체하면 된다.
+//  - GLB 캐릭터 + idle/walk 애니메이션 상태 전환
 //  - 근접 오브젝트 감지 → 하이라이트, E키로 상호작용(퍼즐 열기)
 //  - 입력을 20Hz로 서버 전송
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useKeyboard } from "./useKeyboard";
+import Character, { type AnimState } from "./Character";
 import { sendInput } from "@/net/stompClient";
 import { useGameStore } from "@/store/gameStore";
 import {
@@ -22,15 +22,18 @@ const CAM_OFFSET = new THREE.Vector3(0, 6, 9);
 const INPUT_HZ = 20;
 
 const _camDesired = new THREE.Vector3();
+const _lookAt = new THREE.Vector3();
 
 export default function LocalPlayer() {
-  const ref = useRef<THREE.Mesh>(null);
+  const ref = useRef<THREE.Group>(null);
   const keys = useKeyboard();
   const seq = useRef(0);
   const acc = useRef(0);
-  const walkPhase = useRef(0);
+  const wasMoving = useRef(false);
+  const [anim, setAnim] = useState<AnimState>("idle");
+  const myNick = useGameStore((s) => s.myNick);
 
-  // E키: 근접한 오브젝트 상호작용(퍼즐 열기)
+  // E키: 근접 오브젝트 상호작용(퍼즐 열기)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "KeyE") return;
@@ -43,10 +46,9 @@ export default function LocalPlayer() {
   }, []);
 
   useFrame((state, dt) => {
-    const mesh = ref.current;
-    if (!mesh) return;
+    const g = ref.current;
+    if (!g) return;
 
-    // 퍼즐이 열려 있으면 이동 잠금
     const locked = useInteraction.getState().openId !== null;
 
     const k = keys.current;
@@ -58,30 +60,29 @@ export default function LocalPlayer() {
     if (moving) {
       dx /= len;
       dz /= len;
-      mesh.position.x += dx * SPEED * dt;
-      mesh.position.z += dz * SPEED * dt;
-      mesh.rotation.y = Math.atan2(dx, dz);
+      g.position.x += dx * SPEED * dt;
+      g.position.z += dz * SPEED * dt;
+      g.rotation.y = Math.atan2(dx, dz);
     }
 
-    // 애니메이션 상태: idle/walk → 걸을 때만 바운스
-    if (moving) {
-      walkPhase.current += dt * 12;
-      mesh.position.y = 0.5 + Math.abs(Math.sin(walkPhase.current)) * 0.08;
-    } else {
-      mesh.position.y = 0.5;
+    // idle/walk 전환은 상태가 바뀔 때만 setState
+    if (moving !== wasMoving.current) {
+      wasMoving.current = moving;
+      setAnim(moving ? "walk" : "idle");
     }
 
     // 카메라 팔로우
-    _camDesired.copy(mesh.position).add(CAM_OFFSET);
+    _camDesired.copy(g.position).add(CAM_OFFSET);
     state.camera.position.lerp(_camDesired, 1 - Math.pow(0.001, dt));
-    state.camera.lookAt(mesh.position);
+    _lookAt.copy(g.position).setY(g.position.y + 1);
+    state.camera.lookAt(_lookAt);
 
     // 근접 오브젝트 감지(사거리 내 최근접)
     let nearId: string | null = null;
     let best = INTERACT_RANGE * INTERACT_RANGE;
     for (const it of INTERACTABLES) {
-      const ex = it.position[0] - mesh.position.x;
-      const ez = it.position[2] - mesh.position.z;
+      const ex = it.position[0] - g.position.x;
+      const ez = it.position[2] - g.position.z;
       const d2 = ex * ex + ez * ez;
       if (d2 < best) {
         best = d2;
@@ -99,16 +100,15 @@ export default function LocalPlayer() {
         sendInput(gs.roomId, {
           seq: seq.current++,
           move: { x: dx, y: 0, z: dz },
-          rotationY: mesh.rotation.y,
+          rotationY: g.rotation.y,
         });
       }
     }
   });
 
   return (
-    <mesh ref={ref} position={[0, 0.5, 0]} castShadow>
-      <capsuleGeometry args={[0.4, 0.8, 8, 16]} />
-      <meshStandardMaterial color="#38bdf8" />
-    </mesh>
+    <group ref={ref} position={[0, 0, 0]}>
+      <Character anim={anim} ringColor="#38bdf8" nick={myNick} />
+    </group>
   );
 }
