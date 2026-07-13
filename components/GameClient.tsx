@@ -2,6 +2,7 @@
 // Canvas는 SSR 하지 않는다(three는 브라우저 전용).
 import dynamic from "next/dynamic";
 import HUD from "./HUD";
+import PuzzleOverlay from "./PuzzleOverlay";
 
 const Scene = dynamic(() => import("@/game/Scene"), { ssr: false });
 
@@ -10,6 +11,7 @@ export default function GameClient() {
     <main className="fixed inset-0 overflow-hidden">
       <Scene />
       <HUD />
+      <PuzzleOverlay />
     </main>
   );
 }

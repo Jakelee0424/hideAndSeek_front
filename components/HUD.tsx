@@ -3,12 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/store/gameStore";
 import { leaveRoom } from "@/net/session";
+import { findInteractable, useInteraction } from "@/game/interactables";
 
 export default function HUD() {
   const router = useRouter();
   const status = useGameStore((s) => s.status);
   const roomId = useGameStore((s) => s.roomId);
   const count = useGameStore((s) => s.playerIds.length);
+
+  const nearId = useInteraction((s) => s.nearId);
+  const openId = useInteraction((s) => s.openId);
+  const solvedNear = useInteraction((s) => (nearId ? s.solved[nearId] : false));
+  const near = findInteractable(nearId);
 
   function exit() {
     leaveRoom();
@@ -32,8 +38,25 @@ export default function HUD() {
       </div>
 
       <div className="absolute bottom-4 left-4 rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-300 backdrop-blur">
-        이동: <kbd className="font-mono">W A S D</kbd> / 방향키
+        이동 <kbd className="font-mono">W A S D</kbd> · 상호작용{" "}
+        <kbd className="font-mono">E</kbd>
       </div>
+
+      {/* 상호작용 프롬프트 */}
+      {near && !openId && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 rounded-lg bg-black/70 px-4 py-2 text-sm text-white backdrop-blur">
+          {solvedNear ? (
+            <span className="text-emerald-400">{near.label} · 완료 ✓</span>
+          ) : (
+            <>
+              <kbd className="mr-2 rounded bg-white/15 px-1.5 py-0.5 font-mono">
+                E
+              </kbd>
+              {near.label}
+            </>
+          )}
+        </div>
+      )}
 
       <button
         onClick={exit}
