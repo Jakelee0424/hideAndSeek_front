@@ -7,7 +7,7 @@ import RemotePlayers from "./RemotePlayers";
 
 export default function Scene() {
   return (
-    <Canvas shadows camera={{ position: [0, 6, 9], fov: 60 }}>
+    <Canvas shadows camera={{ position: [0, 4.5, 6], fov: 60 }}>
       <color attach="background" args={["#0b0f17"]} />
       <fog attach="fog" args={["#0b0f17", 25, 60]} />
       <ambientLight intensity={0.5} />

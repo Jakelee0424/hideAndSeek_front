@@ -7,7 +7,11 @@ import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.j
 import * as THREE from "three";
 
 const MODEL = "/models/character.glb";
-const TARGET_HEIGHT = 1.7; // m
+const TARGET_HEIGHT = 2.4; // m
+// 모델(RobotExpressive)의 실측 자연 높이(바인드 포즈, 파일 단위). measureGlb로 측정.
+// Box3.setFromObject는 스킨/모프 때문에 실제보다 크게 잡혀 캐릭터가 과도하게 작아지므로 고정값 사용.
+const MODEL_NATURAL_HEIGHT = 4.599;
+const MODEL_FEET_OFFSET = 0.02; // min.y ≈ -0.02 → 발바닥 보정
 
 useGLTF.preload(MODEL);
 
@@ -34,13 +38,10 @@ export default function Character({
         o.receiveShadow = true;
       }
     });
-    const box = new THREE.Box3().setFromObject(c);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const s = TARGET_HEIGHT / size.y;
+    // 실측 자연 높이로 고정 스케일(Box3 자동맞춤은 스킨/모프로 부정확 → 캐릭터가 작아짐)
+    const s = TARGET_HEIGHT / MODEL_NATURAL_HEIGHT;
     c.scale.setScalar(s);
-    const box2 = new THREE.Box3().setFromObject(c);
-    c.position.y -= box2.min.y; // 발바닥을 바닥에 붙임
+    c.position.y = MODEL_FEET_OFFSET * s; // 발바닥을 바닥에 맞춤
     return c;
   }, [scene]);
 

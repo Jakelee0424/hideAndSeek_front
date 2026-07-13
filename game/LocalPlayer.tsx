@@ -19,7 +19,7 @@ import {
 import { resolveCollision } from "./collision";
 
 const SPEED = 6; // m/s
-const CAM_OFFSET = new THREE.Vector3(0, 6, 9);
+const CAM_OFFSET = new THREE.Vector3(0, 4.5, 6);
 const INPUT_HZ = 20;
 
 const _camDesired = new THREE.Vector3();
