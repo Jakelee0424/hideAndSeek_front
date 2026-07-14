@@ -16,10 +16,10 @@ export function joinRoom(roomId: string, nick: string): string {
       onStatus: (s) => useGameStore.getState().setStatus(s),
       onSnapshot: (snap) => {
         worldState.apply(snap);
-        const ids = snap.players.map((p) => p.id);
-        const nicks: Record<string, string> = {};
-        for (const p of snap.players) nicks[p.id] = p.nick;
-        useGameStore.getState().syncPlayers(ids, nicks);
+        // 로스터(닉네임)는 변경 시에만 실려 온다 → 있을 때만 병합.
+        if (snap.roster) useGameStore.getState().applyRoster(snap.roster);
+        // 플레이어 목록은 매 tick 상태에서 파생(입·퇴장 즉시 반영).
+        useGameStore.getState().syncPlayers(snap.states.map((s) => s.id));
         // 퍼즐 해결 상태 협동 동기화
         if (snap.solvedIds) useInteraction.getState().syncSolved(snap.solvedIds);
       },

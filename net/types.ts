@@ -9,19 +9,27 @@ export interface Vec3 {
 
 export type Role = "seeker" | "hider";
 
-/** 서버가 확정한 단일 플레이어 상태 */
-export interface PlayerState {
+/** 서버 → 클라: tick마다 바뀌는 경량 위치 상태(20Hz). nick/role/y는 싣지 않는다. */
+export interface PlayerTick {
+  id: string;
+  x: number;
+  z: number;
+  rot: number;
+}
+
+/** 서버 → 클라: 정적 정보(닉네임). 입·퇴장으로 로스터가 바뀔 때만 전송된다. */
+export interface RosterEntry {
   id: string;
   nick: string;
-  position: Vec3;
-  rotationY: number;
-  role?: Role;
 }
 
 /** 서버 → 클라: 월드 스냅샷 (tick마다 브로드캐스트) */
 export interface WorldSnapshot {
   tick: number;
-  players: PlayerState[];
+  /** 매 tick 실리는 경량 위치 상태 */
+  states: PlayerTick[];
+  /** 정적 정보. 로스터 변경 시에만 존재(그 외 생략) */
+  roster?: RosterEntry[] | null;
   /** 이 방에서 해결된 퍼즐 오브젝트 id(협동 동기화) */
   solvedIds: string[];
 }
