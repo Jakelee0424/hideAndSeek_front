@@ -21,6 +21,8 @@ export interface PlayerTick {
 export interface RosterEntry {
   id: string;
   nick: string;
+  /** AI 봇 여부. 이동·렌더는 사람과 동일하게 다루되, 방장 선출 등 사람 전용 판단에선 제외할 것. */
+  bot: boolean;
 }
 
 /** 서버 → 클라: 월드 스냅샷 (tick마다 브로드캐스트) */

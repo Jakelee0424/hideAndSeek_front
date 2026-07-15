@@ -22,6 +22,7 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
   const setReady = useGameStore((s) => s.setReady);
   const playerIds = useGameStore((s) => s.playerIds);
   const nicks = useGameStore((s) => s.nicks);
+  const bots = useGameStore((s) => s.bots);
 
   // 닉네임 없이 직접/새로고침으로 들어온 경우 로비로 돌려보냄
   useEffect(() => {
@@ -33,8 +34,11 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
     if (!myId) joinRoom(roomId, myNick);
   }, [myNick, myId, roomId, router]);
 
-  // 방장 = 목록의 첫 번째 플레이어(서버 없을 땐 본인)
-  const isHost = playerIds[0] === myId;
+  // 방장 = 목록의 첫 번째 "사람"(서버 없을 땐 본인).
+  // 봇을 빼지 않으면 봇이 방장이 되어 사람에게 시작 버튼이 안 뜬다 — 스냅샷의 플레이어 순서는
+  // 서버 ConcurrentHashMap 순회 순서라 사람이 먼저라는 보장이 없다.
+  const hostId = playerIds.find((id) => !bots[id]);
+  const isHost = hostId === myId;
   const allReady = playerIds.length > 0; // TODO: 서버 연동 시 전원 ready 체크
 
   function start() {
@@ -84,7 +88,12 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
                 {id === myId && (
                   <span className="text-xs text-sky-400">(나)</span>
                 )}
-                {i === 0 && (
+                {bots[id] && (
+                  <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[10px] text-violet-300">
+                    AI
+                  </span>
+                )}
+                {id === hostId && (
                   <span className="rounded bg-yellow-500/20 px-1.5 py-0.5 text-[10px] text-yellow-300">
                     방장
                   </span>

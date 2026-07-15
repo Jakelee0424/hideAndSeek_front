@@ -11,6 +11,8 @@ interface GameStore {
   ready: boolean;
   playerIds: string[];
   nicks: Record<string, string>;
+  /** AI 봇인 플레이어 id 집합. 방장 선출처럼 사람만 대상이어야 하는 판단에 쓴다. */
+  bots: Record<string, boolean>;
 
   setStatus: (s: ConnStatus) => void;
   setReady: (v: boolean) => void;
@@ -31,6 +33,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   ready: false,
   playerIds: [],
   nicks: {},
+  bots: {},
 
   setStatus: (status) => set({ status }),
   setReady: (ready) => set({ ready }),
@@ -44,10 +47,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       status: "connecting",
       playerIds: [myId],
       nicks: { [myId]: nick },
+      bots: {},
     }),
 
   clear: () =>
-    set({ status: "idle", playerIds: [], nicks: {}, ready: false }),
+    set({ status: "idle", playerIds: [], nicks: {}, bots: {}, ready: false }),
 
   syncPlayers: (ids) => {
     const prev = get().playerIds;
@@ -58,15 +62,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   applyRoster: (roster) => {
-    const cur = get().nicks;
-    const next = { ...cur };
+    const { nicks, bots } = get();
+    const nextNicks = { ...nicks };
+    const nextBots = { ...bots };
     let changed = false;
     for (const r of roster) {
-      if (next[r.id] !== r.nick) {
-        next[r.id] = r.nick;
+      if (nextNicks[r.id] !== r.nick) {
+        nextNicks[r.id] = r.nick;
+        changed = true;
+      }
+      if (nextBots[r.id] !== r.bot) {
+        nextBots[r.id] = r.bot;
         changed = true;
       }
     }
-    if (changed) set({ nicks: next });
+    if (changed) set({ nicks: nextNicks, bots: nextBots });
   },
 }));
