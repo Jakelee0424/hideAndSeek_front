@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useGameStore } from "@/store/gameStore";
 import { leaveRoom } from "@/net/session";
 import { findInteractable, useInteraction } from "@/game/interactables";
+import PhaseBanner from "./PhaseBanner";
 
 export default function HUD() {
   const router = useRouter();
@@ -36,6 +37,9 @@ export default function HUD() {
           {status === "connected" ? "온라인" : "오프라인"}
         </span>
       </div>
+
+      {/* 진행 단계 + 남은 시간 (상단 중앙) */}
+      <PhaseBanner />
 
       <div className="absolute bottom-4 left-4 rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-300 backdrop-blur">
         이동 <kbd className="font-mono">W A S D</kbd> · 상호작용{" "}

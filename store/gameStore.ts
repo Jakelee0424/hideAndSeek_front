@@ -1,7 +1,7 @@
 // 전역 세션/룸 상태(zustand). 3D 트랜스폼은 여기에 두지 않는다(worldState 참고).
 // playerIds는 입/퇴장 시에만 바뀌므로, 이 값으로 원격 플레이어 리스트만 리렌더된다.
 import { create } from "zustand";
-import type { ConnStatus, RosterEntry } from "@/net/types";
+import type { ConnStatus, GamePhase, RosterEntry } from "@/net/types";
 
 interface GameStore {
   status: ConnStatus;
@@ -13,9 +13,17 @@ interface GameStore {
   nicks: Record<string, string>;
   /** AI 봇인 플레이어 id 집합. 방장 선출처럼 사람만 대상이어야 하는 판단에 쓴다. */
   bots: Record<string, boolean>;
+  /** 현재 진행 단계. 서버는 전환 시에만 보내주므로 여기 눌러둔다. */
+  phase: GamePhase | null;
+  /** 현재 단계가 끝나는 시각(Date.now 기준). 카운트다운은 이 값으로 로컬 계산한다. */
+  phaseEndsAt: number | null;
+  /** 현재 단계가 시작된 시각(Date.now 기준). 전환 배너를 얼마나 띄울지 계산하는 데 쓴다. */
+  phaseStartedAt: number | null;
 
   setStatus: (s: ConnStatus) => void;
   setReady: (v: boolean) => void;
+  /** 서버가 단계를 실어 보낼 때만 호출. 남은 시간을 로컬 종료 시각으로 환산해 둔다. */
+  setPhase: (phase: GamePhase, remainMs: number) => void;
   /** 방 입장 시 초기화 + 본인을 목록에 시드(서버 스냅샷 오기 전까지 표시). */
   reset: (roomId: string, myId: string, nick: string) => void;
   clear: () => void;
@@ -34,9 +42,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
   playerIds: [],
   nicks: {},
   bots: {},
+  phase: null,
+  phaseEndsAt: null,
+  phaseStartedAt: null,
 
   setStatus: (status) => set({ status }),
   setReady: (ready) => set({ ready }),
+
+  setPhase: (phase, remainMs) => {
+    if (get().phase === phase) return; // 입장 시 재전송 등 같은 단계면 무시(리렌더 방지)
+    const now = Date.now();
+    set({ phase, phaseEndsAt: now + remainMs, phaseStartedAt: now });
+  },
 
   reset: (roomId, myId, nick) =>
     set({
@@ -48,10 +65,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
       playerIds: [myId],
       nicks: { [myId]: nick },
       bots: {},
+      phase: null,
+      phaseEndsAt: null,
+      phaseStartedAt: null,
     }),
 
   clear: () =>
-    set({ status: "idle", playerIds: [], nicks: {}, bots: {}, ready: false }),
+    set({
+      status: "idle",
+      playerIds: [],
+      nicks: {},
+      bots: {},
+      ready: false,
+      phase: null,
+      phaseEndsAt: null,
+      phaseStartedAt: null,
+    }),
 
   syncPlayers: (ids) => {
     const prev = get().playerIds;

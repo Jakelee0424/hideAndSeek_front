@@ -25,6 +25,18 @@ export interface RosterEntry {
   bot: boolean;
 }
 
+/** 게임 진행 단계. 백엔드 GamePhase enum의 이름과 일치해야 한다(이중 관리). */
+export type GamePhase = "ONBOARDING" | "MISSION" | "SHARING" | "VOTE" | "ENDED";
+
+/** 단계 표시 이름. 백엔드 GamePhase.label()과 같은 값. */
+export const PHASE_LABEL: Record<GamePhase, string> = {
+  ONBOARDING: "온보딩",
+  MISSION: "개별 미션",
+  SHARING: "정보 공유",
+  VOTE: "AI 투표",
+  ENDED: "종료",
+};
+
 /** 서버 → 클라: 월드 스냅샷 (tick마다 브로드캐스트) */
 export interface WorldSnapshot {
   tick: number;
@@ -34,6 +46,10 @@ export interface WorldSnapshot {
   roster?: RosterEntry[] | null;
   /** 이 방에서 해결된 퍼즐 오브젝트 id(협동 동기화) */
   solvedIds: string[];
+  /** 진행 단계. 로스터와 같은 규약 — 전환 시·입장 시에만 존재(그 외 생략) */
+  phase?: GamePhase | null;
+  /** 그 단계의 남은 시간(ms). phase와 함께만 온다. 카운트다운은 클라가 자체 진행. */
+  phaseRemainMs?: number | null;
 }
 
 /** 클라 → 서버: 퍼즐 해결 알림 */
