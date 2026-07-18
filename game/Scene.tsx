@@ -7,7 +7,12 @@ import RemotePlayers from "./RemotePlayers";
 
 export default function Scene() {
   return (
-    <Canvas shadows camera={{ position: [0, 4.5, 6], fov: 60 }}>
+    <Canvas
+      shadows
+      dpr={[1, 1.5]}
+      camera={{ position: [0, 4.5, 6], fov: 60 }}
+      gl={{ powerPreference: "high-performance" }}
+    >
       <color attach="background" args={["#0b0f17"]} />
       <fog attach="fog" args={["#0b0f17", 25, 60]} />
       <ambientLight intensity={0.5} />
@@ -16,8 +21,8 @@ export default function Scene() {
         position={[8, 14, 6]}
         intensity={1.3}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-left={-15}
         shadow-camera-right={15}
         shadow-camera-top={15}
