@@ -21,7 +21,13 @@ import {
 import { DOOR_RANGE, DOORS, randomCellSpawn } from "./prisonLayout";
 import { resolveCollision } from "./collision";
 
+// ⚠️ 아래 넷은 백엔드 application.yml의 game.* 와 이중 관리다. 어긋나면 예측이 서버와 벌어져
+//    러버밴딩이 생긴다(특히 점프는 착지 시점이 눈에 띄게 튄다).
+//    SPEED ↔ speed / SPRINT_MULT ↔ sprint-multiplier / JUMP_SPEED ↔ jump-speed / GRAVITY ↔ gravity
 const SPEED = 6; // m/s
+const SPRINT_MULT = 1.8; // 달리기 배수 → 10.8 m/s
+const JUMP_SPEED = 6; // 점프 초기 수직 속도(m/s). 최고 높이 = v²/2g = 1.0m
+const GRAVITY = 18; // m/s². 9.8은 게임에선 너무 붕 뜬다
 const CAM_DIST = 6.5; // 카메라~캐릭터 거리(m)
 const CAM_LOOK_H = 1.4; // 시선 높이(캐릭터 머리 부근)
 const INPUT_HZ = 20;
@@ -35,7 +41,8 @@ export default function LocalPlayer() {
   const look = useMouseLook();
   const seq = useRef(0);
   const acc = useRef(0);
-  const wasMoving = useRef(false);
+  const vy = useRef(0); // 수직 속도(예측). 접지 중엔 0
+  const lastAnim = useRef<AnimState>("idle");
   const spawned = useRef(false); // 첫 서버 스냅샷 때 배정된 감방 위치로 스냅
   // 프론트 단독 실행 시 초기 위치: 랜덤 감방 안. 서버 연결 시 첫 스냅샷이 덮어쓴다.
   const initPos = useMemo(() => {
@@ -96,24 +103,50 @@ export default function LocalPlayer() {
     const len = Math.hypot(mx, mz);
     const moving = len > 0;
 
+    const sprinting = !locked && k.sprint && moving;
+
     if (moving) {
       mx /= len;
       mz /= len;
-      g.position.x += mx * SPEED * dt;
-      g.position.z += mz * SPEED * dt;
+      const speed = sprinting ? SPEED * SPRINT_MULT : SPEED;
+      g.position.x += mx * speed * dt;
+      g.position.z += mz * speed * dt;
       g.rotation.y = Math.atan2(mx, mz); // 캐릭터는 이동 방향을 바라봄
 
       // 벽/장애물 충돌 해석(서버와 동일 로직). 열린 감방문은 통과.
+      // 충돌은 2D(x/z)라 점프해도 장애물은 못 넘는다 — 서버 Room.tick과 같은 규약.
       const openDoors = useInteraction.getState().doorsOpen;
       const [rx, rz] = resolveCollision(g.position.x, g.position.z, openDoors);
       g.position.x = rx;
       g.position.z = rz;
     }
 
-    // idle/walk 전환은 상태가 바뀔 때만 setState
-    if (moving !== wasMoving.current) {
-      wasMoving.current = moving;
-      setAnim(moving ? "walk" : "idle");
+    // 수직 예측(서버 Room.tick과 같은 식). 지면은 y=0(발바닥 규약).
+    const grounded = g.position.y <= 1e-6 && vy.current <= 0;
+    if (grounded && !locked && k.jump) {
+      vy.current = JUMP_SPEED;
+    }
+    if (!grounded || vy.current > 0) {
+      vy.current -= GRAVITY * dt;
+      g.position.y += vy.current * dt;
+      if (g.position.y <= 0) {
+        g.position.y = 0;
+        vy.current = 0;
+      }
+    }
+    const airborne = g.position.y > 1e-6;
+
+    // 애니메이션은 상태가 바뀔 때만 setState(매 프레임 리렌더 방지)
+    const nextAnim: AnimState = airborne
+      ? "jump"
+      : sprinting
+        ? "run"
+        : moving
+          ? "walk"
+          : "idle";
+    if (nextAnim !== lastAnim.current) {
+      lastAnim.current = nextAnim;
+      setAnim(nextAnim);
     }
 
     // 3인칭 오빗 카메라: yaw/pitch 구면좌표로 캐릭터 주위에 배치(거리 일정).
@@ -165,6 +198,9 @@ export default function LocalPlayer() {
           seq: seq.current++,
           move: { x: moving ? mx : 0, y: 0, z: moving ? mz : 0 },
           rotationY: g.rotation.y,
+          sprint: sprinting,
+          // 접지 판정은 서버가 한다. 여기선 누르고 있다는 사실만 보낸다.
+          jump: !locked && k.jump,
         });
       }
     }

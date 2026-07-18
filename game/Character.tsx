@@ -15,7 +15,15 @@ const MODEL_FEET_OFFSET = 0.02; // min.y ≈ -0.02 → 발바닥 보정
 
 useGLTF.preload(MODEL);
 
-export type AnimState = "idle" | "walk";
+export type AnimState = "idle" | "walk" | "run" | "jump";
+
+/** AnimState → GLB(RobotExpressive) 클립 이름. */
+const CLIP: Record<AnimState, string> = {
+  idle: "Idle",
+  walk: "Walking",
+  run: "Running",
+  jump: "Jump",
+};
 
 export default function Character({
   anim,
@@ -48,10 +56,16 @@ export default function Character({
   const { actions } = useAnimations(animations, group);
 
   useEffect(() => {
-    const name = anim === "walk" ? "Walking" : "Idle";
-    const action = actions[name];
+    const action = actions[CLIP[anim]];
     if (!action) return;
-    action.reset().fadeIn(0.25).play();
+    if (anim === "jump") {
+      // Jump는 원샷 클립이다. 루프로 두면 체공 중 계속 다시 뛰는 것처럼 보이므로
+      // 한 번만 재생하고 마지막 포즈로 정지시킨다(체공이 클립보다 길어도 자연스럽다).
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
+    }
+    // 점프는 짧아서 0.25s 페이드로는 거의 안 보인다 → 진입만 빠르게.
+    action.reset().fadeIn(anim === "jump" ? 0.08 : 0.25).play();
     return () => {
       action.fadeOut(0.25);
     };

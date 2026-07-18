@@ -17,10 +17,10 @@ export default function RemotePlayer({
 }) {
   const ref = useRef<THREE.Group>(null);
   const gPrev = useRef({ x: 0, z: 0 });
-  const wasMoving = useRef(false);
+  const lastAnim = useRef<AnimState>("idle");
   const [anim, setAnim] = useState<AnimState>("idle");
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     const g = ref.current;
     if (!g) return;
 
@@ -31,20 +31,32 @@ export default function RemotePlayer({
 
     g.position.x = tr.x;
     g.position.z = tr.z;
-    g.position.y = 0; // 바닥 고정(캐릭터 피트가 y=0)
+    g.position.y = tr.y; // 서버가 보낸 지면 위 높이(점프). 착지 상태면 0
     g.rotation.y = tr.rotationY;
 
-    // 보간된 위치의 프레임당 이동량으로 walk 판정
-    const moved = Math.hypot(
-      g.position.x - gPrev.current.x,
-      g.position.z - gPrev.current.z,
-    );
+    // 보간된 위치의 프레임당 이동량으로 walk/run 판정.
+    // 로컬처럼 sprint 플래그를 받지 않고 "실제 이동 속도"로 가른다 — 전선에 플래그를 더
+    // 올리지 않아도 되고, 서버가 배수를 이미 반영한 좌표라 결과가 같다.
+    const dx = g.position.x - gPrev.current.x;
+    const dz = g.position.z - gPrev.current.z;
+    const moved = Math.hypot(dx, dz);
     gPrev.current.x = g.position.x;
     gPrev.current.z = g.position.z;
     const moving = moved > 0.0015;
-    if (moving !== wasMoving.current) {
-      wasMoving.current = moving;
-      setAnim(moving ? "walk" : "idle");
+
+    // 걷기(6m/s)와 달리기(10.8m/s)의 중간(≈8.4m/s)을 경계로 삼는다.
+    const speed = moved / Math.max(delta, 1e-4);
+    const airborne = g.position.y > 0.02;
+    const nextAnim: AnimState = airborne
+      ? "jump"
+      : moving
+        ? speed > 8.4
+          ? "run"
+          : "walk"
+        : "idle";
+    if (nextAnim !== lastAnim.current) {
+      lastAnim.current = nextAnim;
+      setAnim(nextAnim);
     }
   });
 

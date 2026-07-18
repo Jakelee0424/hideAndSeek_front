@@ -17,12 +17,15 @@ interface Sample {
   x: number;
   z: number;
   rot: number;
+  y: number; // 지면 위 높이(점프). 착지 상태면 0
 }
 
 export interface Transform {
   x: number;
   z: number;
   rotationY: number;
+  /** 지면 위 높이(m). 그대로 position.y에 넣으면 된다. */
+  y: number;
 }
 
 const buffers = new Map<string, Sample[]>();
@@ -39,7 +42,8 @@ export const worldState = {
         buf = [];
         buffers.set(p.id, buf);
       }
-      buf.push({ t, x: p.x, z: p.z, rot: p.rot });
+      // y는 점프 도입 전 스냅샷/옛 서버엔 없다 → 없으면 착지(0)로 본다.
+      buf.push({ t, x: p.x, z: p.z, rot: p.rot, y: p.y ?? 0 });
       // 오래된 샘플 정리(최소 2개는 남겨 보간/고정에 쓸 수 있게).
       const cutoff = t - MAX_BUFFER_MS;
       while (buf.length > 2 && buf[0].t < cutoff) buf.shift();
@@ -61,11 +65,11 @@ export const worldState = {
 
     const first = buf[0];
     if (renderTime <= first.t) {
-      return { x: first.x, z: first.z, rotationY: first.rot };
+      return { x: first.x, z: first.z, rotationY: first.rot, y: first.y };
     }
     const last = buf[buf.length - 1];
     if (renderTime >= last.t) {
-      return { x: last.x, z: last.z, rotationY: last.rot };
+      return { x: last.x, z: last.z, rotationY: last.rot, y: last.y };
     }
     for (let i = 0; i < buf.length - 1; i++) {
       const a = buf[i];
@@ -77,10 +81,11 @@ export const worldState = {
           x: a.x + (b.x - a.x) * alpha,
           z: a.z + (b.z - a.z) * alpha,
           rotationY: lerpAngle(a.rot, b.rot, alpha),
+          y: a.y + (b.y - a.y) * alpha,
         };
       }
     }
-    return { x: last.x, z: last.z, rotationY: last.rot };
+    return { x: last.x, z: last.z, rotationY: last.rot, y: last.y };
   },
 
   clear(): void {

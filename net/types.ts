@@ -9,12 +9,18 @@ export interface Vec3 {
 
 export type Role = "seeker" | "hider";
 
-/** 서버 → 클라: tick마다 바뀌는 경량 위치 상태(20Hz). nick/role/y는 싣지 않는다. */
+/** 서버 → 클라: tick마다 바뀌는 경량 위치 상태(20Hz). nick/role은 싣지 않는다. */
 export interface PlayerTick {
   id: string;
   x: number;
   z: number;
   rot: number;
+  /**
+   * 지면 위 높이(m). 착지 상태면 0 — 서버 내부 절대 좌표(캡슐 중심 0.5)가 아니라
+   * "발바닥이 y=0"인 프론트 규약에 맞춘 값이라 그대로 position.y에 넣으면 된다.
+   * 점프가 남에게도 보이려면 필요하다(점프 도입 전엔 항상 0이라 싣지 않았다).
+   */
+  y: number;
 }
 
 /** 서버 → 클라: 정적 정보(닉네임). 입·퇴장으로 로스터가 바뀔 때만 전송된다. */
@@ -70,6 +76,10 @@ export interface InputMessage {
   seq: number;
   move: Vec3; // 정규화된 이동 방향 (y는 미사용)
   rotationY: number;
+  /** 달리기 의도(Shift). 실제 속도 배수는 서버의 game.sprint-multiplier가 정한다. */
+  sprint: boolean;
+  /** 점프 의도(Space). 접지 판정은 서버가 하므로 공중에서 눌러도 무시된다. */
+  jump: boolean;
 }
 
 export type ConnStatus = "idle" | "connecting" | "connected" | "error";
