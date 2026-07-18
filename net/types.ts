@@ -69,6 +69,11 @@ export interface SolveMessage {
 export interface JoinMessage {
   id: string;
   nick: string;
+  /**
+   * 대기열(/api/queue)에서 받은 입장 토큰. 대기열이 꺼져 있거나 한산하면 없어도 통과한다.
+   * 정원이 찼는데 토큰이 없으면 서버가 join을 무시한다(스냅샷이 오지 않는다).
+   */
+  token?: string | null;
 }
 
 /** 클라 → 서버: 이동 "의도"(방향 벡터). 서버가 검증·적용한다. */

@@ -1,5 +1,8 @@
 "use client";
 // 로비: 닉네임 + 방 코드 입력 → 대기방으로 입장.
+//
+// 대기열은 이 화면에 오기 전(QueueBoundary)에 이미 통과했다. 여기서는 그때 배정받은
+// playerId/token을 그대로 써야 한다 — 새 id를 만들면 잡아둔 슬롯과 어긋나 입장이 거부된다.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { joinRoom } from "@/net/session";
@@ -12,18 +15,29 @@ function randomCode() {
   return c;
 }
 
-export default function Lobby() {
+export default function Lobby({
+  playerId,
+  token,
+}: {
+  playerId: string;
+  token: string | null;
+}) {
   const router = useRouter();
   const [nick, setNick] = useState("");
   const [room, setRoom] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const canEnter = nick.trim().length > 0;
 
   function enter(roomId: string) {
     if (!canEnter) return;
     const code = roomId.trim().toUpperCase() || randomCode();
-    joinRoom(code, nick.trim());
-    router.push(`/rooms/${code}`);
+    try {
+      joinRoom(code, nick.trim(), { playerId, token });
+      router.push(`/rooms/${code}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "입장에 실패했어요");
+    }
   }
 
   return (
@@ -55,6 +69,12 @@ export default function Lobby() {
           placeholder="비우면 새 방 생성"
           className="mb-6 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm uppercase tracking-widest outline-none focus:border-sky-400"
         />
+
+        {error && (
+          <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+            {error}
+          </p>
+        )}
 
         <button
           onClick={() => enter(room)}

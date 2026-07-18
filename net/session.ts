@@ -5,13 +5,21 @@ import { useInteraction } from "@/game/interactables";
 import { worldState } from "./worldState";
 import * as stomp from "./stompClient";
 
-export function joinRoom(roomId: string, nick: string): string {
-  const myId = crypto.randomUUID();
+/**
+ * 방 입장. playerId/token은 대기열을 거쳐 왔을 때 넘긴다 —
+ * 대기열은 playerId로 슬롯을 잡으므로 여기서 새 id를 만들면 슬롯과 어긋나 입장이 거부된다.
+ */
+export function joinRoom(
+  roomId: string,
+  nick: string,
+  opts?: { playerId?: string; token?: string | null },
+): string {
+  const myId = opts?.playerId ?? crypto.randomUUID();
   useGameStore.getState().reset(roomId, myId, nick);
 
   stomp.connect(
     roomId,
-    { id: myId, nick },
+    { id: myId, nick, token: opts?.token ?? null },
     {
       onStatus: (s) => useGameStore.getState().setStatus(s),
       onSnapshot: (snap) => {
