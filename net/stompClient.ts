@@ -76,6 +76,16 @@ export function sendSolve(roomId: string, objectId: string): void {
   }
 }
 
+/** 감방문 열림 상태 토글 요청. 서버가 실제 상태를 확정해 스냅샷 openDoors로 되돌린다. */
+export function sendDoor(roomId: string, doorId: string): void {
+  if (client?.connected) {
+    client.publish({
+      destination: `/app/rooms/${roomId}/door`,
+      body: JSON.stringify({ doorId }),
+    });
+  }
+}
+
 export function disconnect(): void {
   client?.deactivate();
   client = null;

@@ -4,19 +4,21 @@
 //  - GLB 캐릭터 + idle/walk 애니메이션 상태 전환
 //  - 근접 오브젝트 감지 → 하이라이트, E키로 상호작용(퍼즐 열기)
 //  - 입력을 20Hz로 서버 전송(월드 방향 벡터로 변환해 전송 → 서버 권위 로직 무변경)
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useKeyboard } from "./useKeyboard";
 import { useMouseLook } from "./useMouseLook";
 import Character, { type AnimState } from "./Character";
-import { sendInput } from "@/net/stompClient";
+import { sendDoor, sendInput } from "@/net/stompClient";
+import { worldState } from "@/net/worldState";
 import { useGameStore } from "@/store/gameStore";
 import {
   INTERACTABLES,
   INTERACT_RANGE,
   useInteraction,
 } from "./interactables";
+import { DOOR_RANGE, DOORS, randomCellSpawn } from "./prisonLayout";
 import { resolveCollision } from "./collision";
 
 const SPEED = 6; // m/s
@@ -34,16 +36,29 @@ export default function LocalPlayer() {
   const seq = useRef(0);
   const acc = useRef(0);
   const wasMoving = useRef(false);
+  const spawned = useRef(false); // 첫 서버 스냅샷 때 배정된 감방 위치로 스냅
+  // 프론트 단독 실행 시 초기 위치: 랜덤 감방 안. 서버 연결 시 첫 스냅샷이 덮어쓴다.
+  const initPos = useMemo(() => {
+    const [x, z] = randomCellSpawn();
+    return [x, 0, z] as [number, number, number];
+  }, []);
   const [anim, setAnim] = useState<AnimState>("idle");
   const myNick = useGameStore((s) => s.myNick);
 
-  // E키: 근접 오브젝트 상호작용(퍼즐 열기)
+  // E키: 근접 오브젝트 상호작용(퍼즐 열기) / F키: 근접 감방문 열기
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "KeyE") return;
-      const { nearId, openId, solved, open } = useInteraction.getState();
-      if (openId || !nearId || solved[nearId]) return;
-      open(nearId);
+      const st = useInteraction.getState();
+      if (e.code === "KeyE") {
+        if (st.openId || !st.nearId || st.solved[st.nearId]) return;
+        st.open(st.nearId);
+      } else if (e.code === "KeyF") {
+        // 근접한 감방문을 토글(열림↔닫힘). 로컬 즉시 반영 + 서버 동기화.
+        const id = st.nearDoorId;
+        if (!id) return;
+        st.toggleDoor(id);
+        sendDoor(useGameStore.getState().roomId, id);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -52,6 +67,18 @@ export default function LocalPlayer() {
   useFrame((state, dt) => {
     const g = ref.current;
     if (!g) return;
+
+    // 서버가 배정한 감방으로 최초 1회 스냅(예측은 그 뒤 이어받는다).
+    if (!spawned.current) {
+      const myId = useGameStore.getState().myId;
+      const t = myId ? worldState.sample(myId, performance.now()) : null;
+      if (t) {
+        g.position.x = t.x;
+        g.position.z = t.z;
+        g.rotation.y = t.rotationY;
+        spawned.current = true;
+      }
+    }
 
     const locked = useInteraction.getState().openId !== null;
     const { yaw, pitch } = look.current;
@@ -76,9 +103,9 @@ export default function LocalPlayer() {
       g.position.z += mz * SPEED * dt;
       g.rotation.y = Math.atan2(mx, mz); // 캐릭터는 이동 방향을 바라봄
 
-      // 벽/장애물 충돌 해석(서버와 동일 로직). 문은 해결 시 통과.
-      const solved = useInteraction.getState().solved;
-      const [rx, rz] = resolveCollision(g.position.x, g.position.z, solved);
+      // 벽/장애물 충돌 해석(서버와 동일 로직). 열린 감방문은 통과.
+      const openDoors = useInteraction.getState().doorsOpen;
+      const [rx, rz] = resolveCollision(g.position.x, g.position.z, openDoors);
       g.position.x = rx;
       g.position.z = rz;
     }
@@ -114,6 +141,20 @@ export default function LocalPlayer() {
     }
     useInteraction.getState().setNear(nearId);
 
+    // 근접 감방문 감지(사거리 내 최근접) → F 프롬프트/열기 대상
+    let nearDoorId: string | null = null;
+    let bestDoor = DOOR_RANGE * DOOR_RANGE;
+    for (const d of DOORS) {
+      const ex = d.pos[0] - g.position.x;
+      const ez = d.pos[1] - g.position.z;
+      const q = ex * ex + ez * ez;
+      if (q < bestDoor) {
+        bestDoor = q;
+        nearDoorId = d.id;
+      }
+    }
+    useInteraction.getState().setNearDoor(nearDoorId);
+
     // 서버 전송(20Hz)
     acc.current += dt;
     if (acc.current >= 1 / INPUT_HZ) {
@@ -130,7 +171,7 @@ export default function LocalPlayer() {
   });
 
   return (
-    <group ref={ref} position={[0, 0, 0]}>
+    <group ref={ref} position={initPos}>
       <Character anim={anim} ringColor="#38bdf8" nick={myNick} />
     </group>
   );

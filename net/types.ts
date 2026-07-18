@@ -46,6 +46,8 @@ export interface WorldSnapshot {
   roster?: RosterEntry[] | null;
   /** 이 방에서 해결된 퍼즐 오브젝트 id(협동 동기화) */
   solvedIds: string[];
+  /** 현재 열려 있는 감방문 id 목록(F 토글, 매 tick 동기화) */
+  openDoors: string[];
   /** 진행 단계. 로스터와 같은 규약 — 전환 시·입장 시에만 존재(그 외 생략) */
   phase?: GamePhase | null;
   /** 그 단계의 남은 시간(ms). phase와 함께만 온다. 카운트다운은 클라가 자체 진행. */

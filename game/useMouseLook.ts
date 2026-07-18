@@ -28,7 +28,11 @@ export function useMouseLook() {
     // 캔버스 클릭 → 포인터 잠금(퍼즐 열려 있으면 무시).
     const onClick = () => {
       if (useInteraction.getState().openId !== null) return;
-      if (document.pointerLockElement !== el) el.requestPointerLock();
+      if (document.pointerLockElement === el) return;
+      // requestPointerLock는 최신 브라우저에서 Promise를 반환한다.
+      // ESC 직후 재획득 시도는 SecurityError로 거부되므로 삼켜서 unhandledRejection을 막는다.
+      const p = el.requestPointerLock() as unknown as Promise<void> | undefined;
+      if (p && typeof p.catch === "function") p.catch(() => {});
     };
 
     // 잠긴 동안에만 마우스 델타를 시점에 반영.
