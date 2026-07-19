@@ -34,6 +34,10 @@ export function joinRoom(
         if (snap.phase) {
           useGameStore.getState().setPhase(snap.phase, snap.phaseRemainMs ?? 0);
         }
+        // AI 지목 현황도 바뀔 때만 실려 온다.
+        if (snap.votes) useGameStore.getState().applyVotes(snap.votes);
+        // 진짜 AI는 결말에만 공개된다(그 전엔 아예 안 실린다).
+        if (snap.aiId) useGameStore.getState().setAiId(snap.aiId);
       },
     },
   );

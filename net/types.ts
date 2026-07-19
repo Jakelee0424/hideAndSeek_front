@@ -58,6 +58,24 @@ export interface WorldSnapshot {
   phase?: GamePhase | null;
   /** 그 단계의 남은 시간(ms). phase와 함께만 온다. 카운트다운은 클라가 자체 진행. */
   phaseRemainMs?: number | null;
+  /** AI 지목 현황. 로스터와 같은 규약 — 바뀔 때만 존재. */
+  votes?: VoteEntry[] | null;
+  /**
+   * 진짜 AI의 id. ENDED 단계에서만 온다.
+   * 그 전까지 서버는 roster.bot도 전부 false로 보낸다 — 미리 알면 투표가 무의미해진다.
+   */
+  aiId?: string | null;
+}
+
+/** 서버 → 클라: 누가 누구를 AI로 지목했는지. 집계는 클라가 한다(표가 몇 안 된다). */
+export interface VoteEntry {
+  voterId: string;
+  targetId: string;
+}
+
+/** 클라 → 서버: AI 지목 투표 */
+export interface VoteMessage {
+  targetId: string;
 }
 
 /** 클라 → 서버: 퍼즐 해결 알림 */

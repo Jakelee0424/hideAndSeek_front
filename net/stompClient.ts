@@ -76,6 +76,16 @@ export function sendSolve(roomId: string, objectId: string): void {
   }
 }
 
+/** AI 지목 투표. 투표자는 서버가 STOMP 세션에서 알아내므로 대상만 보낸다. */
+export function sendVote(roomId: string, targetId: string): void {
+  if (client?.connected) {
+    client.publish({
+      destination: `/app/rooms/${roomId}/vote`,
+      body: JSON.stringify({ targetId }),
+    });
+  }
+}
+
 /** 감방문 열림 상태 토글 요청. 서버가 실제 상태를 확정해 스냅샷 openDoors로 되돌린다. */
 export function sendDoor(roomId: string, doorId: string): void {
   if (client?.connected) {

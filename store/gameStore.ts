@@ -1,7 +1,12 @@
 // 전역 세션/룸 상태(zustand). 3D 트랜스폼은 여기에 두지 않는다(worldState 참고).
 // playerIds는 입/퇴장 시에만 바뀌므로, 이 값으로 원격 플레이어 리스트만 리렌더된다.
 import { create } from "zustand";
-import type { ConnStatus, GamePhase, RosterEntry } from "@/net/types";
+import type {
+  ConnStatus,
+  GamePhase,
+  RosterEntry,
+  VoteEntry,
+} from "@/net/types";
 
 interface GameStore {
   status: ConnStatus;
@@ -21,6 +26,12 @@ interface GameStore {
   phaseStartedAt: number | null;
   /** 소음 게이지(0~100). 걸을 땐 0, 달리면 오른다. LocalPlayer가 프레임 루프에서 갱신한다. */
   noise: number;
+  /** 로스터에 실려온 순서 = 입장 순서(서버가 보장). 방장은 이 중 첫 번째. */
+  rosterOrder: string[];
+  /** AI 지목 현황(투표자 id → 지목 대상 id). */
+  votes: Record<string, string>;
+  /** 진짜 AI의 id. 결말(ENDED) 전까지 서버가 알려주지 않으므로 null이다. */
+  aiId: string | null;
 
   setStatus: (s: ConnStatus) => void;
   setReady: (v: boolean) => void;
@@ -35,6 +46,10 @@ interface GameStore {
   applyRoster: (roster: RosterEntry[]) => void;
   /** 소음 게이지 갱신. 실제 값이 바뀔 때만 set 해서 매 프레임 리렌더를 피한다. */
   setNoise: (v: number) => void;
+  /** 서버가 실어 보낸 투표 현황을 반영. 바뀔 때만 갱신. */
+  applyVotes: (votes: VoteEntry[]) => void;
+  /** 결말에 공개되는 진짜 AI id. */
+  setAiId: (id: string) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -50,6 +65,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   phaseEndsAt: null,
   phaseStartedAt: null,
   noise: 0,
+  rosterOrder: [],
+  votes: {},
+  aiId: null,
 
   setStatus: (status) => set({ status }),
   setReady: (ready) => set({ ready }),
@@ -74,6 +92,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       phaseEndsAt: null,
       phaseStartedAt: null,
       noise: 0,
+      rosterOrder: [myId],
+      votes: {},
+      aiId: null,
     }),
 
   clear: () =>
@@ -87,6 +108,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       phaseEndsAt: null,
       phaseStartedAt: null,
       noise: 0,
+      rosterOrder: [],
+      votes: {},
+      aiId: null,
     }),
 
   syncPlayers: (ids) => {
@@ -112,7 +136,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
         changed = true;
       }
     }
-    if (changed) set({ nicks: nextNicks, bots: nextBots });
+    // 로스터가 실려온 순서가 곧 입장 순서다(서버가 그렇게 담아 보낸다).
+    const order = roster.map((r) => r.id);
+    const sameOrder =
+      get().rosterOrder.length === order.length &&
+      get().rosterOrder.every((id, i) => id === order[i]);
+    if (changed || !sameOrder) {
+      set({
+        nicks: nextNicks,
+        bots: nextBots,
+        ...(sameOrder ? {} : { rosterOrder: order }),
+      });
+    }
+  },
+
+  applyVotes: (entries) => {
+    const next: Record<string, string> = {};
+    for (const v of entries) next[v.voterId] = v.targetId;
+    const cur = get().votes;
+    const curKeys = Object.keys(cur);
+    const same =
+      curKeys.length === entries.length &&
+      curKeys.every((k) => cur[k] === next[k]);
+    if (same) return; // 리렌더 방지
+    set({ votes: next });
+  },
+
+  setAiId: (id) => {
+    if (get().aiId === id) return;
+    set({ aiId: id });
   },
 
   setNoise: (v) => {

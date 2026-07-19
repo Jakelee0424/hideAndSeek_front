@@ -22,7 +22,7 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
   const setReady = useGameStore((s) => s.setReady);
   const playerIds = useGameStore((s) => s.playerIds);
   const nicks = useGameStore((s) => s.nicks);
-  const bots = useGameStore((s) => s.bots);
+  const rosterOrder = useGameStore((s) => s.rosterOrder);
 
   // 닉네임 없이 직접/새로고침으로 들어온 경우 로비로 돌려보냄
   useEffect(() => {
@@ -34,10 +34,13 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
     if (!myId) joinRoom(roomId, myNick);
   }, [myNick, myId, roomId, router]);
 
-  // 방장 = 목록의 첫 번째 "사람"(서버 없을 땐 본인).
-  // 봇을 빼지 않으면 봇이 방장이 되어 사람에게 시작 버튼이 안 뜬다 — 스냅샷의 플레이어 순서는
-  // 서버 ConcurrentHashMap 순회 순서라 사람이 먼저라는 보장이 없다.
-  const hostId = playerIds.find((id) => !bots[id]);
+  // 방장 = 가장 먼저 입장한 사람. 서버가 로스터를 입장 순으로 담아 보내므로 그 첫 번째다.
+  //
+  // 예전엔 "봇이 아닌 첫 번째"로 뽑았는데, AI 지목 투표를 넣으면서 서버가 roster.bot을
+  // 결말 전까지 전부 false로 보내게 됐다(정체를 숨겨야 하므로). 그래서 그 방식은 더 이상
+  // 봇을 걸러내지 못한다. 대신 봇은 첫 사람이 들어온 뒤에 스폰되므로 rosterOrder에서
+  // 언제나 사람보다 뒤에 온다 — 첫 번째만 집으면 봇이 방장이 될 일이 없다.
+  const hostId = rosterOrder[0] ?? playerIds[0];
   const isHost = hostId === myId;
   const allReady = playerIds.length > 0; // TODO: 서버 연동 시 전원 ready 체크
 
@@ -88,11 +91,8 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
                 {id === myId && (
                   <span className="text-xs text-sky-400">(나)</span>
                 )}
-                {bots[id] && (
-                  <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[10px] text-violet-300">
-                    AI
-                  </span>
-                )}
+                {/* AI 배지는 없앴다 — 마지막 단계가 AI 지목 투표라 여기서 알려주면 게임이
+                    성립하지 않는다. 정체는 결말에 VoteOverlay가 공개한다. */}
                 {id === hostId && (
                   <span className="rounded bg-yellow-500/20 px-1.5 py-0.5 text-[10px] text-yellow-300">
                     방장
