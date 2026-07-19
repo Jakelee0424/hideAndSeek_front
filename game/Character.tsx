@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useGLTF, useAnimations, Html } from "@react-three/drei";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
+import { applyPrisonSuit } from "./prisonSuit";
 
 const MODEL = "/models/character.glb";
 const TARGET_HEIGHT = 2.4; // m
@@ -46,6 +47,7 @@ export default function Character({
         o.receiveShadow = true;
       }
     });
+    applyPrisonSuit(c); // 몸통·팔·다리에 죄수복 줄무늬
     // 실측 자연 높이로 고정 스케일(Box3 자동맞춤은 스킨/모프로 부정확 → 캐릭터가 작아짐)
     const s = TARGET_HEIGHT / MODEL_NATURAL_HEIGHT;
     c.scale.setScalar(s);
