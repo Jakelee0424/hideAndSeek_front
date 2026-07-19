@@ -17,6 +17,7 @@ import {
   WALL_H,
   WALL_T,
   YARD,
+  YARD_WALL_H,
   type Cell,
   type Rect,
 } from "./prisonLayout";
@@ -46,6 +47,14 @@ function useMaterials() {
       table: mk("#8a9099", 0.6, 0.2),
       hoop: mk("#d9542b", 0.5, 0.3),
       track: mk("#7c3b34", 0.9, 0),
+      // ── 소품용 ──
+      rust: mk("#7a4a32", 0.9, 0.2), // 녹슨 철: 철조망·파이프
+      red: mk("#b4322a", 0.6, 0.2), // 소화전
+      cork: mk("#8a6b46", 0.95, 0), // 게시판 코르크
+      paper: mk("#d8d4c8", 1, 0), // 게시물·트레이 종이
+      lamp: mk("#fff3d0", 0.4, 0), // 형광등 커버
+      water: mk("#2a3b4a", 0.15, 0.1), // 물웅덩이(젖은 바닥)
+      ball: mk("#c96a2b", 0.85, 0), // 농구공
     };
   }, []);
 }
@@ -186,11 +195,17 @@ function Yard({
   hoop,
   track,
   wood,
+  rust,
+  ball,
+  water,
 }: {
   steel: THREE.Material;
   hoop: THREE.Material;
   track: THREE.Material;
   wood: THREE.Material;
+  rust: THREE.Material;
+  ball: THREE.Material;
+  water: THREE.Material;
 }) {
   const { cx, cz } = YARD;
   return (
@@ -217,6 +232,67 @@ function Yard({
           <boxGeometry args={[4, 0.18, 0.7]} />
         </mesh>
       ))}
+
+      {/* 담 위 철조망 — 가로줄 3단. 담 안쪽으로 살짝 들여 벽면과 z-fighting을 피한다. */}
+      {[0.35, 0.75, 1.15].map((dy, i) => (
+        <group key={i}>
+          <mesh position={[43.6, YARD_WALL_H + dy, cz]} material={rust}>
+            <boxGeometry args={[0.05, 0.05, 27.6]} />
+          </mesh>
+          {[13.6, -13.6].map((dz, j) => (
+            <mesh key={j} position={[35, YARD_WALL_H + dy, cz + dz]} material={rust}>
+              <boxGeometry args={[17.6, 0.05, 0.05]} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      {/* 철조망 지지 기둥 */}
+      {[-13.6, 0, 13.6].map((dz, i) => (
+        <mesh key={i} position={[43.6, YARD_WALL_H + 0.75, cz + dz]} material={rust} castShadow>
+          <cylinderGeometry args={[0.07, 0.07, 1.5, 6]} />
+        </mesh>
+      ))}
+
+      {/* 감시탑(북동 모서리) — 기둥 4 + 바닥 + 지붕 */}
+      <group position={[cx + 6.5, 0, cz + 11]}>
+        {[
+          [-1, -1],
+          [1, -1],
+          [-1, 1],
+          [1, 1],
+        ].map(([sx, sz], i) => (
+          <mesh key={i} position={[sx * 1.1, 2.5, sz * 1.1]} material={steel} castShadow>
+            <cylinderGeometry args={[0.12, 0.12, 5, 8]} />
+          </mesh>
+        ))}
+        <mesh position={[0, 5.1, 0]} material={steel} castShadow receiveShadow>
+          <boxGeometry args={[3, 0.2, 3]} />
+        </mesh>
+        <mesh position={[0, 6.6, 0]} material={steel} castShadow>
+          <boxGeometry args={[3.4, 0.15, 3.4]} />
+        </mesh>
+      </group>
+
+      {/* 농구공 — 골대 아래 굴러다니는 것 */}
+      <mesh position={[cx + 5.8, 0.24, cz - 1.6]} material={ball} castShadow>
+        <sphereGeometry args={[0.24, 16, 12]} />
+      </mesh>
+
+      {/* 물웅덩이 — 비 온 뒤 흔적. 바닥에 눕힌 얇은 원. */}
+      {[
+        [-4.5, 5.5, 1.6],
+        [2.5, -6.5, 1.1],
+        [-8, -3, 0.8],
+      ].map(([dx, dz, r], i) => (
+        <mesh
+          key={i}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[cx + dx, 0.015, cz + dz]}
+          material={water}
+        >
+          <circleGeometry args={[r, 20]} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -226,10 +302,12 @@ function Cafeteria({
   table,
   wood,
   steel,
+  paper,
 }: {
   table: THREE.Material;
   wood: THREE.Material;
   steel: THREE.Material;
+  paper: THREE.Material;
 }) {
   const { cx } = CAFETERIA;
   const cols = [-6, 6];
@@ -259,7 +337,185 @@ function Cafeteria({
       <mesh position={[cx - 7.5, 0.6, 0]} material={steel} castShadow receiveShadow>
         <boxGeometry args={[1, 1.2, 10]} />
       </mesh>
+
+      {/* 배식 트레이 더미 — 배식대 위에 살짝 어긋나게 쌓인 것 */}
+      {[0, 1, 2, 3, 4].map((i) => (
+        <mesh
+          key={i}
+          position={[cx - 7.5, 1.24 + i * 0.05, 3.2 + (i % 2) * 0.06]}
+          rotation={[0, i * 0.05, 0]}
+          material={paper}
+          castShadow
+        >
+          <boxGeometry args={[0.62, 0.04, 0.44]} />
+        </mesh>
+      ))}
+
+      {/* 엎어진 의자 2개 — 급히 빠져나간 흔적. 눕혀서 다리가 옆으로 향한다. */}
+      {[
+        [2.5, 9.2, 0.7],
+        [-2.2, -9.4, -1.1],
+      ].map(([dx, dz, rot], i) => (
+        <group key={i} position={[cx + dx, 0.22, dz]} rotation={[0, rot, Math.PI / 2]}>
+          <mesh material={wood} castShadow>
+            <boxGeometry args={[0.44, 0.08, 0.44]} />
+          </mesh>
+          {[
+            [-0.17, -0.17],
+            [0.17, -0.17],
+            [-0.17, 0.17],
+            [0.17, 0.17],
+          ].map(([lx, lz], j) => (
+            <mesh key={j} position={[lx, -0.24, lz]} material={steel}>
+              <cylinderGeometry args={[0.025, 0.025, 0.44, 6]} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {/* 벽시계 — 동쪽 벽면. 판 + 시침·분침 */}
+      <group position={[cx + 8.9, 2.6, 0]} rotation={[0, -Math.PI / 2, 0]}>
+        <mesh material={paper}>
+          <cylinderGeometry args={[0.42, 0.42, 0.07, 20]} />
+        </mesh>
+        <mesh position={[0, 0.05, -0.11]} rotation={[Math.PI / 2, 0, 0]} material={steel}>
+          <boxGeometry args={[0.04, 0.22, 0.02]} />
+        </mesh>
+        <mesh position={[0.14, 0.05, 0]} rotation={[Math.PI / 2, 0, Math.PI / 2]} material={steel}>
+          <boxGeometry args={[0.03, 0.3, 0.02]} />
+        </mesh>
+      </group>
     </group>
+  );
+}
+
+// ── 통로 소품: 소화전 · 게시판 · 파이프 · 깜빡이는 형광등 ──────────
+//
+// 통로는 z가 -2.5~2.5로 좁다. 소품은 전부 벽에 붙여 두 벽 사이 통행로를 비워야 한다
+// (충돌은 벽만 계산하므로 통로 한가운데 두면 몸이 통과해 버려 더 어색하다).
+function CorridorProps({
+  steel,
+  rust,
+  red,
+  cork,
+  paper,
+  lamp,
+}: {
+  steel: THREE.Material;
+  rust: THREE.Material;
+  red: THREE.Material;
+  cork: THREE.Material;
+  paper: THREE.Material;
+  lamp: THREE.Material;
+}) {
+  // 동·서 통로의 x 범위: 14~26, -26~-14
+  const runs = [
+    { from: 14.5, to: 25.5 },
+    { from: -25.5, to: -14.5 },
+  ];
+
+  return (
+    <group>
+      {runs.map((run, ri) => {
+        const mid = (run.from + run.to) / 2;
+        return (
+          <group key={ri}>
+            {/* 천장 배관 2줄 — 통로를 따라 길게 */}
+            {[-1.9, 1.9].map((pz, i) => (
+              <mesh
+                key={i}
+                position={[mid, 2.7, pz]}
+                rotation={[0, 0, Math.PI / 2]}
+                material={rust}
+                castShadow
+              >
+                <cylinderGeometry args={[0.09, 0.09, Math.abs(run.to - run.from), 8]} />
+              </mesh>
+            ))}
+            {/* 배관 고정 밴드 */}
+            {[0.25, 0.5, 0.75].map((t, i) => (
+              <mesh
+                key={i}
+                position={[run.from + (run.to - run.from) * t, 2.7, 1.9]}
+                rotation={[0, 0, Math.PI / 2]}
+                material={steel}
+              >
+                <cylinderGeometry args={[0.13, 0.13, 0.08, 8]} />
+              </mesh>
+            ))}
+            {/* 소화전 — 남쪽 벽에 붙임 */}
+            <group position={[run.from + (run.to - run.from) * 0.3, 0.9, -2.2]}>
+              <mesh material={red} castShadow>
+                <boxGeometry args={[0.42, 0.62, 0.22]} />
+              </mesh>
+              <mesh position={[0, 0, 0.14]} material={steel}>
+                <cylinderGeometry args={[0.07, 0.07, 0.12, 10]} />
+              </mesh>
+            </group>
+            {/* 게시판 — 북쪽 벽. 코르크 판 + 종이 몇 장 */}
+            <group position={[run.from + (run.to - run.from) * 0.65, 1.7, 2.24]}>
+              <mesh material={cork} castShadow>
+                <boxGeometry args={[1.8, 1.1, 0.06]} />
+              </mesh>
+              {[
+                [-0.5, 0.22, 0.06],
+                [0.15, 0.28, -0.05],
+                [0.55, -0.2, 0.09],
+              ].map(([px, py, rot], i) => (
+                <mesh key={i} position={[px, py, -0.04]} rotation={[0, 0, rot]} material={paper}>
+                  <boxGeometry args={[0.42, 0.56, 0.01]} />
+                </mesh>
+              ))}
+            </group>
+            {/* 형광등 2개 — 하나는 깜빡인다 */}
+            <FlickerLamp pos={[run.from + (run.to - run.from) * 0.25, 2.85, 0]} mat={lamp} steady />
+            <FlickerLamp pos={[run.from + (run.to - run.from) * 0.75, 2.85, 0]} mat={lamp} />
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+/**
+ * 형광등. steady가 아니면 불규칙하게 깜빡인다.
+ *
+ * 광원(PointLight)을 켜지 않고 **재질의 emissive만** 흔든다. t2.micro에서 돌리는 게임이라
+ * 실광원을 늘리면 셰이더가 매번 다시 컴파일되고 프레임이 떨어진다.
+ */
+function FlickerLamp({
+  pos,
+  mat,
+  steady = false,
+}: {
+  pos: [number, number, number];
+  mat: THREE.Material;
+  steady?: boolean;
+}) {
+  const ref = useRef<THREE.Mesh>(null);
+  // 등마다 다른 위상 — 전부 같이 깜빡이면 기계적으로 보인다.
+  const seed = useMemo(() => Math.random() * 10, []);
+  const own = useMemo(() => (mat as THREE.MeshStandardMaterial).clone(), [mat]);
+
+  useFrame((state) => {
+    if (steady || !ref.current) return;
+    const t = state.clock.elapsedTime + seed;
+    // 대체로 켜져 있다가 가끔 훅 꺼진다(사인 두 개를 겹쳐 주기를 흐트러뜨린다).
+    const n = Math.sin(t * 11) * Math.sin(t * 3.3);
+    const on = n > -0.72 ? 1 : 0.06;
+    (own as THREE.MeshStandardMaterial).emissiveIntensity = on;
+  });
+
+  useMemo(() => {
+    const m = own as THREE.MeshStandardMaterial;
+    m.emissive = new THREE.Color("#fff3d0");
+    m.emissiveIntensity = 1;
+  }, [own]);
+
+  return (
+    <mesh ref={ref} position={pos} material={own}>
+      <boxGeometry args={[1.6, 0.08, 0.3]} />
+    </mesh>
   );
 }
 
@@ -333,8 +589,24 @@ export default function GameMap() {
       ))}
 
       {/* 운동장 / 식당 */}
-      <Yard steel={mat.steel} hoop={mat.hoop} track={mat.track} wood={mat.wood} />
-      <Cafeteria table={mat.table} wood={mat.wood} steel={mat.steel} />
+      <Yard
+        steel={mat.steel}
+        hoop={mat.hoop}
+        track={mat.track}
+        wood={mat.wood}
+        rust={mat.rust}
+        ball={mat.ball}
+        water={mat.water}
+      />
+      <Cafeteria table={mat.table} wood={mat.wood} steel={mat.steel} paper={mat.paper} />
+      <CorridorProps
+        steel={mat.steel}
+        rust={mat.rust}
+        red={mat.red}
+        cork={mat.cork}
+        paper={mat.paper}
+        lamp={mat.lamp}
+      />
       <Label pos={[YARD.cx, 3.4, YARD.cz + 12.5]} text="운동장" />
       <Label pos={[CAFETERIA.cx, 2.6, CAFETERIA.cz + 10.5]} text="식당" />
 
