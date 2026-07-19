@@ -5,6 +5,7 @@ import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import Basketball from "./Basketball";
 import Interactable from "./Interactable";
 import { INTERACTABLES, isCellDoorOpen, useInteraction } from "./interactables";
 import {
@@ -273,10 +274,8 @@ function Yard({
         </mesh>
       </group>
 
-      {/* 농구공 — 골대 아래 굴러다니는 것 */}
-      <mesh position={[cx + 5.8, 0.24, cz - 1.6]} material={ball} castShadow>
-        <sphereGeometry args={[0.24, 16, 12]} />
-      </mesh>
+      {/* 농구공은 Basketball 컴포넌트가 소유한다(E로 슛을 쏘면 움직여야 해서). */}
+      <Basketball mat={ball} />
 
       {/* 물웅덩이 — 비 온 뒤 흔적. 바닥에 눕힌 얇은 원. */}
       {[

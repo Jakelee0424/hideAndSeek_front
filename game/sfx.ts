@@ -115,6 +115,22 @@ export function sfxEscape(): void {
   );
 }
 
+/** 농구 골인 — 그물 스치는 짧은 쉭. */
+export function sfxSwish(): void {
+  const c = ready();
+  if (!c) return;
+  noise(c, { dur: 0.22, gain: 0.1, cutoff: 6000 });
+  tone(c, { freq: 880, to: 1320, dur: 0.18, gain: 0.08, type: "sine" });
+}
+
+/** 공이 바닥에 튈 때 — 둔탁한 통. */
+export function sfxThud(): void {
+  const c = ready();
+  if (!c) return;
+  tone(c, { freq: 150, to: 60, dur: 0.14, gain: 0.11, type: "sine" });
+  noise(c, { dur: 0.05, gain: 0.05, cutoff: 500 });
+}
+
 /** AI 정체 공개 — 무겁게 내려꽂는 한 방. */
 export function sfxReveal(): void {
   const c = ready();

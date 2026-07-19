@@ -21,6 +21,7 @@ import {
 } from "./interactables";
 import { randomCellSpawn } from "./prisonLayout";
 import { resolveCollision } from "./collision";
+import { localPos } from "./localPos";
 
 // ⚠️ 아래 넷은 백엔드 application.yml의 game.* 와 이중 관리다. 어긋나면 예측이 서버와 벌어져
 //    러버밴딩이 생긴다(특히 점프는 착지 시점이 눈에 띄게 튄다).
@@ -171,6 +172,11 @@ export default function LocalPlayer() {
     state.camera.position.copy(_camDesired); // 마우스룩은 지연 없이 즉시 반영
     _lookAt.set(g.position.x, g.position.y + CAM_LOOK_H, g.position.z);
     state.camera.lookAt(_lookAt);
+
+    // 다른 컴포넌트(농구공 등)가 근접 판정에 쓸 수 있게 위치를 흘려 준다.
+    localPos.x = g.position.x;
+    localPos.y = g.position.y;
+    localPos.z = g.position.z;
 
     // 근접 오브젝트 감지(사거리 내 최근접)
     let nearId: string | null = null;
