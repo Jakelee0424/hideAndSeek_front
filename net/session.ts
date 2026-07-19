@@ -74,6 +74,8 @@ export function joinRoom(
         if (snap.votes) useGameStore.getState().applyVotes(snap.votes);
         // 진짜 AI는 결말에만 공개된다(그 전엔 아예 안 실린다).
         if (snap.aiId) useGameStore.getState().setAiId(snap.aiId);
+        // 대기방 준비 상태도 바뀔 때만 실려 온다.
+        if (snap.readyIds) useGameStore.getState().applyReady(snap.readyIds);
       },
     },
   );

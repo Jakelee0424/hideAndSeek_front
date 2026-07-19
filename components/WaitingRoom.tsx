@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/store/gameStore";
 import { joinRoom, leaveRoom } from "@/net/session";
+import { sendReady, sendStart } from "@/net/stompClient";
 
 const STATUS_LABEL: Record<string, string> = {
   idle: "연결 끊김",
@@ -24,6 +25,9 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
   const playerIds = useGameStore((s) => s.playerIds);
   const nicks = useGameStore((s) => s.nicks);
   const rosterOrder = useGameStore((s) => s.rosterOrder);
+  const bots = useGameStore((s) => s.bots);
+  const readys = useGameStore((s) => s.readys);
+  const phase = useGameStore((s) => s.phase);
 
   // 닉네임 없이 직접/새로고침으로 들어온 경우 로비로 돌려보냄
   useEffect(() => {
@@ -43,11 +47,25 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
   // 언제나 사람보다 뒤에 온다 — 첫 번째만 집으면 봇이 방장이 될 일이 없다.
   const hostId = rosterOrder[0] ?? playerIds[0];
   const isHost = hostId === myId;
-  const allReady = playerIds.length > 0; // TODO: 서버 연동 시 전원 ready 체크
 
+  // 준비 판정의 주인은 서버다. 클라의 ready는 버튼 눌림 표시일 뿐이라, 그걸로 시작을
+  // 막으면 남이 준비했는지 알 수 없다. 봇은 준비 대상이 아니므로 로스터에서 뺀다.
+  const humanIds = rosterOrder.length ? rosterOrder : playerIds;
+  const allReady =
+    humanIds.length > 0 && humanIds.every((id) => bots[id] || readys[id]);
+
+  // 시작은 서버가 확정한다. 여기서 화면을 옮기지 않는다 — 누른 사람만 넘어가면 나머지는
+  // 대기방에 남는다(예전 동작). 아래 useEffect가 단계 전환을 보고 전원을 함께 옮긴다.
   function start() {
-    router.push(`/rooms/${roomId}/play`);
+    sendStart(roomId);
   }
+
+  // 서버가 게임을 시작하면 단계가 LOBBY를 벗어난다 → 그때 모두 함께 게임 화면으로.
+  useEffect(() => {
+    if (phase && phase !== "LOBBY") {
+      router.replace(`/rooms/${roomId}/play`);
+    }
+  }, [phase, roomId, router]);
 
   function leave() {
     leaveRoom();
@@ -102,7 +120,8 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
                   </span>
                 )}
               </span>
-              {id === myId && ready && (
+              {/* 남의 준비 상태도 보여준다 — 서버가 실어 보내므로 알 수 있다. */}
+              {readys[id] && (
                 <span className="text-xs text-emerald-400">준비완료</span>
               )}
             </li>
@@ -110,7 +129,11 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
         </ul>
 
         <button
-          onClick={() => setReady(!ready)}
+          onClick={() => {
+            const next = !ready;
+            setReady(next); // 로컬은 즉시 반영(버튼이 굼뜨게 보이지 않도록)
+            sendReady(roomId, next); // 판정은 서버가 한다
+          }}
           className={`mb-2 w-full rounded-lg py-2.5 text-sm font-semibold transition ${
             ready
               ? "bg-emerald-500 text-white hover:bg-emerald-400"

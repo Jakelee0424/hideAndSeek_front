@@ -32,6 +32,8 @@ interface GameStore {
   votes: Record<string, string>;
   /** 진짜 AI의 id. 결말(ENDED) 전까지 서버가 알려주지 않으므로 null이다. */
   aiId: string | null;
+  /** 대기방에서 준비를 마친 사람 id 집합. 서버가 판정의 주인이다. */
+  readys: Record<string, boolean>;
 
   setStatus: (s: ConnStatus) => void;
   setReady: (v: boolean) => void;
@@ -50,6 +52,8 @@ interface GameStore {
   applyVotes: (votes: VoteEntry[]) => void;
   /** 결말에 공개되는 진짜 AI id. */
   setAiId: (id: string) => void;
+  /** 서버가 실어 보낸 준비 상태를 반영. 바뀔 때만 갱신. */
+  applyReady: (ids: string[]) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -68,6 +72,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   rosterOrder: [],
   votes: {},
   aiId: null,
+  readys: {},
 
   setStatus: (status) => set({ status }),
   setReady: (ready) => set({ ready }),
@@ -95,6 +100,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rosterOrder: [myId],
       votes: {},
       aiId: null,
+      readys: {},
     }),
 
   clear: () =>
@@ -111,6 +117,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rosterOrder: [],
       votes: {},
       aiId: null,
+      readys: {},
     }),
 
   syncPlayers: (ids) => {
@@ -165,6 +172,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setAiId: (id) => {
     if (get().aiId === id) return;
     set({ aiId: id });
+  },
+
+  applyReady: (ids) => {
+    const next: Record<string, boolean> = {};
+    for (const id of ids) next[id] = true;
+    const cur = get().readys;
+    const curIds = Object.keys(cur).filter((k) => cur[k]);
+    const same =
+      curIds.length === ids.length && curIds.every((id) => next[id]);
+    if (same) return; // 리렌더 방지
+    set({ readys: next });
   },
 
   setNoise: (v) => {

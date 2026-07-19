@@ -76,6 +76,23 @@ export function sendSolve(roomId: string, objectId: string): void {
   }
 }
 
+/** 대기방 준비 토글. 누구인지는 서버가 STOMP 세션에서 알아낸다. */
+export function sendReady(roomId: string, ready: boolean): void {
+  if (client?.connected) {
+    client.publish({
+      destination: `/app/rooms/${roomId}/ready`,
+      body: JSON.stringify({ ready }),
+    });
+  }
+}
+
+/** 게임 시작 요청. 전원이 준비돼 있지 않으면 서버가 무시한다. */
+export function sendStart(roomId: string): void {
+  if (client?.connected) {
+    client.publish({ destination: `/app/rooms/${roomId}/start`, body: "{}" });
+  }
+}
+
 /** AI 지목 투표. 투표자는 서버가 STOMP 세션에서 알아내므로 대상만 보낸다. */
 export function sendVote(roomId: string, targetId: string): void {
   if (client?.connected) {

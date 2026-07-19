@@ -32,10 +32,17 @@ export interface RosterEntry {
 }
 
 /** 게임 진행 단계. 백엔드 GamePhase enum의 이름과 일치해야 한다(이중 관리). */
-export type GamePhase = "ONBOARDING" | "MISSION" | "SHARING" | "VOTE" | "ENDED";
+export type GamePhase =
+  | "LOBBY"
+  | "ONBOARDING"
+  | "MISSION"
+  | "SHARING"
+  | "VOTE"
+  | "ENDED";
 
 /** 단계 표시 이름. 백엔드 GamePhase.label()과 같은 값. */
 export const PHASE_LABEL: Record<GamePhase, string> = {
+  LOBBY: "대기 중",
   ONBOARDING: "온보딩",
   MISSION: "개별 미션",
   SHARING: "정보 공유",
@@ -65,6 +72,8 @@ export interface WorldSnapshot {
    * 그 전까지 서버는 roster.bot도 전부 false로 보낸다 — 미리 알면 투표가 무의미해진다.
    */
   aiId?: string | null;
+  /** 대기방에서 준비를 마친 사람들. 로스터와 같은 규약 — 바뀔 때만 존재. */
+  readyIds?: string[] | null;
 }
 
 /** 서버 → 클라: 누가 누구를 AI로 지목했는지. 집계는 클라가 한다(표가 몇 안 된다). */
