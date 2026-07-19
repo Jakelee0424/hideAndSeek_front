@@ -105,4 +105,13 @@ export interface InputMessage {
   jump: boolean;
 }
 
-export type ConnStatus = "idle" | "connecting" | "connected" | "error";
+/**
+ * rejected는 "서버는 살아 있는데 나를 안 받아줬다"(방 정원 초과 등)를 뜻한다.
+ * error(서버에 못 붙음)와 섞으면 정원이 찬 상황이 "서버 오프라인"으로 표시된다.
+ */
+export type ConnStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "error"
+  | "rejected";

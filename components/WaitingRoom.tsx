@@ -11,6 +11,7 @@ const STATUS_LABEL: Record<string, string> = {
   connecting: "연결 중…",
   connected: "서버 연결됨",
   error: "서버 오프라인 (로컬 대기)",
+  rejected: "방이 가득 찼습니다",
 };
 
 export default function WaitingRoom({ roomId }: { roomId: string }) {
@@ -67,9 +68,11 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
             className={`rounded-full px-3 py-1 text-xs font-medium ${
               status === "connected"
                 ? "bg-emerald-500/20 text-emerald-300"
-                : status === "error"
-                  ? "bg-amber-500/20 text-amber-300"
-                  : "bg-slate-500/20 text-slate-300"
+                : status === "rejected"
+                  ? "bg-rose-500/20 text-rose-300"
+                  : status === "error"
+                    ? "bg-amber-500/20 text-amber-300"
+                    : "bg-slate-500/20 text-slate-300"
             }`}
           >
             {STATUS_LABEL[status] ?? status}
