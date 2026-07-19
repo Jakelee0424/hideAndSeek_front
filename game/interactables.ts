@@ -143,7 +143,48 @@ export const INTERACTABLES: Interactable[] = [
     puzzle: { kind: "switches", answer: [true, false, false, true] },
     opensDoor: "cell-D",
   },
+
+  // ── 최종 탈옥문: 감방을 나온 뒤의 목표 ──────────────────────────
+  //
+  // 단서는 감방 "밖"(식당·통로·운동장)에만 둔다. 감방 안에 두면 그 방 자물쇠를 푼 사람만
+  // 볼 수 있는데, 혼자 플레이하면 열리는 감방이 둘뿐이라 나머지 단서에 영영 못 닿는다.
+  // 밖에 두면 인원수와 무관하게 성립한다.
+  //
+  // 세 단서를 모으면 1863.
+  {
+    id: "note-mess",
+    type: "note",
+    position: [-35, 0.6, 7], // 식당
+    label: "배식 당번표",
+    hint: "지워진 칸의 위아래가 17과 19다. 앞 두 자리는 그 사이 수.",
+  },
+  {
+    id: "note-west",
+    type: "note",
+    position: [-20, 0.6, 1.5], // 서통로
+    label: "순찰 일지",
+    hint: "마지막 줄 — “3시 방향 이상 없음.” 끝자리는 이 수.",
+  },
+  {
+    id: "note-yard",
+    type: "note",
+    position: [38, 0.6, -8], // 운동장
+    label: "담벼락 자국",
+    hint: "누군가 긁어놓은 자국이 여섯 줄. 셋째 자리는 이 수.",
+  },
+  {
+    id: "escape-gate",
+    type: "lockbox",
+    position: [42, 0.6, 0], // 운동장 동쪽 담
+    label: "탈옥문",
+    hint: "네 자리. 교도소 곳곳에 흩어진 기록을 모아야 한다.",
+    puzzle: { kind: "dial", code: "1863" },
+    // opensDoor 없음 — 감방문이 아니라 게임의 끝이다. LOCKS에도 잡히지 않는다.
+  },
 ];
+
+/** 최종 탈옥문 id. 이게 solved면 게임 클리어. */
+export const ESCAPE_GATE_ID = "escape-gate";
 
 export function findInteractable(id: string | null): Interactable | undefined {
   return id ? INTERACTABLES.find((it) => it.id === id) : undefined;

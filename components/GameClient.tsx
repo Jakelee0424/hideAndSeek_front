@@ -1,6 +1,7 @@
 "use client";
 // Canvas는 SSR 하지 않는다(three는 브라우저 전용).
 import dynamic from "next/dynamic";
+import EscapeOverlay from "./EscapeOverlay";
 import HUD from "./HUD";
 import PuzzleOverlay from "./PuzzleOverlay";
 
@@ -12,6 +13,7 @@ export default function GameClient() {
       <Scene />
       <HUD />
       <PuzzleOverlay />
+      <EscapeOverlay />
     </main>
   );
 }
