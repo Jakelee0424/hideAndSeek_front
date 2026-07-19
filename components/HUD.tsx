@@ -42,9 +42,13 @@ export default function HUD() {
       <PhaseBanner />
 
       <div className="absolute bottom-4 left-4 rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-300 backdrop-blur">
-        이동 <kbd className="font-mono">W A S D</kbd> · 상호작용{" "}
+        이동 <kbd className="font-mono">W A S D</kbd> · 달리기{" "}
+        <kbd className="font-mono">R</kbd> · 상호작용{" "}
         <kbd className="font-mono">E</kbd>
       </div>
+
+      {/* 소음 게이지 (하단 우측) */}
+      <NoiseGauge />
 
       {/* 상호작용 프롬프트 */}
       {near && !openId && (
@@ -68,6 +72,43 @@ export default function HUD() {
       >
         나가기
       </button>
+    </div>
+  );
+}
+
+// 소음 게이지: 걸을 땐 0, 달리면 차오른다.
+// 색상 구간 — 30 이하 초록 / 31~69 노랑 / 70 이상 빨강.
+// noise만 구독하는 별도 컴포넌트라, 게이지 갱신(최대 15Hz)이 HUD 전체를 리렌더하지 않는다.
+function NoiseGauge() {
+  const noise = useGameStore((s) => s.noise);
+  const level = noise <= 30 ? "low" : noise < 70 ? "mid" : "high";
+  const barColor =
+    level === "low"
+      ? "bg-emerald-500"
+      : level === "mid"
+        ? "bg-yellow-400"
+        : "bg-red-500";
+  const textColor =
+    level === "low"
+      ? "text-emerald-400"
+      : level === "mid"
+        ? "text-yellow-300"
+        : "text-red-400";
+
+  return (
+    <div className="absolute bottom-4 right-4 w-44 rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-300 backdrop-blur">
+      <div className="mb-1 flex items-center justify-between">
+        <span>소음</span>
+        <span className={`font-mono font-semibold tabular-nums ${textColor}`}>
+          {noise}
+        </span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-white/15">
+        <div
+          className={`h-full rounded-full transition-[width,background-color] duration-100 ${barColor}`}
+          style={{ width: `${noise}%` }}
+        />
+      </div>
     </div>
   );
 }

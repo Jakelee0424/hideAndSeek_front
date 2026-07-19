@@ -1,82 +1,85 @@
 "use client";
-// 상호작용 오브젝트 1개. 근접(nearId) 시 발광 하이라이트, 해결(solved) 시 색 변경.
-// 문은 해결 시 경첩을 기준으로 부드럽게 열린다(useFrame 보간).
-import { useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+// 상호작용 오브젝트 1개(자물쇠/힌트). 근접(nearId) 시 발광 하이라이트.
+// 자물쇠(lockbox)는 해결(solved) 시 초록으로 바뀐다(→ 그 방 감방문이 열림).
 import { Html } from "@react-three/drei";
-import * as THREE from "three";
 import { useInteraction, type Interactable as InteractableData } from "./interactables";
 
-const DOOR_OPEN_ANGLE = -1.5; // 열렸을 때 경첩 회전(rad)
+// 근접 시 발광색(공통)
+const NEAR_EMISSIVE = "#fde68a";
 
-const COLOR: Record<string, string> = {
-  lockbox: "#b45309",
-  door: "#7c3aed",
-  note: "#e5e7eb",
-};
+// ── 자물쇠(padlock): 몸통 + U자 고리 + 열쇠구멍 ──────────────────
+function Padlock({ color, near }: { color: string; near: boolean }) {
+  const emissive = near ? NEAR_EMISSIVE : "#000000";
+  const emissiveIntensity = near ? 0.6 : 0;
+  return (
+    <group>
+      {/* U자 고리(스틸). 세로 링의 아랫부분은 몸통에 가려 U자로 보인다. */}
+      <mesh position={[0, 0.5, 0]} castShadow>
+        <torusGeometry args={[0.26, 0.07, 12, 24]} />
+        <meshStandardMaterial
+          color="#c7ccd4"
+          metalness={0.95}
+          roughness={0.25}
+          emissive={emissive}
+          emissiveIntensity={emissiveIntensity * 0.5}
+        />
+      </mesh>
+
+      {/* 몸통(자물쇠 색). 해결 시 color가 초록으로 넘어온다. */}
+      <mesh position={[0, 0, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.7, 0.9, 0.34]} />
+        <meshStandardMaterial
+          color={color}
+          metalness={0.7}
+          roughness={0.35}
+          emissive={emissive}
+          emissiveIntensity={emissiveIntensity}
+        />
+      </mesh>
+
+      {/* 열쇠구멍(앞면). 원 + 아래 홈. */}
+      <mesh position={[0, -0.05, 0.18]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.08, 0.08, 0.06, 16]} />
+        <meshStandardMaterial color="#1b1e24" metalness={0.3} roughness={0.8} />
+      </mesh>
+      <mesh position={[0, -0.22, 0.18]}>
+        <boxGeometry args={[0.06, 0.22, 0.06]} />
+        <meshStandardMaterial color="#1b1e24" metalness={0.3} roughness={0.8} />
+      </mesh>
+    </group>
+  );
+}
 
 export default function Interactable({ data }: { data: InteractableData }) {
   const nearId = useInteraction((s) => s.nearId);
   const solved = useInteraction((s) => s.solved[data.id] ?? false);
   const near = nearId === data.id;
 
-  const geo = useMemo(() => {
-    switch (data.type) {
-      case "door":
-        return <boxGeometry args={[1.6, 2, 0.25]} />;
-      case "note":
-        return <boxGeometry args={[0.5, 0.05, 0.7]} />;
-      default:
-        return <boxGeometry args={[0.9, 0.9, 0.9]} />; // lockbox
-    }
-  }, [data.type]);
-
-  const base = COLOR[data.type] ?? "#888";
-  const color = solved ? "#22c55e" : base;
-  const isDoor = data.type === "door";
-  const hinge = useRef<THREE.Group>(null);
-
-  // 문 열림 모션: 목표 각도로 부드럽게 감쇠 보간
-  useFrame((_, dt) => {
-    if (!isDoor || !hinge.current) return;
-    const target = solved ? DOOR_OPEN_ANGLE : 0;
-    hinge.current.rotation.y = THREE.MathUtils.damp(
-      hinge.current.rotation.y,
-      target,
-      4,
-      dt,
-    );
-  });
-
-  const mat = (
-    <meshStandardMaterial
-      color={color}
-      emissive={near ? "#fde68a" : "#000000"}
-      emissiveIntensity={near ? 0.6 : 0}
-      metalness={0.2}
-      roughness={0.6}
-    />
-  );
+  const isLock = data.type === "lockbox";
+  // 자물쇠: 잠김=황동색, 해결=초록. 힌트(note): 종이색.
+  const color = solved ? "#22c55e" : isLock ? "#b8860b" : "#e5e7eb";
+  const promptH = isLock ? 1.5 : 1.0;
 
   return (
     <group position={data.position}>
-      {isDoor ? (
-        // 왼쪽 모서리를 경첩으로: 해결(solved) 시 열림
-        <group ref={hinge} position={[-0.8, 0, 0]}>
-          <mesh position={[0.8, 0, 0]} castShadow receiveShadow>
-            {geo}
-            {mat}
-          </mesh>
-        </group>
+      {isLock ? (
+        <Padlock color={color} near={near} />
       ) : (
-        <mesh castShadow receiveShadow>
-          {geo}
-          {mat}
+        // 힌트 쪽지(납작한 종이)
+        <mesh castShadow receiveShadow rotation={[-0.15, 0, 0]}>
+          <boxGeometry args={[0.5, 0.05, 0.7]} />
+          <meshStandardMaterial
+            color={color}
+            emissive={near ? NEAR_EMISSIVE : "#000000"}
+            emissiveIntensity={near ? 0.6 : 0}
+            metalness={0.1}
+            roughness={0.8}
+          />
         </mesh>
       )}
 
       {near && (
-        <Html center distanceFactor={10} position={[0, 1.3, 0]}>
+        <Html center distanceFactor={10} position={[0, promptH, 0]}>
           <div className="pointer-events-none select-none whitespace-nowrap rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white">
             {solved ? `${data.label} ✓` : `[E] ${data.label}`}
           </div>

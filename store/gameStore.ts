@@ -19,6 +19,8 @@ interface GameStore {
   phaseEndsAt: number | null;
   /** 현재 단계가 시작된 시각(Date.now 기준). 전환 배너를 얼마나 띄울지 계산하는 데 쓴다. */
   phaseStartedAt: number | null;
+  /** 소음 게이지(0~100). 걸을 땐 0, 달리면 오른다. LocalPlayer가 프레임 루프에서 갱신한다. */
+  noise: number;
 
   setStatus: (s: ConnStatus) => void;
   setReady: (v: boolean) => void;
@@ -31,6 +33,8 @@ interface GameStore {
   syncPlayers: (ids: string[]) => void;
   /** 로스터(닉네임)를 병합. 서버가 로스터를 실어 보낼 때만 호출된다. */
   applyRoster: (roster: RosterEntry[]) => void;
+  /** 소음 게이지 갱신. 실제 값이 바뀔 때만 set 해서 매 프레임 리렌더를 피한다. */
+  setNoise: (v: number) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -45,6 +49,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   phase: null,
   phaseEndsAt: null,
   phaseStartedAt: null,
+  noise: 0,
 
   setStatus: (status) => set({ status }),
   setReady: (ready) => set({ ready }),
@@ -68,6 +73,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       phase: null,
       phaseEndsAt: null,
       phaseStartedAt: null,
+      noise: 0,
     }),
 
   clear: () =>
@@ -80,6 +86,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       phase: null,
       phaseEndsAt: null,
       phaseStartedAt: null,
+      noise: 0,
     }),
 
   syncPlayers: (ids) => {
@@ -106,5 +113,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
     if (changed) set({ nicks: nextNicks, bots: nextBots });
+  },
+
+  setNoise: (v) => {
+    if (get().noise === v) return; // 같은 값이면 리렌더 안 함
+    set({ noise: v });
   },
 }));

@@ -6,7 +6,7 @@ import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import Interactable from "./Interactable";
-import { INTERACTABLES, useInteraction } from "./interactables";
+import { INTERACTABLES, isCellDoorOpen, useInteraction } from "./interactables";
 import {
   BAR_SEGMENTS,
   CAFETERIA,
@@ -87,7 +87,7 @@ function BarredFront({
   );
 }
 
-// ── 감방문: 닫혀 시작, 열림(solved)이면 경첩 회전으로 스윙 오픈. 근접 시 [F] 프롬프트. ──
+// ── 감방문: 닫혀 시작. 그 방의 자물쇠(미션)를 풀면 경첩 회전으로 스윙 오픈. ──
 function CellDoor({
   id,
   pos,
@@ -101,8 +101,7 @@ function CellDoor({
 }) {
   const [x, z] = pos;
   const nBars = 4;
-  const open = useInteraction((s) => s.doorsOpen[id] ?? false);
-  const near = useInteraction((s) => s.nearDoorId === id);
+  const open = useInteraction((s) => isCellDoorOpen(id, s.solved));
   const panel = useRef<THREE.Group>(null);
 
   // 닫힘(0) ↔ 열림(side*1.75)으로 부드럽게 감쇠 보간
@@ -143,14 +142,6 @@ function CellDoor({
           );
         })}
       </group>
-
-      {near && (
-        <Html position={[DOOR_W / 2, 1.4, 0]} center distanceFactor={10}>
-          <div className="pointer-events-none select-none whitespace-nowrap rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white">
-            {open ? "[F] 문 닫기" : "[F] 문 열기"}
-          </div>
-        </Html>
-      )}
     </group>
   );
 }

@@ -28,10 +28,8 @@ export function joinRoom(
         if (snap.roster) useGameStore.getState().applyRoster(snap.roster);
         // 플레이어 목록은 매 tick 상태에서 파생(입·퇴장 즉시 반영).
         useGameStore.getState().syncPlayers(snap.states.map((s) => s.id));
-        // 퍼즐 해결 상태 협동 동기화
+        // 퍼즐 해결 상태 협동 동기화(감방문 열림은 solved에서 파생 → 함께 동기화됨)
         if (snap.solvedIds) useInteraction.getState().syncSolved(snap.solvedIds);
-        // 감방문 열림 상태 동기화
-        if (snap.openDoors) useInteraction.getState().syncDoors(snap.openDoors);
         // 진행 단계도 전환 시·입장 시에만 실려 온다 → 있을 때만 반영. 이후 카운트다운은 클라 몫.
         if (snap.phase) {
           useGameStore.getState().setPhase(snap.phase, snap.phaseRemainMs ?? 0);

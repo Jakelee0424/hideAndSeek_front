@@ -6,7 +6,7 @@ export interface Keys {
   a: boolean;
   s: boolean;
   d: boolean;
-  /** Shift: 달리기 */
+  /** R: 달리기 */
   sprint: boolean;
   /** Space: 점프 */
   jump: boolean;
@@ -21,8 +21,7 @@ const CODE_MAP: Record<string, keyof Keys> = {
   ArrowLeft: "a",
   ArrowDown: "s",
   ArrowRight: "d",
-  ShiftLeft: "sprint",
-  ShiftRight: "sprint",
+  KeyR: "sprint",
   Space: "jump",
 };
 

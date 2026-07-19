@@ -10,15 +10,16 @@ import * as THREE from "three";
 import { useKeyboard } from "./useKeyboard";
 import { useMouseLook } from "./useMouseLook";
 import Character, { type AnimState } from "./Character";
-import { sendDoor, sendInput } from "@/net/stompClient";
+import { sendInput } from "@/net/stompClient";
 import { worldState } from "@/net/worldState";
 import { useGameStore } from "@/store/gameStore";
 import {
   INTERACTABLES,
   INTERACT_RANGE,
+  openDoorsFromSolved,
   useInteraction,
 } from "./interactables";
-import { DOOR_RANGE, DOORS, randomCellSpawn } from "./prisonLayout";
+import { randomCellSpawn } from "./prisonLayout";
 import { resolveCollision } from "./collision";
 
 // ⚠️ 아래 넷은 백엔드 application.yml의 game.* 와 이중 관리다. 어긋나면 예측이 서버와 벌어져
@@ -32,6 +33,12 @@ const CAM_DIST = 6.5; // 카메라~캐릭터 거리(m)
 const CAM_LOOK_H = 1.4; // 시선 높이(캐릭터 머리 부근)
 const INPUT_HZ = 20;
 
+// 소음 게이지(0~100): 달리면 차오르고, 안 달리면(걷기·정지) 0으로 빠진다.
+const NOISE_MAX = 100;
+const NOISE_RISE = 40; // 달릴 때 초당 상승량 → 0→100 약 2.5초
+const NOISE_FALL = 55; // 안 달릴 때 초당 하강량 → 100→0 약 1.8초
+const NOISE_HZ = 15; // 게이지 표시 갱신 주기(매 프레임 setState 방지)
+
 const _camDesired = new THREE.Vector3();
 const _lookAt = new THREE.Vector3();
 
@@ -41,6 +48,8 @@ export default function LocalPlayer() {
   const look = useMouseLook();
   const seq = useRef(0);
   const acc = useRef(0);
+  const noise = useRef(0); // 소음 실수값(프레임마다 누적). 표시값은 반올림해 스토어로
+  const noiseAcc = useRef(0); // 소음 표시 갱신 throttle
   const vy = useRef(0); // 수직 속도(예측). 접지 중엔 0
   const lastAnim = useRef<AnimState>("idle");
   const spawned = useRef(false); // 첫 서버 스냅샷 때 배정된 감방 위치로 스냅
@@ -52,20 +61,13 @@ export default function LocalPlayer() {
   const [anim, setAnim] = useState<AnimState>("idle");
   const myNick = useGameStore((s) => s.myNick);
 
-  // E키: 근접 오브젝트 상호작용(퍼즐 열기) / F키: 근접 감방문 열기
+  // E키: 근접 오브젝트 상호작용(자물쇠/힌트 열기). 자물쇠를 풀면 그 방 감방문이 열린다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyE") return;
       const st = useInteraction.getState();
-      if (e.code === "KeyE") {
-        if (st.openId || !st.nearId || st.solved[st.nearId]) return;
-        st.open(st.nearId);
-      } else if (e.code === "KeyF") {
-        // 근접한 감방문을 토글(열림↔닫힘). 로컬 즉시 반영 + 서버 동기화.
-        const id = st.nearDoorId;
-        if (!id) return;
-        st.toggleDoor(id);
-        sendDoor(useGameStore.getState().roomId, id);
-      }
+      if (st.openId || !st.nearId || st.solved[st.nearId]) return;
+      st.open(st.nearId);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -105,6 +107,16 @@ export default function LocalPlayer() {
 
     const sprinting = !locked && k.sprint && moving;
 
+    // 소음: 달리는 동안 차오르고, 그 외(걷기·정지)엔 0으로 빠진다. 0~100 clamp.
+    noise.current += (sprinting ? NOISE_RISE : -NOISE_FALL) * dt;
+    if (noise.current < 0) noise.current = 0;
+    else if (noise.current > NOISE_MAX) noise.current = NOISE_MAX;
+    noiseAcc.current += dt;
+    if (noiseAcc.current >= 1 / NOISE_HZ) {
+      noiseAcc.current = 0;
+      useGameStore.getState().setNoise(Math.round(noise.current));
+    }
+
     if (moving) {
       mx /= len;
       mz /= len;
@@ -113,9 +125,9 @@ export default function LocalPlayer() {
       g.position.z += mz * speed * dt;
       g.rotation.y = Math.atan2(mx, mz); // 캐릭터는 이동 방향을 바라봄
 
-      // 벽/장애물 충돌 해석(서버와 동일 로직). 열린 감방문은 통과.
+      // 벽/장애물 충돌 해석(서버와 동일 로직). 미션을 푼 방의 감방문은 통과.
       // 충돌은 2D(x/z)라 점프해도 장애물은 못 넘는다 — 서버 Room.tick과 같은 규약.
-      const openDoors = useInteraction.getState().doorsOpen;
+      const openDoors = openDoorsFromSolved(useInteraction.getState().solved);
       const [rx, rz] = resolveCollision(g.position.x, g.position.z, openDoors);
       g.position.x = rx;
       g.position.z = rz;
@@ -173,20 +185,6 @@ export default function LocalPlayer() {
       }
     }
     useInteraction.getState().setNear(nearId);
-
-    // 근접 감방문 감지(사거리 내 최근접) → F 프롬프트/열기 대상
-    let nearDoorId: string | null = null;
-    let bestDoor = DOOR_RANGE * DOOR_RANGE;
-    for (const d of DOORS) {
-      const ex = d.pos[0] - g.position.x;
-      const ez = d.pos[1] - g.position.z;
-      const q = ex * ex + ez * ez;
-      if (q < bestDoor) {
-        bestDoor = q;
-        nearDoorId = d.id;
-      }
-    }
-    useInteraction.getState().setNearDoor(nearDoorId);
 
     // 서버 전송(20Hz)
     acc.current += dt;
