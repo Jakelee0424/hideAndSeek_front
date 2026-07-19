@@ -25,7 +25,6 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
   const playerIds = useGameStore((s) => s.playerIds);
   const nicks = useGameStore((s) => s.nicks);
   const rosterOrder = useGameStore((s) => s.rosterOrder);
-  const bots = useGameStore((s) => s.bots);
   const readys = useGameStore((s) => s.readys);
   const phase = useGameStore((s) => s.phase);
 
@@ -49,10 +48,14 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
   const isHost = hostId === myId;
 
   // 준비 판정의 주인은 서버다. 클라의 ready는 버튼 눌림 표시일 뿐이라, 그걸로 시작을
-  // 막으면 남이 준비했는지 알 수 없다. 봇은 준비 대상이 아니므로 로스터에서 뺀다.
-  const humanIds = rosterOrder.length ? rosterOrder : playerIds;
-  const allReady =
-    humanIds.length > 0 && humanIds.every((id) => bots[id] || readys[id]);
+  // 막으면 남이 준비했는지 알 수 없다.
+  //
+  // ⚠️ 여기서 봇을 걸러내려 하지 말 것. roster.bot은 결말 전까지 전부 false라(정체 은닉)
+  //    클라는 누가 봇인지 모른다. 예전엔 `bots[id] || readys[id]`로 썼다가, 봇이 사람으로
+  //    잡히고 준비도 못 눌러서 3명이 다 준비해도 시작 버튼이 안 열렸다.
+  //    대신 서버가 봇을 준비 완료 상태로 실어 보낸다.
+  const memberIds = rosterOrder.length ? rosterOrder : playerIds;
+  const allReady = memberIds.length > 0 && memberIds.every((id) => readys[id]);
 
   // 시작은 서버가 확정한다. 여기서 화면을 옮기지 않는다 — 누른 사람만 넘어가면 나머지는
   // 대기방에 남는다(예전 동작). 아래 useEffect가 단계 전환을 보고 전원을 함께 옮긴다.
