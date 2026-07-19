@@ -1,9 +1,17 @@
 "use client";
 // 탈옥문이 열리면 뜨는 클리어 화면. solvedIds는 서버가 방 전체에 뿌리므로 모두에게 함께 뜬다.
+import { useEffect } from "react";
 import { ESCAPE_GATE_ID, useInteraction } from "@/game/interactables";
+import { sfxEscape } from "@/game/sfx";
 
 export default function EscapeOverlay() {
   const escaped = useInteraction((s) => !!s.solved[ESCAPE_GATE_ID]);
+
+  // 화면이 뜨는 순간 팡파르. escaped가 false→true로 바뀔 때만 울린다.
+  useEffect(() => {
+    if (escaped) sfxEscape();
+  }, [escaped]);
+
   if (!escaped) return null;
 
   return (

@@ -1,7 +1,8 @@
 // stompClient + gameStore + worldState 를 묶는 세션 오케스트레이션.
 // UI는 joinRoom / leaveRoom 만 호출한다.
 import { useGameStore } from "@/store/gameStore";
-import { useInteraction } from "@/game/interactables";
+import { ESCAPE_GATE_ID, useInteraction } from "@/game/interactables";
+import { sfxDoor, sfxUnlock } from "@/game/sfx";
 import { worldState } from "./worldState";
 import * as stomp from "./stompClient";
 
@@ -14,6 +15,11 @@ const JOIN_TIMEOUT_MS = 5000;
 // 입장 확인 타이머. 모듈 스코프에 둔다 — joinRoom 안에 가둬 두면 확인 전에 나갔을 때
 // 타이머가 살아남아 이미 떠난 세션에 오류 상태를 씌운다.
 let joinTimer: ReturnType<typeof setTimeout> | null = null;
+
+// 이미 소리를 낸 대상. 스냅샷은 매 tick 전체 목록을 실어 오므로, 기억해 두지 않으면
+// 같은 해제음이 20Hz로 반복된다. 방을 옮기면 비운다.
+const heardSolved = new Set<string>();
+const heardDoors = new Set<string>();
 
 function clearJoinTimer(): void {
   if (joinTimer) {
@@ -33,6 +39,9 @@ export function joinRoom(
 ): string {
   const myId = opts?.playerId ?? crypto.randomUUID();
   useGameStore.getState().reset(roomId, myId, nick);
+  // 새 방에서는 처음부터 다시 들려야 한다.
+  heardSolved.clear();
+  heardDoors.clear();
 
   // 서버가 입장을 거절하면(방 정원 초과·대기열 초과) 아무 응답도 오지 않는다. 스냅샷에
   // 내가 안 실려 오는 것으로만 알 수 있으므로, 일정 시간 안에 못 보면 실패로 처리한다.
@@ -64,6 +73,24 @@ export function joinRoom(
         if (snap.roster) useGameStore.getState().applyRoster(snap.roster);
         // 플레이어 목록은 매 tick 상태에서 파생(입·퇴장 즉시 반영).
         useGameStore.getState().syncPlayers(snap.states.map((s) => s.id));
+        // 효과음은 서버 상태가 실제로 바뀔 때만 낸다. 내 조작이 아니라 스냅샷을 기준으로 삼아야
+        // 남이 푼 것도 방 전원에게 들린다(협동 게임이라 그게 맞다).
+        if (snap.solvedIds) {
+          for (const id of snap.solvedIds) {
+            if (heardSolved.has(id)) continue;
+            heardSolved.add(id);
+            // 탈옥문은 클리어 화면이 따로 팡파르를 울린다 — 여기서 겹쳐 내지 않는다.
+            if (id !== ESCAPE_GATE_ID) sfxUnlock();
+          }
+        }
+        if (snap.openDoors) {
+          for (const id of snap.openDoors) {
+            if (heardDoors.has(id)) continue;
+            heardDoors.add(id);
+            sfxDoor();
+          }
+        }
+
         // 퍼즐 해결 상태 협동 동기화(감방문 열림은 solved에서 파생 → 함께 동기화됨)
         if (snap.solvedIds) useInteraction.getState().syncSolved(snap.solvedIds);
         // 진행 단계도 전환 시·입장 시에만 실려 온다 → 있을 때만 반영. 이후 카운트다운은 클라 몫.

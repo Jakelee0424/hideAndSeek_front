@@ -3,7 +3,11 @@
 //
 // 서버는 결말 전까지 roster.bot을 전부 false로 보내고 aiId도 싣지 않는다.
 // 그래서 이 화면이 켜져 있는 동안 클라는 누가 AI인지 알 방법이 없다.
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { sendVote } from "@/net/stompClient";
+import { leaveRoom } from "@/net/session";
+import { sfxReveal } from "@/game/sfx";
 import { useGameStore } from "@/store/gameStore";
 
 export default function VoteOverlay() {
@@ -14,9 +18,34 @@ export default function VoteOverlay() {
   const nicks = useGameStore((s) => s.nicks);
   const votes = useGameStore((s) => s.votes);
   const aiId = useGameStore((s) => s.aiId);
+  const phaseEndsAt = useGameStore((s) => s.phaseEndsAt);
+  const router = useRouter();
 
   const voting = phase === "VOTE";
   const revealed = phase === "ENDED" && !!aiId;
+
+  // 정체가 공개되는 순간 한 방. 훅은 early return 위에 있어야 한다(조건부 훅 금지).
+  useEffect(() => {
+    if (revealed) sfxReveal();
+  }, [revealed]);
+
+  // 남은 시간 표시용 1초 틱. 이 오버레이(z-30)가 PhaseBanner를 덮어 버려서, 투표 중에는
+  // 상단 카운트다운이 보이지 않는다. 그래서 여기서 따로 보여준다.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!voting) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [voting]);
+  const remainSec = phaseEndsAt
+    ? Math.max(0, Math.ceil((phaseEndsAt - now) / 1000))
+    : 0;
+
+  function exit() {
+    leaveRoom();
+    router.push("/");
+  }
+
   if (!voting && !revealed) return null;
 
   const myVote = myId ? votes[myId] : undefined;
@@ -56,9 +85,18 @@ export default function VoteOverlay() {
           </>
         ) : (
           <>
-            <h2 className="mb-1 text-lg font-bold">누가 AI였을까?</h2>
+            <div className="mb-1 flex items-baseline justify-between">
+              <h2 className="text-lg font-bold">누가 AI였을까?</h2>
+              <span
+                className={`font-mono text-2xl tabular-nums ${
+                  remainSec <= 10 ? "text-rose-400" : "text-slate-300"
+                }`}
+              >
+                {remainSec}
+              </span>
+            </div>
             <p className="mb-4 text-sm text-slate-400">
-              함께 탈옥한 사람 중 하나는 AI였습니다. 지목하세요.
+              함께 탈옥한 사람 중 하나는 AI였습니다. 시간이 끝나면 정체가 공개됩니다.
             </p>
           </>
         )}
@@ -101,6 +139,16 @@ export default function VoteOverlay() {
           <p className="mt-4 text-center text-xs text-slate-500">
             {myVote ? "다시 눌러 바꿀 수 있습니다." : "아직 지목하지 않았습니다."}
           </p>
+        )}
+
+        {/* 결과까지 봤으면 여기서 한 판이 끝난다. 나갈 길이 없으면 브라우저 뒤로가기밖에 없다. */}
+        {revealed && (
+          <button
+            onClick={exit}
+            className="mt-5 w-full rounded-lg bg-sky-500 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-400"
+          >
+            로비로 나가기
+          </button>
         )}
       </div>
     </div>
