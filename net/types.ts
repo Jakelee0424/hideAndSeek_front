@@ -40,14 +40,20 @@ export type GamePhase =
   | "VOTE"
   | "ENDED";
 
-/** 단계 표시 이름. 백엔드 GamePhase.label()과 같은 값. */
+/**
+ * 단계 표시 이름.
+ *
+ * 기계적인 이름("온보딩"·"개별 미션")이었는데, 엔딩이 자정의 종·배수관이라는 설정을 쓰면서
+ * 앞단만 개발 용어로 남으면 이야기가 끊긴다. 같은 세계의 말로 바꿨다.
+ * (백엔드 GamePhase.label()과 이중 관리지만, 클라는 enum 이름만 받아 여기서 이름을 붙인다.)
+ */
 export const PHASE_LABEL: Record<GamePhase, string> = {
-  LOBBY: "대기 중",
-  ONBOARDING: "온보딩",
-  MISSION: "개별 미션",
-  SHARING: "정보 공유",
-  VOTE: "AI 투표",
-  ENDED: "종료",
+  LOBBY: "수감 대기",
+  ONBOARDING: "소등",
+  MISSION: "감방 탈출",
+  SHARING: "단서 공유",
+  VOTE: "색출",
+  ENDED: "자정",
 };
 
 /** 서버 → 클라: 월드 스냅샷 (tick마다 브로드캐스트) */

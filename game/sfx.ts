@@ -146,6 +146,43 @@ export function sfxThud(): void {
   noise(c, { dur: 0.05, gain: 0.05, cutoff: 500 });
 }
 
+/** 재수감 — 두 음을 오가는 사이렌 두 바퀴. */
+export function sfxSiren(): void {
+  const c = ready();
+  if (!c) return;
+  for (let i = 0; i < 4; i++) {
+    tone(c, {
+      at: i * 0.45,
+      freq: i % 2 === 0 ? 620 : 880,
+      to: i % 2 === 0 ? 880 : 620,
+      dur: 0.42,
+      gain: 0.11,
+      type: "sawtooth",
+    });
+  }
+}
+
+/** 자정의 종 — 낮게 오래 끌리는 타종 세 번. */
+export function sfxBell(): void {
+  const c = ready();
+  if (!c) return;
+  for (let i = 0; i < 3; i++) {
+    const at = i * 1.15;
+    tone(c, { at, freq: 196, dur: 1.6, gain: 0.15, type: "sine" });
+    tone(c, { at, freq: 293.7, dur: 1.2, gain: 0.07, type: "sine" }); // 배음
+    noise(c, { at, dur: 0.12, gain: 0.05, cutoff: 1400 }); // 때리는 순간
+  }
+}
+
+/** 완전한 탈출 — 새벽이 밝아오는 느린 상승. */
+export function sfxDawn(): void {
+  const c = ready();
+  if (!c) return;
+  [261.6, 329.6, 392, 523.3, 659.3].forEach((f, i) =>
+    tone(c, { at: i * 0.28, freq: f, dur: 1.1, gain: 0.1, type: "triangle" }),
+  );
+}
+
 /** AI 정체 공개 — 무겁게 내려꽂는 한 방. */
 export function sfxReveal(): void {
   const c = ready();
