@@ -183,6 +183,14 @@ export function sfxDawn(): void {
   );
 }
 
+/** 펀치 — 짧게 스치는 바람 소리 + 낮은 툭(약한 타격감). */
+export function sfxPunch(): void {
+  const c = ready();
+  if (!c) return;
+  noise(c, { dur: 0.09, gain: 0.09, cutoff: 1400 }); // 휘두르는 바람
+  tone(c, { freq: 200, to: 90, dur: 0.1, gain: 0.1, type: "sine" }); // 맞는 툭
+}
+
 /** AI 정체 공개 — 무겁게 내려꽂는 한 방. */
 export function sfxReveal(): void {
   const c = ready();

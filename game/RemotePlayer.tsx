@@ -6,6 +6,8 @@ import { useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { worldState, INTERP_DELAY_MS } from "@/net/worldState";
+import { punches } from "@/net/punches";
+import { PUNCH_ANIM_MS } from "./punchConfig";
 import Character, { type AnimState } from "./Character";
 
 export default function RemotePlayer({
@@ -18,6 +20,8 @@ export default function RemotePlayer({
   const ref = useRef<THREE.Group>(null);
   const gPrev = useRef({ x: 0, z: 0 });
   const lastAnim = useRef<AnimState>("idle");
+  const seenPunchAt = useRef(0); // 마지막으로 처리한 펀치 수신 시각
+  const punchUntil = useRef(0); // 이 시각까지 펀치 모션 재생
   const [anim, setAnim] = useState<AnimState>("idle");
 
   useFrame((_, delta) => {
@@ -44,16 +48,28 @@ export default function RemotePlayer({
     gPrev.current.z = g.position.z;
     const moving = moved > 0.0015;
 
-    // 걷기(6m/s)와 달리기(10.8m/s)의 중간(≈8.4m/s)을 경계로 삼는다.
+    // 이 원격 플레이어가 펀치를 날렸으면(스냅샷 이벤트) 잠깐 펀치 모션으로 덮는다.
+    // 넉백으로 밀리는 모습은 위 보간 위치가 이미 담고 있다 — 여기선 때리는 쪽 모션만 얹는다.
+    const now = performance.now();
+    const pAt = punches.lastPunchAt(id);
+    if (pAt > seenPunchAt.current) {
+      seenPunchAt.current = pAt;
+      punchUntil.current = now + PUNCH_ANIM_MS;
+    }
+    const punching = now < punchUntil.current;
+
+    // 걷기(6m/s)와 달리기(10.8m/s)의 중간(≈8.4m/s)을 경계로 삼는다. 펀치가 최우선.
     const speed = moved / Math.max(delta, 1e-4);
     const airborne = g.position.y > 0.02;
-    const nextAnim: AnimState = airborne
-      ? "jump"
-      : moving
-        ? speed > 8.4
-          ? "run"
-          : "walk"
-        : "idle";
+    const nextAnim: AnimState = punching
+      ? "punch"
+      : airborne
+        ? "jump"
+        : moving
+          ? speed > 8.4
+            ? "run"
+            : "walk"
+          : "idle";
     if (nextAnim !== lastAnim.current) {
       lastAnim.current = nextAnim;
       setAnim(nextAnim);

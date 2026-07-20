@@ -16,7 +16,7 @@ const MODEL_FEET_OFFSET = 0.02; // min.y ≈ -0.02 → 발바닥 보정
 
 useGLTF.preload(MODEL);
 
-export type AnimState = "idle" | "walk" | "run" | "jump";
+export type AnimState = "idle" | "walk" | "run" | "jump" | "punch";
 
 /** AnimState → GLB(RobotExpressive) 클립 이름. */
 const CLIP: Record<AnimState, string> = {
@@ -24,6 +24,7 @@ const CLIP: Record<AnimState, string> = {
   walk: "Walking",
   run: "Running",
   jump: "Jump",
+  punch: "Punch",
 };
 
 export default function Character({
@@ -60,14 +61,15 @@ export default function Character({
   useEffect(() => {
     const action = actions[CLIP[anim]];
     if (!action) return;
-    if (anim === "jump") {
-      // Jump는 원샷 클립이다. 루프로 두면 체공 중 계속 다시 뛰는 것처럼 보이므로
-      // 한 번만 재생하고 마지막 포즈로 정지시킨다(체공이 클립보다 길어도 자연스럽다).
+    const oneShot = anim === "jump" || anim === "punch";
+    if (oneShot) {
+      // 원샷 클립(점프·펀치). 루프로 두면 계속 반복되므로 한 번만 재생하고 마지막 포즈로 정지.
+      // 상태 복귀(punch → idle/walk 등)는 재생 대상 컴포넌트가 타이머로 되돌린다.
       action.setLoop(THREE.LoopOnce, 1);
       action.clampWhenFinished = true;
     }
-    // 점프는 짧아서 0.25s 페이드로는 거의 안 보인다 → 진입만 빠르게.
-    action.reset().fadeIn(anim === "jump" ? 0.08 : 0.25).play();
+    // 원샷은 짧아서 0.25s 페이드로는 거의 안 보인다 → 진입만 빠르게.
+    action.reset().fadeIn(oneShot ? 0.08 : 0.25).play();
     return () => {
       action.fadeOut(0.25);
     };

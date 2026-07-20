@@ -10,8 +10,16 @@ import * as THREE from "three";
 import { useKeyboard } from "./useKeyboard";
 import { useMouseLook } from "./useMouseLook";
 import Character, { type AnimState } from "./Character";
-import { sendInput } from "@/net/stompClient";
+import { sendInput, sendPunch } from "@/net/stompClient";
 import { worldState } from "@/net/worldState";
+import { punches } from "@/net/punches";
+import { sfxPunch } from "./sfx";
+import {
+  KNOCKBACK_SPEED,
+  KNOCKBACK_TAU,
+  PUNCH_ANIM_MS,
+  PUNCH_COOLDOWN_MS,
+} from "./punchConfig";
 import { useGameStore } from "@/store/gameStore";
 import {
   INTERACTABLES,
@@ -53,6 +61,11 @@ export default function LocalPlayer() {
   const noise = useRef(0); // 소음 실수값(프레임마다 누적). 표시값은 반올림해 스토어로
   const noiseAcc = useRef(0); // 소음 표시 갱신 throttle
   const vy = useRef(0); // 수직 속도(예측). 접지 중엔 0
+  const kx = useRef(0); // 넉백 수평 속도(예측). 맞으면 실리고 지수 감쇠
+  const kz = useRef(0);
+  const punchUntil = useRef(0); // 이 시각(perf.now)까지 펀치 모션 재생
+  const punchCdUntil = useRef(0); // 이 시각 전엔 펀치 재발동 억제(쿨다운)
+  const punchReq = useRef(false); // 클릭이 펀치를 요청했다(useFrame에서 소비)
   const lastAnim = useRef<AnimState>("idle");
   const spawned = useRef(false); // 첫 서버 스냅샷 때 배정된 감방 위치로 스냅
   // 프론트 단독 실행 시 초기 위치: 랜덤 감방 안. 서버 연결 시 첫 스냅샷이 덮어쓴다.
@@ -73,6 +86,18 @@ export default function LocalPlayer() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // 좌클릭: 펀치. 단, 포인터락을 <b>거는</b> 첫 클릭은 펀치가 아니다(그때는 아직 락이 안 걸려 있다).
+  // 오버레이(퍼즐 등) 조작 중에도 펀치하지 않는다 — 실제 발동/쿨다운 판정은 useFrame에서.
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (e.button !== 0 || document.pointerLockElement === null) return;
+      if (useInteraction.getState().openId !== null) return;
+      punchReq.current = true;
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
   }, []);
 
   useFrame((state, dt) => {
@@ -119,6 +144,14 @@ export default function LocalPlayer() {
       useGameStore.getState().setNoise(Math.round(noise.current));
     }
 
+    // 넉백 임펄스 수령(맞은 사람 본인만). 서버가 보낸 방향에 KNOCKBACK_SPEED를 곱해 속도로.
+    const kb = punches.takeKnockback();
+    if (kb) {
+      kx.current += KNOCKBACK_SPEED * kb.x;
+      kz.current += KNOCKBACK_SPEED * kb.z;
+    }
+    const knocked = kx.current !== 0 || kz.current !== 0;
+
     if (moving) {
       mx /= len;
       mz /= len;
@@ -126,9 +159,25 @@ export default function LocalPlayer() {
       g.position.x += mx * speed * dt;
       g.position.z += mz * speed * dt;
       g.rotation.y = Math.atan2(mx, mz); // 캐릭터는 이동 방향을 바라봄
+    }
 
-      // 벽/장애물 충돌 해석(서버와 동일 로직). 미션을 푼 방의 감방문은 통과.
-      // 충돌은 2D(x/z)라 점프해도 장애물은 못 넘는다 — 서버 Room.tick과 같은 규약.
+    // 넉백 적분 + 지수 감쇠(서버 Room.tick과 동일 식 → 결정론적 복제). 아주 작아지면 0으로 끊는다.
+    if (knocked) {
+      g.position.x += kx.current * dt;
+      g.position.z += kz.current * dt;
+      const decay = Math.exp(-dt / KNOCKBACK_TAU);
+      kx.current *= decay;
+      kz.current *= decay;
+      if (Math.abs(kx.current) < 0.01 && Math.abs(kz.current) < 0.01) {
+        kx.current = 0;
+        kz.current = 0;
+      }
+    }
+
+    // 벽/장애물 충돌 해석(서버와 동일 로직). 미션을 푼 방의 감방문은 통과.
+    // 충돌은 2D(x/z)라 점프해도 장애물은 못 넘는다 — 서버 Room.tick과 같은 규약.
+    // 이동이든 넉백이든 위치가 바뀌었을 때만 해석한다.
+    if (moving || knocked) {
       const openDoors = openDoorsFromSolved(useInteraction.getState().solved);
       const [rx, rz] = resolveCollision(g.position.x, g.position.z, openDoors);
       g.position.x = rx;
@@ -150,14 +199,31 @@ export default function LocalPlayer() {
     }
     const airborne = g.position.y > 1e-6;
 
-    // 애니메이션은 상태가 바뀔 때만 setState(매 프레임 리렌더 방지)
-    const nextAnim: AnimState = airborne
-      ? "jump"
-      : sprinting
-        ? "run"
-        : moving
-          ? "walk"
-          : "idle";
+    // 펀치 발동: 클릭 요청을 쿨다운·오버레이 조건에서 소비. 서버엔 "쳤다"만 보내고(대상·넉백은
+    // 서버가 위치로 정한다), 내 모션·소리는 즉시 재생한다. 서버 연결 전이면 연출만 로컬로.
+    const now = performance.now();
+    if (punchReq.current) {
+      punchReq.current = false;
+      if (!locked && now >= punchCdUntil.current) {
+        punchCdUntil.current = now + PUNCH_COOLDOWN_MS;
+        punchUntil.current = now + PUNCH_ANIM_MS;
+        sfxPunch();
+        const gs = useGameStore.getState();
+        if (gs.status === "connected") sendPunch(gs.roomId);
+      }
+    }
+    const punching = now < punchUntil.current;
+
+    // 애니메이션은 상태가 바뀔 때만 setState(매 프레임 리렌더 방지). 펀치가 최우선.
+    const nextAnim: AnimState = punching
+      ? "punch"
+      : airborne
+        ? "jump"
+        : sprinting
+          ? "run"
+          : moving
+            ? "walk"
+            : "idle";
     if (nextAnim !== lastAnim.current) {
       lastAnim.current = nextAnim;
       setAnim(nextAnim);

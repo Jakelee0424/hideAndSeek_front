@@ -67,6 +67,13 @@ export function sendInput(roomId: string, input: InputMessage): void {
   }
 }
 
+/** 펀치. 누굴 맞혔는지·넉백은 서버가 위치로 정하므로(위조 방지) 페이로드 없이 보낸다. */
+export function sendPunch(roomId: string): void {
+  if (client?.connected) {
+    client.publish({ destination: `/app/rooms/${roomId}/punch`, body: "{}" });
+  }
+}
+
 export function sendSolve(roomId: string, objectId: string): void {
   if (client?.connected) {
     client.publish({

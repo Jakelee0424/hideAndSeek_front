@@ -4,6 +4,7 @@ import { useGameStore } from "@/store/gameStore";
 import { ESCAPE_GATE_ID, useInteraction } from "@/game/interactables";
 import { sfxDoor, sfxUnlock } from "@/game/sfx";
 import { worldState } from "./worldState";
+import { punches } from "./punches";
 import * as stomp from "./stompClient";
 
 /**
@@ -103,6 +104,8 @@ export function joinRoom(
         if (snap.aiId) useGameStore.getState().setAiId(snap.aiId);
         // 대기방 준비 상태도 바뀔 때만 실려 온다.
         if (snap.readyIds) useGameStore.getState().applyReady(snap.readyIds);
+        // 펀치는 일어난 tick에만 실려 온다 → 모션·넉백을 렌더 컴포넌트에 흘려 준다.
+        if (snap.punches) punches.ingest(snap.punches, myId);
       },
     },
   );
@@ -114,5 +117,6 @@ export function leaveRoom(): void {
   clearJoinTimer();
   stomp.disconnect();
   worldState.clear();
+  punches.clear();
   useGameStore.getState().clear();
 }

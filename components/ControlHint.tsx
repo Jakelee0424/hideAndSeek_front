@@ -36,7 +36,7 @@ export default function ControlHint() {
         <div className="rounded-xl bg-black/70 px-7 py-5 text-center backdrop-blur">
           <p className="mb-1 text-lg font-bold text-white">클릭해서 조작 시작</p>
           <p className="text-sm text-slate-300">
-            WASD 이동 · Shift 달리기 · E 상호작용 · F 문
+            WASD 이동 · Shift 달리기 · 클릭 펀치 · E 상호작용 · F 문
           </p>
           <p className="mt-2 text-xs text-slate-500">
             마우스를 다시 쓰려면 ESC

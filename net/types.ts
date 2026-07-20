@@ -80,12 +80,28 @@ export interface WorldSnapshot {
   aiId?: string | null;
   /** 대기방에서 준비를 마친 사람들. 로스터와 같은 규약 — 바뀔 때만 존재. */
   readyIds?: string[] | null;
+  /** 이 tick에 성사된 펀치들. 일어난 순간에만 존재(그 외 생략). */
+  punches?: PunchEvent[] | null;
 }
 
 /** 서버 → 클라: 누가 누구를 AI로 지목했는지. 집계는 클라가 한다(표가 몇 안 된다). */
 export interface VoteEntry {
   voterId: string;
   targetId: string;
+}
+
+/**
+ * 서버 → 클라: 이 tick에 성사된 펀치 하나. 백엔드 PunchEvent record와 필드명 일치.
+ *   attacker: 펀치 모션을 재생할 대상(원격 시청자·본인). 헛방이어도 모션은 온다.
+ *   victim:   맞은 사람 id. 없으면(헛방) null·생략.
+ *   dirX/dirZ: 넉백 방향(단위 벡터, attacker→victim). victim이 본인이면 이 방향으로
+ *             자기 예측 위치에 같은 넉백을 준다(서버와 동일 감쇠 → 결정론적 복제).
+ */
+export interface PunchEvent {
+  attacker: string;
+  victim?: string | null;
+  dirX: number;
+  dirZ: number;
 }
 
 /** 클라 → 서버: AI 지목 투표 */
