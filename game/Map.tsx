@@ -277,7 +277,7 @@ function InfirmaryDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMat
   );
 }
 
-// ── 배수관: 배수 격자 + 굵은 파이프 + 물웅덩이 ────────────────────
+// ── 교도소 정문: 콘크리트 기둥 둘 + 상인방. 최종 탈출구(escape-gate)가 여기 있다 ──
 function MainGate({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   const gz = -55; // 외벽(z=-56) 바로 안쪽 — 교도소 정문
   return (
