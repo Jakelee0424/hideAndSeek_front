@@ -6,12 +6,24 @@
 // 배정은 방 코드로 시드를 고정한다 — 같은 방 사람들은 같은 감방에서 같은 게임을 본다.
 // (안 그러면 "나는 테트리스였는데?" 같은 대화가 어긋난다. 새 방에 들어가면 다시 섞인다.)
 import { breakoutDef } from "./breakout";
+import { flappyDef } from "./flappy";
+import { rhythmDef } from "./rhythm";
 import { shooterDef } from "./shooter";
 import { snakeDef } from "./snake";
 import { tetrisDef } from "./tetris";
+import { whackDef } from "./whack";
 import type { MinigameDef } from "./types";
 
-export const POOL: MinigameDef[] = [tetrisDef, shooterDef, snakeDef, breakoutDef];
+// 감방은 넷, 게임은 이보다 많다 → 방마다 그중 넷이 뽑힌다.
+export const POOL: MinigameDef[] = [
+  tetrisDef,
+  shooterDef,
+  snakeDef,
+  breakoutDef,
+  flappyDef,
+  rhythmDef,
+  whackDef,
+];
 
 /** 문자열 → 32bit 정수(FNV-1a). 시드를 재현 가능한 난수로 바꾸는 데만 쓴다. */
 function hash(s: string): number {
