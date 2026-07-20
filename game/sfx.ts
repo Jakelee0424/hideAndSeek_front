@@ -115,6 +115,21 @@ export function sfxEscape(): void {
   );
 }
 
+/** 미니게임 클리어 — 짧게 올라가는 두 음. 자물쇠 해제음(sfxUnlock)과 겹치지 않게 가볍게. */
+export function sfxClear(): void {
+  const c = ready();
+  if (!c) return;
+  tone(c, { freq: 660, dur: 0.1, gain: 0.12, type: "square" });
+  tone(c, { at: 0.09, freq: 990, dur: 0.18, gain: 0.12, type: "square" });
+}
+
+/** 미니게임 실패 — 내려앉는 부저. */
+export function sfxGameOver(): void {
+  const c = ready();
+  if (!c) return;
+  tone(c, { freq: 220, to: 80, dur: 0.42, gain: 0.13, type: "sawtooth" });
+}
+
 /** 농구 골인 — 그물 스치는 짧은 쉭. */
 export function sfxSwish(): void {
   const c = ready();

@@ -1,13 +1,18 @@
 // 맵에 배치된 상호작용 오브젝트 정의 + 근접/퍼즐 상태(zustand).
 //
-// 방탈출 구조: 감방(1~4호실)마다 "미션 자물쇠(lockbox)" 하나와 그 답을 알려주는
-// "힌트(note)"들을 방 안에 배치한다. 힌트를 조합해 자물쇠를 풀면(solved) 그 방의
-// 감방문(cell-X)이 열린다. 방마다 자물쇠 종류(탈출 방법)가 다르다.
-//   1호실 A: 숫자 다이얼 / 2호실 B: 색 순서 / 3호실 C: 문자 / 4호실 D: 레버 패턴
+// 방탈출 구조: 감방(1~4호실)마다 "미션 자물쇠(lockbox)" 하나를 둔다. 감방 자물쇠는
+// 아케이드 미니게임(테트리스·슈터·스네이크·벽돌깨기…)이고, 한 판을 깨면 그 방의
+// 감방문(cell-X)이 열린다. 어느 방에 어느 게임이 걸리는지는 방 코드로 정해진다
+// (minigameFor 참고) — 같은 방 사람들은 같은 배치를 본다.
+//
+// 최종 탈옥문만 코드 입력(dial)으로 남겼다. 감방 밖에 흩어진 쪽지 셋을 모아야 풀리는
+// 협동 단계라, 여기까지 반사신경 게임으로 만들면 "같이 단서를 맞춘다"는 축이 사라진다.
 //
 // 문 열림은 solved에서 파생한다(openDoorsFromSolved). solvedIds는 서버가 매 tick
 // 브로드캐스트하므로 협동 플레이에서 문이 모두에게 함께 열린다 — 별도 문 동기화 불필요.
 import { create } from "zustand";
+import { assignMinigames } from "./minigames/registry";
+import type { MinigameDef } from "./minigames/types";
 
 /** 색 순서 퍼즐에 쓰는 색 키. */
 export type ColorKey = "red" | "yellow" | "green" | "blue";
@@ -17,7 +22,8 @@ export type Puzzle =
   | { kind: "dial"; code: string } // 숫자 다이얼(자리수 = code 길이)
   | { kind: "sequence"; palette: ColorKey[]; answer: ColorKey[] } // 색 버튼을 순서대로
   | { kind: "letters"; answer: string } // A~Z 문자 휠로 단어 맞추기(대문자)
-  | { kind: "switches"; answer: boolean[] }; // 레버 on(위)/off(아래) 패턴
+  | { kind: "switches"; answer: boolean[] } // 레버 on(위)/off(아래) 패턴
+  | { kind: "minigame" }; // 아케이드 한 판. 어느 게임인지는 방 코드로 배정된다
 
 export type InteractableType = "lockbox" | "note";
 
@@ -38,109 +44,108 @@ export interface Interactable {
 export const INTERACT_RANGE = 2.2;
 
 // ── 방별 상호작용 오브젝트 ────────────────────────────────────────
-// 좌표는 각 감방 내부(prisonLayout CELLS 기준). 자물쇠는 문 근처, 힌트는 안쪽 벽에.
+// 좌표는 각 감방 내부(prisonLayout CELLS 기준). 자물쇠는 문 근처, 쪽지는 안쪽 벽에.
+//
+// 감방 쪽지는 이제 답을 알려주지 않는다 — 게임을 이기는 것 말고는 열 방법이 없으니
+// 알려줄 답 자체가 없다. 대신 분위기와 "실패해도 손해 없다"는 안내를 맡는다.
 export const INTERACTABLES: Interactable[] = [
-  // ── 1호실(A): 숫자 다이얼 "725" ──
+  // ── 1호실(A) ──
   {
     id: "note-A1",
     type: "note",
     position: [-11, 0.6, 9.5],
     label: "벽 낙서",
-    hint: "탈출 번호의 앞 두 자리 = 72",
+    hint: "밤이면 자물쇠에서 삐-삐- 소리가 난다. 꼭 오락실 같다.",
   },
   {
     id: "note-A2",
     type: "note",
     position: [-4, 0.6, 9.0],
     label: "변기 뒤 낙서",
-    hint: "마지막 자리 = 5",
+    hint: "져도 벌은 없다. 될 때까지 붙어라.",
   },
   {
     id: "lock-A",
     type: "lockbox",
     position: [-7, 0.6, 3.6],
-    label: "숫자 자물쇠",
-    hint: "세 자리 숫자를 맞춰라. 낙서를 조합하면 나온다.",
-    puzzle: { kind: "dial", code: "725" },
+    label: "1호실 게임 자물쇠",
+    hint: "간수가 압수한 게임기를 자물쇠에 박아 놨다. 한 판 이겨야 열린다.",
+    puzzle: { kind: "minigame" },
     opensDoor: "cell-A",
   },
 
-  // ── 2호실(B): 색 순서 [초록·빨강·파랑·노랑] ──
+  // ── 2호실(B) ──
   {
     id: "note-B1",
     type: "note",
     position: [11, 0.6, 9.5],
     label: "낡은 쪽지",
-    hint: "네 개의 색 버튼을 그림 순서대로 눌러라.",
+    hint: "방마다 걸린 게임이 다르다더군. 뭐가 나올지는 들어가 봐야 안다.",
   },
   {
     id: "note-B2",
     type: "note",
     position: [4, 0.6, 9.0],
     label: "벽 그림",
-    hint: "잔디 → 피 → 하늘 → 태양",
+    hint: "먼저 나간 놈이 남긴 그림 — 손가락 두 개와 화살표뿐이다.",
   },
   {
     id: "lock-B",
     type: "lockbox",
     position: [7, 0.6, 3.6],
-    label: "색 순서 자물쇠",
-    hint: "그림이 가리키는 색을 순서대로 누른다.",
-    puzzle: {
-      kind: "sequence",
-      palette: ["red", "yellow", "green", "blue"],
-      answer: ["green", "red", "blue", "yellow"],
-    },
+    label: "2호실 게임 자물쇠",
+    hint: "화면이 깜빡인다. 한 판 이겨야 열린다.",
+    puzzle: { kind: "minigame" },
     opensDoor: "cell-B",
   },
 
-  // ── 3호실(C): 문자 자물쇠 "FREE" ──
+  // ── 3호실(C) ──
   {
     id: "note-C1",
     type: "note",
     position: [-11, 0.6, -9.5],
     label: "긁힌 쪽지",
-    hint: "네 글자 영어 단어를 새겨라.",
+    hint: "Esc로 물러났다가 다시 붙어도 된다. 판은 처음부터 시작한다.",
   },
   {
     id: "note-C2",
     type: "note",
     position: [-4, 0.6, -9.0],
     label: "벽 낙서",
-    hint: "‘자유’를 영어로 (F _ _ _)",
+    hint: "여긴 머리가 아니라 손이 여는 문이다.",
   },
   {
     id: "lock-C",
     type: "lockbox",
     position: [-7, 0.6, -3.6],
-    label: "문자 자물쇠",
-    hint: "네 글자를 맞춰라.",
-    puzzle: { kind: "letters", answer: "FREE" },
+    label: "3호실 게임 자물쇠",
+    hint: "먼지 앉은 화면에 커서가 깜빡인다. 한 판 이겨야 열린다.",
+    puzzle: { kind: "minigame" },
     opensDoor: "cell-C",
   },
 
-  // ── 4호실(D): 레버 패턴 1001 ──
+  // ── 4호실(D) ──
   {
     id: "note-D1",
     type: "note",
     position: [11, 0.6, -9.5],
     label: "쪽지",
-    hint: "레버 4개 — 위=1, 아래=0",
+    hint: "감방을 나가면 진짜가 시작된다. 탈옥문은 네 자리 숫자다.",
   },
   {
     id: "note-D2",
     type: "note",
     position: [4, 0.6, -9.0],
     label: "벽 낙서",
-    hint: "암호: 1 0 0 1",
+    hint: "숫자는 식당·통로·운동장에 나뉘어 있다. 혼자선 다 못 본다.",
   },
   {
     id: "lock-D",
     type: "lockbox",
     position: [7, 0.6, -3.6],
-    label: "레버 패널",
-    hint: "레버를 암호에 맞춰 올리고 내려라.",
-    puzzle: { kind: "switches", answer: [true, false, false, true] },
+    label: "4호실 게임 자물쇠",
+    hint: "조이스틱은 부러졌고 버튼만 남았다. 한 판 이겨야 열린다.",
+    puzzle: { kind: "minigame" },
     opensDoor: "cell-D",
   },
 
@@ -195,6 +200,19 @@ const LOCKS = INTERACTABLES.filter(
   (it): it is Interactable & { opensDoor: string } =>
     it.type === "lockbox" && !!it.opensDoor,
 );
+
+/** 미니게임이 걸린 자물쇠 id들(배치 순서 = 1~4호실 순서). */
+export const MINIGAME_LOCK_IDS: string[] = INTERACTABLES.filter(
+  (it) => it.puzzle?.kind === "minigame",
+).map((it) => it.id);
+
+/**
+ * 이 자물쇠에 걸린 미니게임. seed(방 코드)가 같으면 항상 같은 배치가 나온다 —
+ * 같은 방 사람끼리 "3호실은 뱀이더라" 같은 말이 통해야 하기 때문이다.
+ */
+export function minigameFor(objectId: string, seed: string): MinigameDef | undefined {
+  return assignMinigames(seed || "solo", MINIGAME_LOCK_IDS)[objectId];
+}
 
 // 매 프레임 충돌 계산에서 쓰므로 객체를 재사용한다(프레임마다 new 방지).
 const _openDoors: Record<string, boolean> = {};

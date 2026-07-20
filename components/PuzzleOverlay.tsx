@@ -1,11 +1,15 @@
 "use client";
 // 퍼즐 UI 오버레이. openId가 있으면 표시.
 //   note      → 힌트 문구만
-//   lockbox   → 자물쇠 종류별 입력 UI(숫자 다이얼 / 색 순서 / 문자 / 레버)
-// 정답이면 sendSolve(협동 동기화) + markSolved(로컬 즉시 반영) → 감방문이 열린다.
+//   lockbox   → 자물쇠 종류별 UI
+//                 감방 자물쇠(minigame) → 아케이드 한 판(ArcadeHost)
+//                 탈옥문(dial)          → 네 자리 코드 입력
+// 풀면 sendSolve(협동 동기화) + markSolved(로컬 즉시 반영) → 감방문이 열린다.
 import { useEffect, useState } from "react";
+import ArcadeHost from "./ArcadeHost";
 import {
   findInteractable,
+  minigameFor,
   useInteraction,
   type ColorKey,
   type Puzzle,
@@ -25,6 +29,8 @@ export default function PuzzleOverlay() {
   const close = useInteraction((s) => s.close);
   const markSolved = useInteraction((s) => s.markSolved);
   const data = findInteractable(openId);
+  // 어느 감방에 어느 게임이 걸리는지는 방 코드로 정해진다(같은 방이면 모두 같은 배치).
+  const roomId = useGameStore((s) => s.roomId);
 
   const [error, setError] = useState(false);
 
@@ -62,7 +68,8 @@ export default function PuzzleOverlay() {
       className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       style={{ zIndex: 16777300 }}
     >
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#12161f] p-6 text-slate-100 shadow-2xl">
+      {/* 미니게임은 세로로 길다 — 작은 화면에서 잘리지 않게 모달 안에서 스크롤시킨다. */}
+      <div className="max-h-[94vh] w-full max-w-sm overflow-y-auto rounded-2xl border border-white/10 bg-[#12161f] p-6 text-slate-100 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{data.label}</h2>
           <button
@@ -91,6 +98,8 @@ export default function PuzzleOverlay() {
           <PuzzleInput
             // 퍼즐 종류/대상이 바뀌면 입력 상태를 새로 시작
             key={data.id}
+            objectId={data.id}
+            roomId={roomId}
             puzzle={data.puzzle}
             error={error}
             onSolve={solve}
@@ -105,12 +114,16 @@ export default function PuzzleOverlay() {
 
 // 자물쇠 종류별 입력 UI. 정답이면 onSolve, 틀리면 onFail.
 function PuzzleInput({
+  objectId,
+  roomId,
   puzzle,
   error,
   onSolve,
   onFail,
   clearError,
 }: {
+  objectId: string;
+  roomId: string;
   puzzle: Puzzle;
   error: boolean;
   onSolve: () => void;
@@ -118,6 +131,13 @@ function PuzzleInput({
   clearError: () => void;
 }) {
   switch (puzzle.kind) {
+    case "minigame": {
+      const def = minigameFor(objectId, roomId);
+      // 배정에 실패할 일은 없지만(자물쇠는 전부 목록에 있다), 없으면 문을 영영 못 여는
+      // 사태가 되므로 조용히 통과시킨다 — 게임이 막히는 것보다 낫다.
+      if (!def) return <SubmitRow error={error} onSubmit={onSolve} />;
+      return <ArcadeHost def={def} onWin={onSolve} />;
+    }
     case "dial":
       return (
         <WheelLock
