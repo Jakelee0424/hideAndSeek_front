@@ -6,6 +6,7 @@ import EndingOverlay from "./EndingOverlay";
 import EscapeOverlay from "./EscapeOverlay";
 import HUD from "./HUD";
 import OnboardingOverlay from "./OnboardingOverlay";
+import PatrolOverlay from "./PatrolOverlay";
 import PuzzleOverlay from "./PuzzleOverlay";
 import VoteOverlay from "./VoteOverlay";
 import WebGLGuard from "./WebGLGuard";
@@ -21,8 +22,10 @@ export default function GameClient() {
         <HUD />
         {/* 퍼즐·투표보다 아래(z-10) — 그 화면들이 뜨면 어차피 스스로 숨는다. */}
         <ControlHint />
-        {/* 도입 내레이션. 조작을 막지 않으므로 퍼즐보다 아래에 둔다. */}
+        {/* 도입 내레이션·순찰 경고. 둘 다 조작을 막지 않으므로 퍼즐보다 아래에 둔다.
+            특히 순찰은 "멈추는 건 플레이어 몫"이라는 게 규칙이라 가려서도 안 된다. */}
         <OnboardingOverlay />
+        <PatrolOverlay />
         <PuzzleOverlay />
         <EscapeOverlay />
         {/* 투표는 클리어 화면보다 위에 온다 — 탈옥 뒤 마지막 단계라서. */}

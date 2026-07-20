@@ -35,7 +35,7 @@ export default function EscapeOverlay() {
           ESCAPE COMPLETE
         </p>
         <h1 className="mb-4 text-5xl font-black text-white drop-shadow-lg">
-          배수관이 열렸다
+          탈출로가 열렸다
         </h1>
         <p className="text-slate-300">
           담을 넘었다. 하지만 아직 끝이 아니다 — 누가 사람이었는지 밝혀야 한다.

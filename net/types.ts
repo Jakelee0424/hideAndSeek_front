@@ -82,7 +82,20 @@ export interface WorldSnapshot {
   readyIds?: string[] | null;
   /** 이 tick에 성사된 펀치들. 일어난 순간에만 존재(그 외 생략). */
   punches?: PunchEvent[] | null;
+  /** 정기 순찰 상태. 로스터와 같은 규약 — 바뀔 때·입장 시에만 존재. */
+  patrol?: PatrolState | null;
+  /** 그 상태가 끝나기까지 남은 시간(ms). patrol과 함께만 온다. 카운트다운은 클라 몫. */
+  patrolRemainMs?: number | null;
+  /** 이번 순찰에서 걸린 사람의 id. 아무도 안 걸렸으면 없다. */
+  patrolCaughtId?: string | null;
 }
+
+/**
+ * 정기 순찰 상태. 백엔드 Patrol.State enum의 이름과 일치해야 한다(이중 관리).
+ *   WARNING — 곧 온다. 멈출 준비를 하는 시간(이때는 움직여도 걸리지 않는다)
+ *   ACTIVE  — 순찰 중. 움직이거나 무언가를 건드리면 걸린다
+ */
+export type PatrolState = "NONE" | "WARNING" | "ACTIVE";
 
 /** 서버 → 클라: 누가 누구를 AI로 지목했는지. 집계는 클라가 한다(표가 몇 안 된다). */
 export interface VoteEntry {

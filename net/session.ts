@@ -106,6 +106,16 @@ export function joinRoom(
         if (snap.readyIds) useGameStore.getState().applyReady(snap.readyIds);
         // 펀치는 일어난 tick에만 실려 온다 → 모션·넉백을 렌더 컴포넌트에 흘려 준다.
         if (snap.punches) punches.ingest(snap.punches, myId);
+        // 정기 순찰도 바뀔 때·입장 시에만 실려 온다. 이후 카운트다운은 클라 몫.
+        if (snap.patrol) {
+          useGameStore
+            .getState()
+            .setPatrol(
+              snap.patrol,
+              snap.patrolRemainMs ?? 0,
+              snap.patrolCaughtId ?? null,
+            );
+        }
       },
     },
   );

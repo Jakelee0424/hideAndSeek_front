@@ -146,6 +146,35 @@ export function sfxThud(): void {
   noise(c, { dur: 0.05, gain: 0.05, cutoff: 500 });
 }
 
+/** 순찰 예고 — 멀리서 다가오는 구둣발 넷. */
+export function sfxPatrolWarn(): void {
+  const c = ready();
+  if (!c) return;
+  for (let i = 0; i < 4; i++) {
+    // 뒤로 갈수록 커진다 = 가까워진다
+    noise(c, { at: i * 0.42, dur: 0.07, gain: 0.05 + i * 0.03, cutoff: 900 });
+    tone(c, { at: i * 0.42, freq: 90, to: 55, dur: 0.09, gain: 0.05 + i * 0.02, type: "sine" });
+  }
+}
+
+/** 순찰 시작 — 짧고 날카로운 호루라기. */
+export function sfxWhistle(): void {
+  const c = ready();
+  if (!c) return;
+  tone(c, { freq: 1800, to: 2400, dur: 0.16, gain: 0.09, type: "sine" });
+  tone(c, { at: 0.15, freq: 2400, to: 1600, dur: 0.22, gain: 0.09, type: "sine" });
+}
+
+/** 순찰에 걸렸다 — 내려꽂는 경보 두 방. */
+export function sfxCaught(): void {
+  const c = ready();
+  if (!c) return;
+  for (let i = 0; i < 2; i++) {
+    tone(c, { at: i * 0.26, freq: 700, to: 240, dur: 0.24, gain: 0.16, type: "square" });
+  }
+  noise(c, { dur: 0.3, gain: 0.08, cutoff: 1200 });
+}
+
 /** 재수감 — 두 음을 오가는 사이렌 두 바퀴. */
 export function sfxSiren(): void {
   const c = ready();

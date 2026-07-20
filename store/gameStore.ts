@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type {
   ConnStatus,
   GamePhase,
+  PatrolState,
   RosterEntry,
   VoteEntry,
 } from "@/net/types";
@@ -34,6 +35,12 @@ interface GameStore {
   aiId: string | null;
   /** 대기방에서 준비를 마친 사람 id 집합. 서버가 판정의 주인이다. */
   readys: Record<string, boolean>;
+  /** 정기 순찰 상태. 서버는 바뀔 때만 보내주므로 여기 눌러둔다. */
+  patrol: PatrolState;
+  /** 지금 순찰(또는 예고)이 끝나는 시각(Date.now 기준). 카운트다운은 이 값으로 로컬 계산. */
+  patrolEndsAt: number | null;
+  /** 이번 순찰에서 걸린 사람의 id. 아무도 안 걸렸으면 null. */
+  patrolCaughtId: string | null;
 
   setStatus: (s: ConnStatus) => void;
   setReady: (v: boolean) => void;
@@ -54,6 +61,8 @@ interface GameStore {
   setAiId: (id: string) => void;
   /** 서버가 실어 보낸 준비 상태를 반영. 바뀔 때만 갱신. */
   applyReady: (ids: string[]) => void;
+  /** 서버가 순찰 상태를 실어 보낼 때만 호출. 남은 시간을 로컬 종료 시각으로 환산해 둔다. */
+  setPatrol: (state: PatrolState, remainMs: number, caughtId: string | null) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -73,15 +82,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
   votes: {},
   aiId: null,
   readys: {},
+  patrol: "NONE",
+  patrolEndsAt: null,
+  patrolCaughtId: null,
 
   setStatus: (status) => set({ status }),
   setReady: (ready) => set({ ready }),
 
   setPhase: (phase, remainMs) => {
-    if (get().phase === phase) return; // 입장 시 재전송 등 같은 단계면 무시(리렌더 방지)
+    // 같은 단계여도 남은 시간이 바뀔 수 있다 — 순찰에 걸리면 자정이 앞당겨져 서버가
+    // 같은 단계를 다시 실어 보낸다. 그때 종료 시각만 갈아 끼운다(전환 배너는 다시 띄우지 않는다).
     const now = Date.now();
+    if (get().phase === phase) {
+      set({ phaseEndsAt: now + remainMs });
+      return;
+    }
     set({ phase, phaseEndsAt: now + remainMs, phaseStartedAt: now });
   },
+
+  setPatrol: (state, remainMs, caughtId) =>
+    set({
+      patrol: state,
+      patrolEndsAt: state === "NONE" ? null : Date.now() + remainMs,
+      patrolCaughtId: caughtId,
+    }),
 
   reset: (roomId, myId, nick) =>
     set({
@@ -101,6 +125,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       votes: {},
       aiId: null,
       readys: {},
+      patrol: "NONE",
+      patrolEndsAt: null,
+      patrolCaughtId: null,
     }),
 
   clear: () =>
