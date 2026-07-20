@@ -127,9 +127,22 @@ export default function ArcadeHost({
 
   return (
     <div className="flex flex-col items-center">
+      {/* 승리 조건이 이 화면에서 제일 중요한 정보다. 뭘 해야 이기는지 모르면
+          게임이 시작된 줄도 모르고 키만 눌러 본다. */}
+      <div className="mb-3 w-full rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-center">
+        <p className="text-[11px] font-medium tracking-wide text-emerald-300/70">
+          🎮 {def.name} — 클리어 조건
+        </p>
+        <p className="mt-0.5 text-xl font-black leading-tight text-emerald-300">
+          {def.goal}
+        </p>
+      </div>
+
       <div className="mb-2 flex w-full items-center justify-between text-xs">
-        <span className="font-medium text-amber-300">🎮 {def.name}</span>
-        <span className="font-mono text-slate-400">{progress}</span>
+        <span className="text-slate-500">진행</span>
+        <span className="font-mono text-base font-bold text-slate-200">
+          {progress}
+        </span>
       </div>
 
       <div className="relative w-full overflow-hidden rounded-lg border border-white/10 bg-black">
@@ -166,10 +179,8 @@ export default function ArcadeHost({
         )}
       </div>
 
-      <p className="mt-3 text-center text-[11px] leading-relaxed text-slate-400">
-        {def.goal}
-        <br />
-        <span className="text-slate-500">{def.controls}</span>
+      <p className="mt-3 text-center text-[11px] leading-relaxed text-slate-500">
+        {def.controls}
       </p>
     </div>
   );

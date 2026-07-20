@@ -13,6 +13,7 @@
 import { create } from "zustand";
 import { assignMinigames } from "./minigames/registry";
 import type { MinigameDef } from "./minigames/types";
+import { cellIdAt } from "./prisonLayout";
 
 /** 색 순서 퍼즐에 쓰는 색 키. */
 export type ColorKey = "red" | "yellow" | "green" | "blue";
@@ -43,108 +44,53 @@ export interface Interactable {
 /** 상호작용 사거리(m, XZ 평면 기준) */
 export const INTERACT_RANGE = 2.2;
 
+// 감방 자물쇠 넷이 공유하는 안내문. 네 방이 같은 처지이므로 방마다 다르게 쓸 이유가 없고,
+// 감방 안 쪽지를 전부 없앤 뒤로는 "나가서 뭘 해야 하는지"를 알려줄 곳이 여기뿐이다.
+const CELL_LOCK_HINT =
+  "간수가 압수한 게임기를 자물쇠에 박아 놨다. 한 판 이겨야 열린다. " +
+  "나가면 탈옥문이 기다린다 — 네 자리 숫자이고, 단서는 감방 밖에 흩어져 있다.";
+
 // ── 방별 상호작용 오브젝트 ────────────────────────────────────────
-// 좌표는 각 감방 내부(prisonLayout CELLS 기준). 자물쇠는 문 근처, 쪽지는 안쪽 벽에.
+// 좌표는 각 감방 내부(prisonLayout CELLS 기준). 감방 안에는 자물쇠 하나뿐이다.
 //
-// 감방 쪽지는 이제 답을 알려주지 않는다 — 게임을 이기는 것 말고는 열 방법이 없으니
-// 알려줄 답 자체가 없다. 대신 분위기와 "실패해도 손해 없다"는 안내를 맡는다.
+// 감방 쪽지는 전부 없앴다. 자물쇠가 코드 입력이던 시절엔 답을 나눠 주는 장치였는데,
+// 이제 게임을 이기는 것 말고는 열 방법이 없어서 알려줄 답이 없다. 읽어도 소득이 없는
+// 오브젝트가 방 안에 놓여 있으면 "여기 뭔가 있나" 하고 시간만 쓰게 된다.
+// (감방 밖 단서 셋은 남는다 — 탈옥문 코드는 여전히 모아야 풀린다.)
 export const INTERACTABLES: Interactable[] = [
-  // ── 1호실(A) ──
-  {
-    id: "note-A1",
-    type: "note",
-    position: [-11, 0.6, 9.5],
-    label: "벽 낙서",
-    hint: "밤이면 자물쇠에서 삐-삐- 소리가 난다. 꼭 오락실 같다.",
-  },
-  {
-    id: "note-A2",
-    type: "note",
-    position: [-4, 0.6, 9.0],
-    label: "변기 뒤 낙서",
-    hint: "져도 벌은 없다. 될 때까지 붙어라.",
-  },
   {
     id: "lock-A",
     type: "lockbox",
     position: [-7, 0.6, 3.6],
     label: "1호실 게임 자물쇠",
-    hint: "간수가 압수한 게임기를 자물쇠에 박아 놨다. 한 판 이겨야 열린다.",
+    hint: CELL_LOCK_HINT,
     puzzle: { kind: "minigame" },
     opensDoor: "cell-A",
-  },
-
-  // ── 2호실(B) ──
-  {
-    id: "note-B1",
-    type: "note",
-    position: [11, 0.6, 9.5],
-    label: "낡은 쪽지",
-    hint: "방마다 걸린 게임이 다르다더군. 뭐가 나올지는 들어가 봐야 안다.",
-  },
-  {
-    id: "note-B2",
-    type: "note",
-    position: [4, 0.6, 9.0],
-    label: "벽 그림",
-    hint: "먼저 나간 놈이 남긴 그림 — 손가락 두 개와 화살표뿐이다.",
   },
   {
     id: "lock-B",
     type: "lockbox",
     position: [7, 0.6, 3.6],
     label: "2호실 게임 자물쇠",
-    hint: "화면이 깜빡인다. 한 판 이겨야 열린다.",
+    hint: CELL_LOCK_HINT,
     puzzle: { kind: "minigame" },
     opensDoor: "cell-B",
-  },
-
-  // ── 3호실(C) ──
-  {
-    id: "note-C1",
-    type: "note",
-    position: [-11, 0.6, -9.5],
-    label: "긁힌 쪽지",
-    hint: "Esc로 물러났다가 다시 붙어도 된다. 판은 처음부터 시작한다.",
-  },
-  {
-    id: "note-C2",
-    type: "note",
-    position: [-4, 0.6, -9.0],
-    label: "벽 낙서",
-    hint: "여긴 머리가 아니라 손이 여는 문이다.",
   },
   {
     id: "lock-C",
     type: "lockbox",
     position: [-7, 0.6, -3.6],
     label: "3호실 게임 자물쇠",
-    hint: "먼지 앉은 화면에 커서가 깜빡인다. 한 판 이겨야 열린다.",
+    hint: CELL_LOCK_HINT,
     puzzle: { kind: "minigame" },
     opensDoor: "cell-C",
-  },
-
-  // ── 4호실(D) ──
-  {
-    id: "note-D1",
-    type: "note",
-    position: [11, 0.6, -9.5],
-    label: "쪽지",
-    hint: "감방을 나가면 진짜가 시작된다. 탈옥문은 네 자리 숫자다.",
-  },
-  {
-    id: "note-D2",
-    type: "note",
-    position: [4, 0.6, -9.0],
-    label: "벽 낙서",
-    hint: "숫자는 식당·통로·운동장에 나뉘어 있다. 혼자선 다 못 본다.",
   },
   {
     id: "lock-D",
     type: "lockbox",
     position: [7, 0.6, -3.6],
     label: "4호실 게임 자물쇠",
-    hint: "조이스틱은 부러졌고 버튼만 남았다. 한 판 이겨야 열린다.",
+    hint: CELL_LOCK_HINT,
     puzzle: { kind: "minigame" },
     opensDoor: "cell-D",
   },
@@ -200,6 +146,26 @@ const LOCKS = INTERACTABLES.filter(
   (it): it is Interactable & { opensDoor: string } =>
     it.type === "lockbox" && !!it.opensDoor,
 );
+
+// 감방 자물쇠 id → 그 자물쇠가 있는 감방 id("cell-A" → "A").
+const LOCK_CELL: Record<string, string> = Object.fromEntries(
+  LOCKS.map((l) => [l.id, l.opensDoor.replace("cell-", "")]),
+);
+
+/**
+ * 지금 위치에서 이 오브젝트를 만질 수 있는가.
+ *
+ * 감방 자물쇠는 **그 감방 안에 있을 때만** 만질 수 있다. 사거리(2.2m)만 보면 복도에서
+ * 창살 너머로 손이 닿는다 — 자물쇠가 문 바로 안쪽(z=±3.6)이고 문은 z=±2.5라 1.1m밖에
+ * 안 떨어져 있다. 그대로 두면 남의 방을 밖에서 열어 주게 되고, 각자 자기 방을 푼다는
+ * 전제가 무너진다.
+ *
+ * 탈옥문은 감방이 아니므로 이 제한을 받지 않는다(모두가 함께 여는 곳이다).
+ */
+export function canInteract(it: Interactable, x: number, z: number): boolean {
+  const cell = LOCK_CELL[it.id];
+  return cell === undefined || cell === cellIdAt(x, z);
+}
 
 /** 미니게임이 걸린 자물쇠 id들(배치 순서 = 1~4호실 순서). */
 export const MINIGAME_LOCK_IDS: string[] = INTERACTABLES.filter(

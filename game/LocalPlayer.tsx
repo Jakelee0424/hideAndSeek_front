@@ -16,6 +16,7 @@ import { useGameStore } from "@/store/gameStore";
 import {
   INTERACTABLES,
   INTERACT_RANGE,
+  canInteract,
   openDoorsFromSolved,
   useInteraction,
 } from "./interactables";
@@ -178,14 +179,15 @@ export default function LocalPlayer() {
     localPos.y = g.position.y;
     localPos.z = g.position.z;
 
-    // 근접 오브젝트 감지(사거리 내 최근접)
+    // 근접 오브젝트 감지(사거리 내 최근접). 남의 감방 자물쇠는 후보에서 뺀다 —
+    // 사거리만 보면 복도에서 창살 너머로 닿는다(canInteract 참고).
     let nearId: string | null = null;
     let best = INTERACT_RANGE * INTERACT_RANGE;
     for (const it of INTERACTABLES) {
       const ex = it.position[0] - g.position.x;
       const ez = it.position[2] - g.position.z;
       const d2 = ex * ex + ez * ez;
-      if (d2 < best) {
+      if (d2 < best && canInteract(it, g.position.x, g.position.z)) {
         best = d2;
         nearId = it.id;
       }

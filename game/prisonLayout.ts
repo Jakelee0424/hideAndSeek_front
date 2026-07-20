@@ -151,6 +151,19 @@ export const DOOR_BOXES: DoorBox[] = DOORS.map((d) => ({
 // F로 문을 열/닫을 수 있는 거리(m)
 export const DOOR_RANGE = 3.0;
 
+/**
+ * 그 좌표가 어느 감방 안인가. 복도·통로·바깥이면 null.
+ *
+ * 감방은 x=0과 복도(|z|≤2.5)로 넷으로 갈린 사분면이다. 서버 Room.sameCell과 같은 판정이니
+ * 한쪽을 고치면 양쪽 반영할 것.
+ */
+export function cellIdAt(x: number, z: number): string | null {
+  if (Math.abs(x) >= 14) return null;
+  const az = Math.abs(z);
+  if (az <= CORRIDOR_HALF_Z || az >= 11) return null;
+  return x < 0 ? (z > 0 ? "A" : "C") : z > 0 ? "B" : "D";
+}
+
 // 랜덤 감방 + 감방 내부 랜덤 위치 스폰(서버 Room.join과 같은 규약). 프론트 단독 실행용.
 export function randomCellSpawn(): [number, number] {
   const c = CELLS[Math.floor(Math.random() * CELLS.length)];
