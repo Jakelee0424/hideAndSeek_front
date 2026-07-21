@@ -117,6 +117,29 @@ export interface PunchEvent {
   dirZ: number;
 }
 
+/**
+ * 서버 → 클라: 채팅 한 줄. 백엔드 ChatEvent record와 필드명 일치.
+ * 스냅샷이 아니라 별도 토픽(/topic/rooms/{id}/chat)으로 온다 — 스냅샷은 "지금 상태"라
+ * tick 사이에 오간 말이 유실될 수 있는데, 채팅은 한 줄도 사라지면 안 된다.
+ *
+ * 봇 여부는 오지 않는다(올 수도 없다). 로스터의 bot이 결말 전까지 false인 것과 같은 이유 —
+ * 채팅에 정체가 묻으면 AI 지목 투표가 성립하지 않는다.
+ */
+export interface ChatEvent {
+  /** 말한 사람의 playerId. 내 말인지 구분하는 데 쓴다. */
+  senderId: string;
+  /** 말한 사람의 닉네임. 로스터는 바뀔 때만 오므로 여기 함께 실어 준다. */
+  nick: string;
+  text: string;
+  /** 서버 기준 발화 시각(ms). 표시 순서에만 쓰고 클라 시계와 비교하지 않는다. */
+  at: number;
+}
+
+/** 클라 → 서버: 채팅 발화. 누가 말했는지는 서버가 STOMP 세션에서 정한다(위조 방지). */
+export interface ChatMessage {
+  text: string;
+}
+
 /** 클라 → 서버: AI 지목 투표 */
 export interface VoteMessage {
   targetId: string;

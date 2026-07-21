@@ -7,6 +7,7 @@
 //       → 백엔드는 registerStompEndpoints("/ws")에 .withSockJS()를 붙이지 말 것.
 import { Client } from "@stomp/stompjs";
 import type {
+  ChatEvent,
   ConnStatus,
   InputMessage,
   JoinMessage,
@@ -16,6 +17,7 @@ import type {
 interface Handlers {
   onStatus: (s: ConnStatus) => void;
   onSnapshot: (snap: WorldSnapshot) => void;
+  onChat: (e: ChatEvent) => void;
 }
 
 let client: Client | null = null;
@@ -39,6 +41,14 @@ export function connect(
       client?.subscribe(`/topic/rooms/${roomId}/state`, (msg) => {
         try {
           handlers.onSnapshot(JSON.parse(msg.body) as WorldSnapshot);
+        } catch {
+          /* 잘못된 payload 무시 */
+        }
+      });
+      // 채팅은 스냅샷과 별도 토픽이다(저빈도 + 유실되면 안 되는 값).
+      client?.subscribe(`/topic/rooms/${roomId}/chat`, (msg) => {
+        try {
+          handlers.onChat(JSON.parse(msg.body) as ChatEvent);
         } catch {
           /* 잘못된 payload 무시 */
         }
@@ -106,6 +116,20 @@ export function sendVote(roomId: string, targetId: string): void {
     client.publish({
       destination: `/app/rooms/${roomId}/vote`,
       body: JSON.stringify({ targetId }),
+    });
+  }
+}
+
+/**
+ * 채팅 발화. 말한 사람은 서버가 STOMP 세션에서 알아내므로 본문만 보낸다 —
+ * 여기서 id를 실어 보내면 남의 이름으로 발언을 지어낼 수 있고, 마지막 단계가
+ * 말을 근거로 AI를 가리는 투표라 그건 게임을 무너뜨린다.
+ */
+export function sendChat(roomId: string, text: string): void {
+  if (client?.connected) {
+    client.publish({
+      destination: `/app/rooms/${roomId}/chat`,
+      body: JSON.stringify({ text }),
     });
   }
 }

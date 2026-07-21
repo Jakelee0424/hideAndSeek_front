@@ -6,6 +6,7 @@
 //   - ESC로 포인터락 해제(브라우저 기본 동작).
 import { useEffect, useRef } from "react";
 import { useThree } from "@react-three/fiber";
+import { useChat } from "@/net/chat";
 import { useInteraction } from "./interactables";
 
 export interface Look {
@@ -25,9 +26,12 @@ export function useMouseLook() {
   useEffect(() => {
     const el = gl.domElement;
 
-    // 캔버스 클릭 → 포인터 잠금(퍼즐 열려 있으면 무시).
+    // 캔버스 클릭 → 포인터 잠금(퍼즐이나 채팅 입력 중이면 무시).
     const onClick = () => {
       if (useInteraction.getState().openId !== null) return;
+      // 채팅 중 캔버스를 클릭하면 포인터가 잠기며 입력창이 포커스를 잃는다.
+      // 그러면 타이핑하던 말이 그대로 날아간다.
+      if (useChat.getState().composing) return;
       if (document.pointerLockElement === el) return;
       // requestPointerLock는 최신 브라우저에서 Promise를 반환한다.
       // ESC 직후 재획득 시도는 SecurityError로 거부되므로 삼켜서 unhandledRejection을 막는다.
@@ -55,10 +59,19 @@ export function useMouseLook() {
       }
     });
 
+    // 채팅을 여는 순간에도 같은 이유로 푼다. 포인터가 잠긴 채로는 마우스가 입력창에 닿지
+    // 않아 커서를 옮기거나 텍스트를 고를 수 없다.
+    const unsubChat = useChat.subscribe((s, prev) => {
+      if (s.composing && !prev.composing && document.pointerLockElement === el) {
+        document.exitPointerLock();
+      }
+    });
+
     return () => {
       el.removeEventListener("click", onClick);
       document.removeEventListener("mousemove", onMove);
       unsub();
+      unsubChat();
     };
   }, [gl]);
 

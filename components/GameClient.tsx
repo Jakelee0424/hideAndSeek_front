@@ -1,6 +1,7 @@
 "use client";
 // Canvas는 SSR 하지 않는다(three는 브라우저 전용).
 import dynamic from "next/dynamic";
+import ChatPanel from "./ChatPanel";
 import ControlHint from "./ControlHint";
 import EndingOverlay from "./EndingOverlay";
 import EscapeOverlay from "./EscapeOverlay";
@@ -30,6 +31,8 @@ export default function GameClient() {
         <EscapeOverlay />
         {/* 투표는 클리어 화면보다 위에 온다 — 탈옥 뒤 마지막 단계라서. */}
         <VoteOverlay />
+        {/* 채팅은 투표(z-30)보다 위다(z-35). 누가 AI인지 말로 가리는 단계라 그때 가장 필요하다. */}
+        <ChatPanel />
         {/* 엔딩은 전부를 덮는다(z-40). 한 판의 마지막 화면이라 뒤가 보일 이유가 없다. */}
         <EndingOverlay />
       </main>

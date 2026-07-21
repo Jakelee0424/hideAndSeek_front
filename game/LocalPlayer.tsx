@@ -21,6 +21,7 @@ import {
   PUNCH_COOLDOWN_MS,
 } from "./punchConfig";
 import { useGameStore } from "@/store/gameStore";
+import { useChat } from "@/net/chat";
 import {
   INTERACTABLES,
   INTERACT_RANGE,
@@ -80,6 +81,8 @@ export default function LocalPlayer() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "KeyE") return;
+      // 채팅에 "e"를 칠 때마다 눈앞의 자물쇠가 열리면 안 된다.
+      if (useChat.getState().composing) return;
       const st = useInteraction.getState();
       if (st.openId || !st.nearId || st.solved[st.nearId]) return;
       st.open(st.nearId);
@@ -117,7 +120,11 @@ export default function LocalPlayer() {
       }
     }
 
-    const locked = useInteraction.getState().openId !== null;
+    // 퍼즐 오버레이가 열려 있거나 채팅을 치는 중이면 이동을 멈춘다.
+    // (채팅 중엔 useKeyboard가 키를 안 먹지만, 열기 직전에 눌려 있던 값이 남을 수 있어
+    //  여기서도 한 번 더 잠근다 — 순찰 중이라면 한 걸음이 그대로 적발이다.)
+    const locked =
+      useInteraction.getState().openId !== null || useChat.getState().composing;
     const { yaw, pitch } = look.current;
 
     // 카메라가 보는 방향을 기준으로 입력을 월드 방향 벡터로 변환.

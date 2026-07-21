@@ -5,6 +5,7 @@ import { ESCAPE_GATE_ID, useInteraction } from "@/game/interactables";
 import { sfxDoor, sfxUnlock } from "@/game/sfx";
 import { worldState } from "./worldState";
 import { punches } from "./punches";
+import { useChat } from "./chat";
 import * as stomp from "./stompClient";
 
 /**
@@ -43,6 +44,8 @@ export function joinRoom(
   // 새 방에서는 처음부터 다시 들려야 한다.
   heardSolved.clear();
   heardDoors.clear();
+  // 이전 방의 대화가 새 방에 남으면 안 된다.
+  useChat.getState().clear();
 
   // 서버가 입장을 거절하면(방 정원 초과·대기열 초과) 아무 응답도 오지 않는다. 스냅샷에
   // 내가 안 실려 오는 것으로만 알 수 있으므로, 일정 시간 안에 못 보면 실패로 처리한다.
@@ -63,6 +66,7 @@ export function joinRoom(
     { id: myId, nick, token: opts?.token ?? null },
     {
       onStatus: (s) => useGameStore.getState().setStatus(s),
+      onChat: (e) => useChat.getState().receive(e),
       onSnapshot: (snap) => {
         // 내가 스냅샷에 실려 왔다 = 서버가 받아줬다.
         if (!joined && snap.states.some((s) => s.id === myId)) {
@@ -128,5 +132,6 @@ export function leaveRoom(): void {
   stomp.disconnect();
   worldState.clear();
   punches.clear();
+  useChat.getState().clear();
   useGameStore.getState().clear();
 }
