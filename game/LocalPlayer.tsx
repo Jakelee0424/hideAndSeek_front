@@ -11,7 +11,7 @@ import { useKeyboard } from "./useKeyboard";
 import { useMouseLook } from "./useMouseLook";
 import Character, { type AnimState } from "./Character";
 import { sendInput, sendPunch } from "@/net/stompClient";
-import { worldState } from "@/net/worldState";
+import { worldState, INTERP_DELAY_MS } from "@/net/worldState";
 import { punches } from "@/net/punches";
 import { sfxPunch } from "./sfx";
 import {
@@ -28,8 +28,8 @@ import {
   openDoorsFromSolved,
   useInteraction,
 } from "./interactables";
-import { randomCellSpawn } from "./prisonLayout";
-import { resolveCollision } from "./collision";
+import { STEP_UP, groundHeightAt, randomCellSpawn } from "./prisonLayout";
+import { pushOutOfPlayer, resolveCollision } from "./collision";
 import { localPos } from "./localPos";
 
 // ⚠️ 아래 넷은 백엔드 application.yml의 game.* 와 이중 관리다. 어긋나면 예측이 서버와 벌어져
@@ -110,6 +110,7 @@ export default function LocalPlayer() {
       const t = myId ? worldState.sample(myId, performance.now()) : null;
       if (t) {
         g.position.x = t.x;
+        g.position.y = t.y;
         g.position.z = t.z;
         g.rotation.y = t.rotationY;
         spawned.current = true;
@@ -174,30 +175,47 @@ export default function LocalPlayer() {
       }
     }
 
-    // 벽/장애물 충돌 해석(서버와 동일 로직). 미션을 푼 방의 감방문은 통과.
-    // 충돌은 2D(x/z)라 점프해도 장애물은 못 넘는다 — 서버 Room.tick과 같은 규약.
-    // 이동이든 넉백이든 위치가 바뀌었을 때만 해석한다.
-    if (moving || knocked) {
+    // 다른 플레이어와의 충돌(실체). 같은 층에 있는 상대만 — 2층에 있으면 1층 사람과 겹쳐도 된다.
+    // 상대 위치는 보간 재생 시점(서버 좌표)이라, 내 쪽만 밀어도 서버 판정과 수렴한다.
+    const renderTime = performance.now() - INTERP_DELAY_MS;
+    const myId = useGameStore.getState().myId;
+    for (const oid of worldState.ids()) {
+      if (oid === myId) continue;
+      const o = worldState.sample(oid, renderTime);
+      if (!o || Math.abs(o.y - g.position.y) > 1.6) continue;
+      const [px, pz] = pushOutOfPlayer(g.position.x, g.position.z, o.x, o.z);
+      g.position.x = px;
+      g.position.z = pz;
+    }
+
+    // 벽/소품 충돌 해석(서버와 동일 로직). 미션을 푼 방의 감방문은 통과.
+    // 충돌은 XZ 밀어내기 + 발높이 층 판정 — 점프해도 장애물은 못 넘는다(서버 Room.tick과 같은 규약).
+    {
       const openDoors = openDoorsFromSolved(useInteraction.getState().solved);
-      const [rx, rz] = resolveCollision(g.position.x, g.position.z, openDoors);
+      const [rx, rz] = resolveCollision(g.position.x, g.position.z, g.position.y, openDoors);
       g.position.x = rx;
       g.position.z = rz;
     }
 
-    // 수직 예측(서버 Room.tick과 같은 식). 지면은 y=0(발바닥 규약).
-    const grounded = g.position.y <= 1e-6 && vy.current <= 0;
-    if (grounded && !locked && k.jump) {
-      vy.current = JUMP_SPEED;
+    // 수직 예측(서버 Room.tick과 같은 식). 바닥은 그 좌표의 지지면(1층 0 / 계단 램프 / 2층 4.5).
+    // STEP_UP 이하의 턱은 걸어서 스냅해 오르내린다 — 계단을 내려갈 때 통통 튀지 않게 한다.
+    const floorY = groundHeightAt(g.position.x, g.position.z, g.position.y);
+    const grounded = vy.current <= 0 && g.position.y - floorY <= STEP_UP;
+    if (grounded) {
+      g.position.y = floorY; // 계단·턱 스냅
+      if (!locked && k.jump) {
+        vy.current = JUMP_SPEED;
+      }
     }
     if (!grounded || vy.current > 0) {
       vy.current -= GRAVITY * dt;
       g.position.y += vy.current * dt;
-      if (g.position.y <= 0) {
-        g.position.y = 0;
+      if (g.position.y <= floorY) {
+        g.position.y = floorY;
         vy.current = 0;
       }
     }
-    const airborne = g.position.y > 1e-6;
+    const airborne = g.position.y > floorY + 1e-6;
 
     // 펀치 발동: 클릭 요청을 쿨다운·오버레이 조건에서 소비. 서버엔 "쳤다"만 보내고(대상·넉백은
     // 서버가 위치로 정한다), 내 모션·소리는 즉시 재생한다. 서버 연결 전이면 연출만 로컬로.
@@ -247,15 +265,18 @@ export default function LocalPlayer() {
 
     // 근접 오브젝트 감지(사거리 내 최근접). 남의 감방 자물쇠는 후보에서 뺀다 —
     // 사거리만 보면 복도에서 창살 너머로 닿는다(canInteract 참고).
+    // 상호작용 오브젝트는 전부 1층에 있다 — 2층(감방 위 슬래브)에서 XZ가 겹쳐도 닿지 않아야 한다.
     let nearId: string | null = null;
-    let best = INTERACT_RANGE * INTERACT_RANGE;
-    for (const it of INTERACTABLES) {
-      const ex = it.position[0] - g.position.x;
-      const ez = it.position[2] - g.position.z;
-      const d2 = ex * ex + ez * ez;
-      if (d2 < best && canInteract(it, g.position.x, g.position.z)) {
-        best = d2;
-        nearId = it.id;
+    if (g.position.y < 2) {
+      let best = INTERACT_RANGE * INTERACT_RANGE;
+      for (const it of INTERACTABLES) {
+        const ex = it.position[0] - g.position.x;
+        const ez = it.position[2] - g.position.z;
+        const d2 = ex * ex + ez * ez;
+        if (d2 < best && canInteract(it, g.position.x, g.position.z)) {
+          best = d2;
+          nearId = it.id;
+        }
       }
     }
     useInteraction.getState().setNear(nearId);

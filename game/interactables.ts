@@ -5,7 +5,7 @@
 // 감방문(cell-X)이 열린다. 어느 방에 어느 게임이 걸리는지는 방 코드로 정해진다
 // (minigameFor 참고) — 같은 방 사람들은 같은 배치를 본다.
 //
-// 지원 방(작업장·의무실·세탁실)은 방 "밖" 개활지의 고전 자물쇠(문자·숫자·색 순서)로 연다.
+// 지원 방(작업장·의무실·세탁실)은 방 "밖" 복도의 고전 자물쇠(문자·숫자·색 순서)로 연다.
 // 최종 탈옥문만 코드 입력(dial)으로 남겼다. 감방 밖에 흩어진 쪽지 셋을 모아야 풀리는
 // 협동 단계라, 여기까지 반사신경 게임으로 만들면 "같이 단서를 맞춘다"는 축이 사라진다.
 //
@@ -52,14 +52,14 @@ const CELL_LOCK_HINT =
   "나가면 교도소 정문의 탈옥문이 기다린다 — 네 자리 숫자이고, 단서는 감방 밖에 흩어져 있다.";
 
 // ── 방별 상호작용 오브젝트 ────────────────────────────────────────
-// 좌표는 prisonLayout BUILDINGS(도면 배치) 기준. 본관 감방(A~D) 안에는 자물쇠(미니게임) 하나뿐.
-// 안에서 시작 → 한 판 이겨 남쪽 문으로 나간다. 감방 쪽지는 없앴다(게임엔 답이 없어 읽을 게 없다).
-// 별관 지원 방(작업장·의무실·세탁실)은 방 "밖" 개활지의 고전 자물쇠로, 최종 탈옥문은 코드로 연다.
+// 좌표는 prisonLayout BUILDINGS(도면 배치) 기준. 수감동 감방(A~D) 안에는 자물쇠(미니게임) 하나뿐.
+// 안에서 시작 → 한 판 이겨 가운데 복도로 나간다. 감방 쪽지는 없앴다(게임엔 답이 없어 읽을 게 없다).
+// 별관 지원 방(작업장·의무실·세탁실)은 방 "밖" 복도의 고전 자물쇠로, 최종 탈옥문은 코드로 연다.
 export const INTERACTABLES: Interactable[] = [
   {
     id: "lock-A",
     type: "lockbox",
-    position: [-59, 0.6, 32],
+    position: [-30, 0.6, 21],
     label: "1-1 게임 자물쇠",
     hint: CELL_LOCK_HINT,
     puzzle: { kind: "minigame" },
@@ -68,7 +68,7 @@ export const INTERACTABLES: Interactable[] = [
   {
     id: "lock-B",
     type: "lockbox",
-    position: [-43, 0.6, 32],
+    position: [-14, 0.6, 21],
     label: "1-2 게임 자물쇠",
     hint: CELL_LOCK_HINT,
     puzzle: { kind: "minigame" },
@@ -77,7 +77,7 @@ export const INTERACTABLES: Interactable[] = [
   {
     id: "lock-C",
     type: "lockbox",
-    position: [-27, 0.6, 32],
+    position: [-30, 0.6, 13],
     label: "1-3 게임 자물쇠",
     hint: CELL_LOCK_HINT,
     puzzle: { kind: "minigame" },
@@ -86,20 +86,20 @@ export const INTERACTABLES: Interactable[] = [
   {
     id: "lock-D",
     type: "lockbox",
-    position: [-11, 0.6, 32],
+    position: [-14, 0.6, 13],
     label: "1-4 게임 자물쇠",
     hint: CELL_LOCK_HINT,
     puzzle: { kind: "minigame" },
     opensDoor: "cell-D",
   },
 
-  // ── 별관 세탁실(자물쇠 밖, 문 x42/z13 서편 개활지): 색 순서 [파랑·노랑·빨강·초록] ──
-  { id: "note-laundry1", type: "note", position: [40, 0.6, 9], label: "세탁 안내문", hint: "세제통을 그림 순서대로 눌러라." },
-  { id: "note-laundry2", type: "note", position: [40, 0.6, 17], label: "젖은 쪽지", hint: "하늘 → 태양 → 피 → 잔디" },
+  // ── 세탁실(자물쇠 밖, 별관 복도 — 문 x30/z20 앞): 색 순서 [파랑·노랑·빨강·초록] ──
+  { id: "note-laundry1", type: "note", position: [25.5, 0.6, 18.4], label: "세탁 안내문", hint: "세제통을 그림 순서대로 눌러라." },
+  { id: "note-laundry2", type: "note", position: [34.5, 0.6, 18.4], label: "젖은 쪽지", hint: "하늘 → 태양 → 피 → 잔디" },
   {
     id: "lock-laundry",
     type: "lockbox",
-    position: [40, 0.6, 13],
+    position: [30, 0.6, 18.4],
     label: "세탁실 문 자물쇠",
     hint: "쪽지가 가리키는 색을 순서대로 누른다.",
     puzzle: {
@@ -110,47 +110,49 @@ export const INTERACTABLES: Interactable[] = [
     opensDoor: "door-laundry",
   },
 
-  // ── 별관 작업장(자물쇠 밖, 문 x42/z-13): 문자 "TOOL" ──
-  { id: "note-work1", type: "note", position: [40, 0.6, -17], label: "작업 지시서", hint: "네 글자 영어 단어를 새겨라." },
-  { id: "note-work2", type: "note", position: [40, 0.6, -9], label: "공구함 각인", hint: "‘연장’을 뜻하는 영어 (T _ _ L)" },
+  // ── 작업장(자물쇠 밖, 별관 복도 — 문 x14/z14 앞): 문자 "TOOL" ──
+  { id: "note-work1", type: "note", position: [9.5, 0.6, 15.6], label: "작업 지시서", hint: "네 글자 영어 단어를 새겨라." },
+  { id: "note-work2", type: "note", position: [18.5, 0.6, 15.6], label: "공구함 각인", hint: "‘연장’을 뜻하는 영어 (T _ _ L)" },
   {
     id: "lock-work",
     type: "lockbox",
-    position: [40, 0.6, -13],
+    position: [14, 0.6, 15.6],
     label: "작업장 문 자물쇠",
     hint: "네 글자를 맞춰라.",
     puzzle: { kind: "letters", answer: "TOOL" },
     opensDoor: "door-work",
   },
 
-  // ── 별관 의무실(자물쇠 밖, 문 x42/z-39): 숫자 "451" ──
-  { id: "note-med1", type: "note", position: [40, 0.6, -43], label: "약장 라벨", hint: "약장 번호 앞 두 자리 = 45" },
-  { id: "note-med2", type: "note", position: [40, 0.6, -35], label: "처방 기록", hint: "마지막 자리 = 1" },
+  // ── 의무실(자물쇠 밖, 별관 복도 — 문 x30/z14 앞): 숫자 "451" ──
+  { id: "note-med1", type: "note", position: [25.5, 0.6, 15.6], label: "약장 라벨", hint: "약장 번호 앞 두 자리 = 45" },
+  { id: "note-med2", type: "note", position: [34.5, 0.6, 15.6], label: "처방 기록", hint: "마지막 자리 = 1" },
   {
     id: "lock-med",
     type: "lockbox",
-    position: [40, 0.6, -39],
+    position: [30, 0.6, 15.6],
     label: "의무실 문 자물쇠",
     hint: "세 자리 숫자를 맞춰라.",
     puzzle: { kind: "dial", code: "451" },
     opensDoor: "door-med",
   },
 
-  // ── 최종 탈옥문(교도소 정문): 감방을 나온 뒤의 목표 ────────────────
+  // ── 최종 탈옥문(교도소 정문, 연병장 남쪽): 감방을 나온 뒤의 목표 ────
   //
-  // 단서는 감방 "밖"(식당·운동장 개활지)에 흩어 둔다. 감방 안에 두면 그 방을 푼 사람만 보므로
+  // 단서는 감방 "밖"(식당·연병장 개활지)에 흩어 둔다. 감방 안에 두면 그 방을 푼 사람만 보므로
   // 혼자 플레이하면 못 닿는 단서가 생긴다. 세 단서를 모으면 1863.
-  { id: "note-mess", type: "note", position: [54, 0.6, 39], label: "배식 당번표", hint: "지워진 칸의 위아래가 17과 19다. 앞 두 자리는 그 사이 수." },
-  { id: "note-west", type: "note", position: [-20, 0.6, 0], label: "순찰 일지", hint: "마지막 줄 — “3시 방향 이상 없음.” 끝자리는 이 수." },
-  { id: "note-yard", type: "note", position: [12, 0.6, -18], label: "담벼락 자국", hint: "누군가 긁어놓은 자국이 여섯 줄. 셋째 자리는 이 수." },
+  { id: "note-mess", type: "note", position: [14, 0.6, 24], label: "배식 당번표", hint: "지워진 칸의 위아래가 17과 19다. 앞 두 자리는 그 사이 수." },
+  { id: "note-west", type: "note", position: [-28, 0.6, -10], label: "순찰 일지", hint: "마지막 줄 — “3시 방향 이상 없음.” 끝자리는 이 수." },
+  { id: "note-yard", type: "note", position: [10, 0.6, -20], label: "담벼락 자국", hint: "누군가 긁어놓은 자국이 여섯 줄. 셋째 자리는 이 수." },
   {
     id: "escape-gate",
     type: "lockbox",
-    position: [0, 0.6, -50], // 교도소 정문 앞(최종 탈출구)
+    position: [0, 0.6, -26], // 파란 정문 앞(최종 탈출구)
     label: "탈옥문",
     hint: "네 자리. 교도소 곳곳에 흩어진 기록을 모아야 한다.",
     puzzle: { kind: "dial", code: "1863" },
-    // opensDoor 없음 — 감방문이 아니라 게임의 끝이다. LOCKS에도 잡히지 않는다.
+    // 풀면 남벽의 파란 정문(gate-main)이 열린다 — 게임의 끝을 눈으로 보여주는 연출.
+    // 서버 Room.LOCK_OPENS에도 같은 매핑이 있다(봇이 근접만으로 정문을 열지 못하게 막는 효과도 겸한다).
+    opensDoor: "gate-main",
   },
 ];
 

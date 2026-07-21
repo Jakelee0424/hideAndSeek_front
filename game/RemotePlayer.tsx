@@ -8,6 +8,7 @@ import * as THREE from "three";
 import { worldState, INTERP_DELAY_MS } from "@/net/worldState";
 import { punches } from "@/net/punches";
 import { PUNCH_ANIM_MS } from "./punchConfig";
+import { groundHeightAt } from "./prisonLayout";
 import Character, { type AnimState } from "./Character";
 
 export default function RemotePlayer({
@@ -35,7 +36,7 @@ export default function RemotePlayer({
 
     g.position.x = tr.x;
     g.position.z = tr.z;
-    g.position.y = tr.y; // 서버가 보낸 지면 위 높이(점프). 착지 상태면 0
+    g.position.y = tr.y; // 서버가 보낸 발바닥 높이(1층 0 / 2층 4.5 / 점프 중 그 사이)
     g.rotation.y = tr.rotationY;
 
     // 보간된 위치의 프레임당 이동량으로 walk/run 판정.
@@ -59,8 +60,10 @@ export default function RemotePlayer({
     const punching = now < punchUntil.current;
 
     // 걷기(6m/s)와 달리기(10.8m/s)의 중간(≈8.4m/s)을 경계로 삼는다. 펀치가 최우선.
+    // 접지는 그 좌표의 바닥(2층·계단 포함) 기준 — 절대 y로 보면 2층에 서 있는 사람이 늘 점프다.
     const speed = moved / Math.max(delta, 1e-4);
-    const airborne = g.position.y > 0.02;
+    const airborne =
+      g.position.y > groundHeightAt(g.position.x, g.position.z, g.position.y) + 0.02;
     const nextAnim: AnimState = punching
       ? "punch"
       : airborne

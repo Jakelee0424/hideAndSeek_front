@@ -88,6 +88,11 @@ export const worldState = {
     return { x: last.x, z: last.z, rotationY: last.rot, y: last.y };
   },
 
+  /** 버퍼에 있는 플레이어 id들(로컬 플레이어의 대인 충돌 예측이 순회한다). */
+  ids(): IterableIterator<string> {
+    return buffers.keys();
+  },
+
   clear(): void {
     buffers.clear();
   },

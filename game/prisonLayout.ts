@@ -1,33 +1,44 @@
 // 교도소 맵 레이아웃 — 단일 소스(시각 + 충돌 + 스폰이 모두 참조).
 //
-// 실제 교도소 도면(조감도)을 따른다: 본관(감방동) — 중앙 통로 — 별관(미션동) — 정문/운동장.
+// 가로로 긴 직사각형 캠퍼스(84×60). 북쪽 절반에 수감동(서)·별관(동)이 복도로 이어지고,
+// 남쪽 절반은 모래 바닥의 연병장. 남벽 중앙에 파란 정문(탈옥문을 풀면 열린다).
 // 벽·문·바닥은 아래 BUILDINGS(방=사각형 + 문 위치) 스펙에서 **자동 생성**한다 — 좌표를 손으로
 // 두 번 쓰지 않으므로 프론트/백 어긋남(러버밴딩)을 원천 차단한다.
 //
-//   [관리실][통제실]        [관구실]              (북)
-//   ┌──┐┌──┐┌──┐┌──┐                    ┌────── 별관(미션동) ──────┐
-//   │A ││B ││C ││D │  ← 본관 감방(스폰)    │ 식당(개방) · 세탁실(자물쇠) │
-//   └┬─┘└┬─┘└┬─┘└┬─┘                    │ 작업장(자물쇠) · 의무실(자물쇠)│
-//    문(남향)                            └──────────┬───────────────┘
-//        ───────── 운동장(개활지) ─────────────
-//              [정문초소]  교도소 정문(탈옥문)   (남)   감시탑
+//   ┌────────────────────────────────────────────┐ z=30 (북)
+//   │🗼          [2m 순찰로]                  🗼│
+//   │ ┌수감동(2층)────┐┌화장실┐┌별관────────────┐ │
+//   │ │ 1-1 │ 1-2   ││ WC  ││ 식당  │ 세탁실  │ │
+//   │ │─복도─열린 철창╪╪─복도─╪╪──복도──────────│ │
+//   │ │ 1-3 │ 1-4   │└출입구┘│ 작업장 │ 의무실 │ │
+//   │ └─────────────┘   ↓   └────────────────┘ │
+//   │ ~~~~~~~~~~~ 연병장(모래) ~~~~~~~~~~~~~~~~ │
+//   │🗼        ▓▓ 정문(파랑) ▓▓              🗼│
+//   └────────────────────────────────────────────┘ z=-30 (남)
+//
+// 인접한 방이 벽을 공유할 때는 한쪽만 벽을 갖고 반대쪽은 그 변 전체를 개구부로 비운다
+// (같은 자리에 벽 상자가 둘 생기면 렌더가 z-fighting으로 깜빡인다). 규칙: 서쪽 방이 동벽을 소유.
 //
 // ⚠️ 서버 Collision.java(같은 BUILDINGS 스펙에서 생성) / Room.java(CELL_CENTERS·cellOf·LOCK_OPENS)
 //    / BotNav.java(웨이포인트) / Interactables.java(POI) 와 규약을 맞출 것. 방을 옮기면 이 파일과
 //    Collision.java의 BUILDINGS를 같은 값으로 고치면 벽·문은 자동으로 맞는다.
 
 export const WALL_H = 3; // 실내 벽 높이(m)
-export const YARD_WALL_H = 4.2; // 담(연병장·외벽) 높이(m)
+export const FLOOR2_Y = 4.5; // 수감동 2층 바닥 높이(m). 3인칭 카메라(pitch↑)가 천장에 가리지 않을 층고.
+export const CELL_BLOCK_H = FLOOR2_Y * 2; // 수감동(2층) 벽 높이(m)
 export const WALL_T = 0.4; // 벽 두께(m)
 export const PLAYER_R = 0.4; // 플레이어 반경(원 충돌)
 export const DOOR_W = 2; // 잠금 문 개구부 폭(m)
 
 // 안전용 바깥 사각 경계(실제 격리는 외벽이 담당; 이 clamp는 탈출 방지 그물). 외벽 안쪽 면.
-export const BOUND_X = 74.6;
-export const BOUND_Z = 55.6;
+export const BOUND_X = 41.6;
+export const BOUND_Z = 29.6;
 
 // F로 문을 열/닫을 수 있는 거리(m). 서버 Room.BOT_DOOR_RANGE와 같은 값.
 export const DOOR_RANGE = 3.0;
+
+// 걸어서 오를 수 있는 턱 높이(m). 계단은 이 스냅으로 오른다(점프 불필요).
+export const STEP_UP = 0.5;
 
 export interface Rect {
   x0: number;
@@ -60,44 +71,91 @@ export interface Opening {
 export interface Building {
   id: string;
   label?: string; // 있으면 바닥 위에 라벨 표시
-  kind: "perimeter" | "yard" | "cell" | "room" | "gate";
+  kind: "perimeter" | "yard" | "cell" | "room" | "hall";
   rect: Rect;
   h?: number; // 벽 높이(기본 WALL_H)
   color?: string; // 바닥 색(없으면 바닥 생략)
   openings?: Opening[];
-  noWalls?: boolean; // 개활지(운동장 등): 바닥 색만, 벽 생성 안 함
+  noWalls?: boolean; // 개활지(연병장 등): 바닥 색만, 벽 생성 안 함
 }
 
+// 복도의 인접 변을 통째로 비우는 개구부 폭. 북/남 변은 모서리 덮개(±WALL_T/2)까지 걷어야
+// 이웃 벽과 겹치는 토막이 안 남는다.
+const HALL_W = 32; // 수감동·별관 복도 x 폭
+const FULL_NS = HALL_W + WALL_T; // 북/남 변 전체 개구부(모서리 포함)
+const CORNER = WALL_T; // 이웃 벽의 모서리 덮개와 겹치는 토막 제거용
+
 // ── 도면 배치 ──────────────────────────────────────────────────────
-// 좌표계: z+ = 북(도면 위쪽). 본관 감방은 북서, 별관 미션동은 동, 운동장·정문은 남.
+// 좌표계: z+ = 북(도면 위쪽). 수감동은 북서, 별관은 북동, 연병장·정문은 남.
 export const BUILDINGS: Building[] = [
-  // 외벽(전체를 감싼다). 바닥 없음 — 개활지는 베이스 지면(Map의 Ground)이 깐다.
-  { id: "perimeter", kind: "perimeter", rect: { x0: -75, z0: -56, x1: 75, z1: 56 }, h: 5 },
+  // 외벽(전체를 감싼다). 남벽 중앙이 정문 — 탈옥문(escape-gate)을 풀면 열린다.
+  {
+    id: "perimeter", kind: "perimeter", rect: { x0: -42, z0: -30, x1: 42, z1: 30 }, h: 5,
+    openings: [{ edge: "S", at: 0, width: 8, door: "gate-main" }],
+  },
 
-  // ── 본관(감방동, 북서): 감방 4 + 관리실·통제실(시각) ──
-  // 문은 남향(z 작은 쪽). 열면 남쪽 운동장으로 나온다.
-  { id: "A", kind: "cell", label: "1-1", rect: { x0: -66, z0: 30, x1: -52, z1: 42 }, color: "#2a2d34", openings: [{ edge: "S", at: -59, width: DOOR_W, door: "cell-A" }] },
-  { id: "B", kind: "cell", label: "1-2", rect: { x0: -50, z0: 30, x1: -36, z1: 42 }, color: "#2a2d34", openings: [{ edge: "S", at: -43, width: DOOR_W, door: "cell-B" }] },
-  { id: "C", kind: "cell", label: "1-3", rect: { x0: -34, z0: 30, x1: -20, z1: 42 }, color: "#2a2d34", openings: [{ edge: "S", at: -27, width: DOOR_W, door: "cell-C" }] },
-  { id: "D", kind: "cell", label: "1-4", rect: { x0: -18, z0: 30, x1: -4, z1: 42 }, color: "#2a2d34", openings: [{ edge: "S", at: -11, width: DOOR_W, door: "cell-D" }] },
-  { id: "admin", kind: "room", label: "관리실", rect: { x0: -66, z0: 44, x1: -52, z1: 54 }, color: "#343842", openings: [{ edge: "S", at: -59, width: 4 }] },
-  { id: "control", kind: "room", label: "본관 통제실", rect: { x0: -50, z0: 44, x1: -36, z1: 54 }, color: "#39323a", openings: [{ edge: "S", at: -43, width: 4 }] },
+  // ── 수감동(북서, 2층): 1층 감방 4개가 복도를 사이에 두고 2:2 마주보기 ──
+  // 북측(1-1·1-2)은 남향 문, 남측(1-3·1-4)은 북향 문 → 모두 가운데 복도로 나온다.
+  { id: "A", kind: "cell", label: "1-1", rect: { x0: -38, z0: 20, x1: -22, z1: 28 }, h: CELL_BLOCK_H, color: "#2a2d34", openings: [{ edge: "S", at: -30, width: DOOR_W, door: "cell-A" }] },
+  // 서쪽 이웃에게 벽을 양보한 방(B·D)은 북/남 변의 공유 모서리 토막(0.4)도 함께 비운다 —
+  // 이웃이 모서리 덮개(±t/2)로 이미 채운 자리라, 남겨두면 같은 자리에 벽이 두 번 생긴다.
+  { id: "B", kind: "cell", label: "1-2", rect: { x0: -22, z0: 20, x1: -6, z1: 28 }, h: CELL_BLOCK_H, color: "#2a2d34", openings: [{ edge: "S", at: -14, width: DOOR_W, door: "cell-B" }, { edge: "W", at: 24, width: 8 }, { edge: "N", at: -22, width: CORNER }, { edge: "S", at: -22, width: CORNER }] },
+  { id: "C", kind: "cell", label: "1-3", rect: { x0: -38, z0: 6, x1: -22, z1: 14 }, h: CELL_BLOCK_H, color: "#2a2d34", openings: [{ edge: "N", at: -30, width: DOOR_W, door: "cell-C" }] },
+  { id: "D", kind: "cell", label: "1-4", rect: { x0: -22, z0: 6, x1: -6, z1: 14 }, h: CELL_BLOCK_H, color: "#2a2d34", openings: [{ edge: "N", at: -14, width: DOOR_W, door: "cell-D" }, { edge: "W", at: 10, width: 8 }, { edge: "N", at: -22, width: CORNER }, { edge: "S", at: -22, width: CORNER }] },
+  // 수감동 복도: 북/남 변은 감방 벽이 담당(전체 개구), 동쪽은 연결 복도로 열림. 서쪽 벽만 소유.
+  {
+    id: "hall-west", kind: "hall", label: "수감동", rect: { x0: -38, z0: 14, x1: -6, z1: 20 }, h: CELL_BLOCK_H, color: "#30343c",
+    openings: [
+      { edge: "N", at: -22, width: FULL_NS },
+      { edge: "S", at: -22, width: FULL_NS },
+      { edge: "E", at: 17, width: 6 },
+    ],
+  },
 
-  // ── 관구실(중앙 통로 landmark, 시각) ──
-  { id: "office", kind: "room", label: "관구실", rect: { x0: 4, z0: 42, x1: 22, z1: 54 }, color: "#343842", openings: [{ edge: "S", at: 13, width: 5 }] },
+  // ── 연결 복도(중앙): 수감동↔별관. 남벽 중앙이 단지 출입구(연병장으로). 열린 철창은 Map이 얹는다 ──
+  {
+    id: "link", kind: "hall", rect: { x0: -6, z0: 14, x1: 6, z1: 20 }, color: "#30343c",
+    openings: [
+      { edge: "N", at: 0, width: 12 + WALL_T }, // 화장실 남벽이 담당
+      { edge: "E", at: 17, width: 6 },
+      { edge: "W", at: 17, width: 6 },
+      // 남벽: 중앙 출입구 + 양끝 모서리 토막 제거(이웃 감방·작업장 벽과 겹침 방지)
+      { edge: "S", at: -6, width: CORNER },
+      { edge: "S", at: 0, width: 3 },
+      { edge: "S", at: 6, width: CORNER },
+    ],
+  },
+  // 화장실(연결 복도 북측). 동/서 벽은 이웃 건물이 담당.
+  {
+    id: "toilet", kind: "room", label: "화장실", rect: { x0: -6, z0: 20, x1: 6, z1: 28 }, color: "#3b444f",
+    openings: [
+      { edge: "W", at: 24, width: 8 },
+      { edge: "E", at: 24, width: 8 },
+      { edge: "N", at: -6, width: CORNER },
+      { edge: "N", at: 6, width: CORNER },
+      { edge: "S", at: -6, width: CORNER },
+      { edge: "S", at: 0, width: DOOR_W },
+      { edge: "S", at: 6, width: CORNER },
+    ],
+  },
 
-  // ── 별관(미션동, 동): 식당(개방) · 세탁실 · 작업장 · 의무실 ──
-  // 문은 서향(x 작은 쪽). 열면 서쪽 운동장으로.
-  { id: "cafeteria", kind: "room", label: "식당", rect: { x0: 42, z0: 28, x1: 68, z1: 50 }, color: "#3a3f4a", openings: [{ edge: "W", at: 39, width: 6 }] },
-  { id: "laundry", kind: "room", label: "세탁실", rect: { x0: 42, z0: 2, x1: 68, z1: 24 }, color: "#3a3f46", openings: [{ edge: "W", at: 13, width: DOOR_W, door: "door-laundry" }] },
-  { id: "workshop", kind: "room", label: "작업장", rect: { x0: 42, z0: -24, x1: 68, z1: -2 }, color: "#3a3a30", openings: [{ edge: "W", at: -13, width: DOOR_W, door: "door-work" }] },
-  { id: "infirmary", kind: "room", label: "의무실", rect: { x0: 42, z0: -50, x1: 68, z1: -28 }, color: "#33403f", openings: [{ edge: "W", at: -39, width: DOOR_W, door: "door-med" }] },
+  // ── 별관(북동): 식당(개방) · 세탁실 · 작업장 · 의무실. 문은 모두 가운데 복도로 ──
+  { id: "cafeteria", kind: "room", label: "식당", rect: { x0: 6, z0: 20, x1: 22, z1: 28 }, color: "#3a3f4a", openings: [{ edge: "S", at: 14, width: 4 }] },
+  { id: "laundry", kind: "room", label: "세탁실", rect: { x0: 22, z0: 20, x1: 38, z1: 28 }, color: "#3a3f46", openings: [{ edge: "S", at: 30, width: DOOR_W, door: "door-laundry" }, { edge: "W", at: 24, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
+  { id: "workshop", kind: "room", label: "작업장", rect: { x0: 6, z0: 6, x1: 22, z1: 14 }, color: "#3a3a30", openings: [{ edge: "N", at: 14, width: DOOR_W, door: "door-work" }] },
+  { id: "infirmary", kind: "room", label: "의무실", rect: { x0: 22, z0: 6, x1: 38, z1: 14 }, color: "#33403f", openings: [{ edge: "N", at: 30, width: DOOR_W, door: "door-med" }, { edge: "W", at: 10, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
+  // 별관 복도: 동쪽 벽만 소유(서쪽은 연결 복도로 열림, 북/남은 방 벽이 담당).
+  {
+    id: "hall-east", kind: "hall", label: "별관", rect: { x0: 6, z0: 14, x1: 38, z1: 20 }, color: "#30343c",
+    openings: [
+      { edge: "N", at: 22, width: FULL_NS },
+      { edge: "S", at: 22, width: FULL_NS },
+      { edge: "W", at: 17, width: 6 },
+    ],
+  },
 
-  // ── 운동장(개활지, 정문 앞): 벽 없이 바닥 색만. 트랙·농구골대·감시탑은 Map이 얹는다. ──
-  { id: "yard", kind: "yard", label: "운동장", rect: { x0: -40, z0: -46, x1: 38, z1: 28 }, color: "#3d4732", noWalls: true },
-
-  // ── 정문초소(시각) ──
-  { id: "post", kind: "room", label: "정문초소", rect: { x0: -16, z0: -54, x1: -6, z1: -48 }, color: "#343842", openings: [{ edge: "N", at: -11, width: 3 }] },
+  // ── 연병장(남쪽 절반, 개활지): 모래 바닥. 트랙·골대·연단은 Map이 얹는다 ──
+  { id: "yard", kind: "yard", label: "연병장", rect: { x0: -42, z0: -30, x1: 42, z1: 6 }, color: "#9c8756", noWalls: true },
 ];
 
 // ── 스펙 → 벽/문/바닥 자동 생성 ───────────────────────────────────
@@ -213,12 +271,23 @@ export function getBuilding(id: string): Building | undefined {
   return BUILDINGS.find((b) => b.id === id);
 }
 
-/** 운동장 정보(농구 이스터에그·트랙·감시탑이 참조). 골대는 (cx+7.5) 부근. */
+/** 연병장 정보(농구 이스터에그·트랙·연단이 참조). 골대는 (cx+7.5) 부근. */
 export const YARD = {
   cx: 0,
-  cz: -8,
+  cz: -12,
   rect: getBuilding("yard")!.rect,
 };
+
+/** 정문(남벽 중앙, 파란 철문). Map의 정문 비주얼과 탈옥문 상호작용이 참조한다. */
+export const GATE = { x: 0, z: -30, width: 8 };
+
+/** 감시탑 자리 — 맵 네 모서리(담장 위). 시각 전용(다리가 가늘어 충돌 없음). */
+export const TOWERS: [number, number][] = [
+  [-42, -30],
+  [42, -30],
+  [-42, 30],
+  [42, 30],
+];
 
 /**
  * 그 좌표가 어느 감방 안인가. 개활지·다른 건물이면 null.
@@ -236,7 +305,121 @@ export function cellIdAt(x: number, z: number): string | null {
 /** 랜덤 감방 + 감방 내부 랜덤 위치 스폰(서버 Room.takeFreeCell과 같은 규약). 프론트 단독 실행용. */
 export function randomCellSpawn(): [number, number] {
   const c = CELLS[Math.floor(Math.random() * CELLS.length)];
-  const ox = (Math.random() * 2 - 1) * 5;
-  const oz = (Math.random() * 2 - 1) * 4;
+  const ox = (Math.random() * 2 - 1) * 6;
+  const oz = (Math.random() * 2 - 1) * 2.5;
   return [c.cx + ox, c.cz + oz];
 }
+
+// ── 수감동 2층(걸어 올라갈 수 있다) ────────────────────────────────
+// 이동은 XZ + "바닥 높이"로 푼다: groundHeightAt이 그 좌표의 지지 바닥(1층 0 / 2층 FLOOR2_Y /
+// 계단 램프)을 돌려주고, 플레이어는 STEP_UP 이하의 턱을 걸어서 스냅해 오른다. 계단만이 2층으로
+// 가는 유일한 경사라 점프(최고 1m)로는 2층에 못 오른다.
+// ⚠️ 서버 Collision.java(SLAB2·STAIR·OBSTACLES·groundHeight)와 같은 값 — 한쪽 고치면 양쪽 반영.
+
+/** 계단(수감동 복도 중앙, 북벽에 붙은 직선 계단). 동쪽 끝(x1)이 1층 바닥, 서쪽 끝(x0)이 2층. */
+export const STAIR = { x0: -25.2, z0: 18.6, x1: -18.8, z1: 20 };
+
+/** 2층 바닥 슬래브(감방 두 열 + 복도, 계단 개구부 제외). */
+export const SLAB2: Rect[] = [
+  { x0: -38, z0: 20, x1: -6, z1: 28 }, // 북측 감방 열 위
+  { x0: -38, z0: 6, x1: -6, z1: 14 }, // 남측 감방 열 위
+  { x0: -38, z0: 14, x1: -6, z1: STAIR.z0 }, // 복도(계단 남쪽)
+  { x0: -38, z0: STAIR.z0, x1: STAIR.x0, z1: 20 }, // 복도(계단 서쪽 — 계단 상단과 이어진다)
+  { x0: STAIR.x1, z0: STAIR.z0, x1: -6, z1: 20 }, // 복도(계단 동쪽)
+];
+
+/**
+ * (x,z)에서 딛고 설 수 있는 바닥 높이(발바닥 기준). 지금 높이(feetY)에서 STEP_UP 이하로
+ * 닿는 바닥 중 가장 높은 것 — 1층에서 2층 슬래브는 머리 위 천장일 뿐이므로 후보에서 빠진다.
+ */
+export function groundHeightAt(x: number, z: number, feetY: number): number {
+  let g = 0;
+  if (x >= STAIR.x0 && x <= STAIR.x1 && z >= STAIR.z0 && z <= STAIR.z1) {
+    const h = (FLOOR2_Y * (STAIR.x1 - x)) / (STAIR.x1 - STAIR.x0);
+    if (h <= feetY + STEP_UP && h > g) g = h;
+  } else if (FLOOR2_Y <= feetY + STEP_UP) {
+    for (const r of SLAB2) {
+      if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) {
+        g = FLOOR2_Y;
+        break;
+      }
+    }
+  }
+  return g;
+}
+
+// ── 소품 충돌(실체가 있는 오브젝트) ────────────────────────────────
+// Map.tsx의 소품(침상·테이블·세탁기…)과 같은 자리의 AABB. 자물쇠·쪽지(상호작용 오브젝트)는
+// 실체가 없다 — 밟고 지나며 상호작용하는 대상이라 막으면 오히려 불편하다.
+// [y0, y1)은 이 장애물이 유효한 발높이 구간: 1층 소품은 2층에서 그 위를 걸어도 걸리지 않고,
+// 2층 난간은 1층 통행을 막지 않는다.
+export interface ObstacleBox {
+  cx: number;
+  cz: number;
+  hx: number;
+  hz: number;
+  y0: number;
+  y1: number;
+}
+const OB = (cx: number, cz: number, hx: number, hz: number, y0 = -1, y1 = 3): ObstacleBox =>
+  ({ cx, cz, hx, hz, y0, y1 });
+
+export const OBSTACLES: ObstacleBox[] = [
+  // 감방 소품(Map.CellInterior와 같은 자리): 이층 침상(서벽) + 변기(문 반대편 구석)
+  ...BUILDINGS.filter((b) => b.kind === "cell").flatMap((b) => {
+    const z = (b.rect.z0 + b.rect.z1) / 2;
+    const doorS = b.openings?.[0]?.edge === "S";
+    return [
+      OB(b.rect.x0 + 1.4, z, 0.5, 1.55),
+      OB(b.rect.x1 - 1.3, doorS ? b.rect.z1 - 1.3 : b.rect.z0 + 1.3, 0.4, 0.4),
+    ];
+  }),
+  // 화장실: 변기·칸막이 열(북벽) + 세면대(서벽)
+  OB(0, 26.8, 4.3, 0.55),
+  OB(-5.4, 22.5, 0.35, 1.5),
+  // 식당: 식탁+벤치 2조 + 배식대(북벽)
+  OB(10, 23.5, 1.6, 1.15),
+  OB(18, 23.5, 1.6, 1.15),
+  OB(14, 27.2, 5, 0.5),
+  // 세탁실: 세탁기 4대(북벽) + 카트(동남쪽 구석 — 문(x30) 정면 동선을 비운다)
+  OB(25, 26.8, 0.8, 0.9),
+  OB(28.2, 26.8, 0.8, 0.9),
+  OB(31.4, 26.8, 0.8, 0.9),
+  OB(34.6, 26.8, 0.8, 0.9),
+  OB(35, 21.6, 0.7, 0.5),
+  // 작업장: 작업대(북벽 서편 — 문(x14) 정면 동선을 비운다) + 상자 5개
+  OB(10, 12.4, 3, 0.7),
+  ...[10, 12, 14, 16, 18].map((x) => OB(x, 7.6, 0.5, 0.5)),
+  // 의무실: 침대 3 + 약장(동벽)
+  OB(25.5, 8.3, 0.6, 1.3),
+  OB(30, 8.3, 0.6, 1.3),
+  OB(34.5, 8.3, 0.6, 1.3),
+  OB(36.8, 10, 0.5, 1.5),
+  // 연병장: 연단·깃대·벤치 2·농구골대 기둥
+  OB(-16, 1, 4, 1.3),
+  OB(-24, 1, 0.15, 0.15),
+  OB(-14, -20, 2.5, 0.35),
+  OB(-14, -4, 2.5, 0.35),
+  OB(7.5, -12, 0.15, 0.15),
+  // 정문 기둥 + 연결 복도 철창 기둥(x=-3: 출입구·복도 교차점(x=0) 동선을 비켜 세운다)
+  OB(-4.5, -30, 0.5, 0.5),
+  OB(4.5, -30, 0.5, 0.5),
+  OB(-3, 14.5, 0.1, 0.12),
+  OB(-3, 19.5, 0.1, 0.12),
+  // 감시탑 안쪽 다리(맵 안으로 들어온 다리 하나씩)
+  OB(-40.8, -28.8, 0.15, 0.15),
+  OB(40.8, -28.8, 0.15, 0.15),
+  OB(-40.8, 28.8, 0.15, 0.15),
+  OB(40.8, 28.8, 0.15, 0.15),
+  // 계단 구조물 —
+  // 난간벽(계단 남측, 전 높이): 1층 복도에서 옆으로 램프에 오르는 것과 2층에서 추락을 함께 막는다.
+  OB((STAIR.x0 + STAIR.x1) / 2, STAIR.z0, (STAIR.x1 - STAIR.x0) / 2, 0.1, -1, 99),
+  // 계단 밑 진입 차단(머리가 계단 밑면에 끼는 구간, 발높이 0.4 미만에서만): 서쪽 높은 구간은
+  // 머리 공간이 넉넉해 지나갈 수 있고, 계단을 오르내리는 사람은 박스에 닿는 지점(반경 포함,
+  // x≈-19.54)에서 발높이가 이미 0.52+라 걸리지 않는다.
+  OB(-21.15, 19.3, 1.21, 0.7, -1, 0.4),
+  // 2층 계단 개구부 동측 난간(2층에서 계단통으로 떨어지지 않게)
+  OB(STAIR.x1, 19.3, 0.08, 0.7, 3, 99),
+  // 2층 복도 동측 막이(1층 연결 복도 아치 위): 2층이 연결 복도 쪽으로 뚫려 떨어지는 것을 막는다.
+  OB(-6, 17, 0.2, 3, 3, 99),
+];
