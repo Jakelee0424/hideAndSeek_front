@@ -22,6 +22,13 @@ interface Handlers {
 
 let client: Client | null = null;
 
+// 연결 세대. connect/disconnect마다 증가한다. deactivate()는 비동기라 옛 연결의 구독
+// 콜백이 정리되는 동안에도 살아 있는데, 그 콜백은 전역 스토어(useChat 등)를 직접 건드린다.
+// 방을 옮긴 뒤 도착한 옛 방 프레임이 새 세션의 스토어에 끼어드는 걸 막는다 — 특히 봇 채팅은
+// 방이 봇으로 유지되는 동안 계속 흐르므로, 이 가드가 없으면 옛 방 봇의 대화(옛 죄수번호)가
+// clear() 뒤에 새 게임 화면에 그대로 나타난다.
+let epoch = 0;
+
 const WS_URL =
   process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8080/ws";
 
@@ -30,7 +37,10 @@ export function connect(
   join: JoinMessage,
   handlers: Handlers,
 ): void {
-  disconnect();
+  disconnect(); // 이전 연결 정리 + epoch 증가
+
+  const myEpoch = epoch; // 이 연결의 세대. 콜백은 이 값이 최신일 때만 유효하다.
+  const live = () => myEpoch === epoch;
 
   client = new Client({
     brokerURL: WS_URL,
@@ -39,6 +49,7 @@ export function connect(
     heartbeatOutgoing: 10000,
     onConnect: () => {
       client?.subscribe(`/topic/rooms/${roomId}/state`, (msg) => {
+        if (!live()) return; // 옛 연결이 뒤늦게 뱉는 스냅샷은 버린다
         try {
           handlers.onSnapshot(JSON.parse(msg.body) as WorldSnapshot);
         } catch {
@@ -47,6 +58,7 @@ export function connect(
       });
       // 채팅은 스냅샷과 별도 토픽이다(저빈도 + 유실되면 안 되는 값).
       client?.subscribe(`/topic/rooms/${roomId}/chat`, (msg) => {
+        if (!live()) return; // 옛 방(봇 포함)의 뒤늦은 발화가 새 세션에 새지 않게
         try {
           handlers.onChat(JSON.parse(msg.body) as ChatEvent);
         } catch {
@@ -57,11 +69,17 @@ export function connect(
         destination: `/app/rooms/${roomId}/join`,
         body: JSON.stringify(join),
       });
-      handlers.onStatus("connected");
+      if (live()) handlers.onStatus("connected");
     },
-    onWebSocketError: () => handlers.onStatus("error"),
-    onStompError: () => handlers.onStatus("error"),
-    onWebSocketClose: () => handlers.onStatus("idle"),
+    onWebSocketError: () => {
+      if (live()) handlers.onStatus("error");
+    },
+    onStompError: () => {
+      if (live()) handlers.onStatus("error");
+    },
+    onWebSocketClose: () => {
+      if (live()) handlers.onStatus("idle");
+    },
   });
 
   handlers.onStatus("connecting");
@@ -145,6 +163,7 @@ export function sendDoor(roomId: string, doorId: string): void {
 }
 
 export function disconnect(): void {
+  epoch++; // 이 시점부터 이 연결의 모든 콜백(채팅·스냅샷·상태)을 무효화한다
   client?.deactivate();
   client = null;
 }
