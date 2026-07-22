@@ -140,10 +140,11 @@ export const BUILDINGS: Building[] = [
   },
 
   // ── 별관(북동): 식당(개방) · 세탁실 · 작업장 · 의무실. 문은 모두 가운데 복도로 ──
-  { id: "cafeteria", kind: "room", label: "식당", rect: { x0: 6, z0: 20, x1: 22, z1: 28 }, color: "#3a3f4a", openings: [{ edge: "S", at: 14, width: 4 }] },
-  { id: "laundry", kind: "room", label: "세탁실", rect: { x0: 22, z0: 20, x1: 38, z1: 28 }, color: "#3a3f46", openings: [{ edge: "S", at: 30, width: DOOR_W, door: "door-laundry" }, { edge: "W", at: 24, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
-  { id: "workshop", kind: "room", label: "작업장", rect: { x0: 6, z0: 6, x1: 22, z1: 14 }, color: "#3a3a30", openings: [{ edge: "N", at: 14, width: DOOR_W, door: "door-work" }] },
-  { id: "infirmary", kind: "room", label: "의무실", rect: { x0: 22, z0: 6, x1: 38, z1: 14 }, color: "#33403f", openings: [{ edge: "N", at: 30, width: DOOR_W, door: "door-med" }, { edge: "W", at: 10, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
+  // 바닥에 방마다 다른 색을 깔아 구분한다(식당=따뜻한 갈색, 세탁실=파랑, 작업장=황토, 의무실=청록).
+  { id: "cafeteria", kind: "room", label: "식당", rect: { x0: 6, z0: 20, x1: 22, z1: 28 }, color: "#4a4033", openings: [{ edge: "S", at: 14, width: 4 }] },
+  { id: "laundry", kind: "room", label: "세탁실", rect: { x0: 22, z0: 20, x1: 38, z1: 28 }, color: "#33455c", openings: [{ edge: "S", at: 30, width: DOOR_W, door: "door-laundry" }, { edge: "W", at: 24, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
+  { id: "workshop", kind: "room", label: "작업장", rect: { x0: 6, z0: 6, x1: 22, z1: 14 }, color: "#4b452a", openings: [{ edge: "N", at: 14, width: DOOR_W, door: "door-work" }] },
+  { id: "infirmary", kind: "room", label: "의무실", rect: { x0: 22, z0: 6, x1: 38, z1: 14 }, color: "#2f4a44", openings: [{ edge: "N", at: 30, width: DOOR_W, door: "door-med" }, { edge: "W", at: 10, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
   // 별관 복도: 동쪽 벽만 소유(서쪽은 연결 복도로 열림, 북/남은 방 벽이 담당).
   {
     id: "hall-east", kind: "hall", label: "별관", rect: { x0: 6, z0: 14, x1: 38, z1: 20 }, color: "#30343c",
@@ -154,7 +155,7 @@ export const BUILDINGS: Building[] = [
     ],
   },
 
-  // ── 연병장(남쪽 절반, 개활지): 모래 바닥. 트랙·골대·연단은 Map이 얹는다 ──
+  // ── 연병장(남쪽 절반, 개활지): 황량한 모래 마당. 골대·구석 벤치는 Map이 얹는다 ──
   { id: "yard", kind: "yard", label: "연병장", rect: { x0: -42, z0: -30, x1: 42, z1: 6 }, color: "#9c8756", noWalls: true },
 ];
 
@@ -271,7 +272,7 @@ export function getBuilding(id: string): Building | undefined {
   return BUILDINGS.find((b) => b.id === id);
 }
 
-/** 연병장 정보(농구 이스터에그·트랙·연단이 참조). 골대는 (cx+7.5) 부근. */
+/** 연병장 정보(농구 이스터에그·구석 벤치가 참조). 골대는 (cx+7.5) 부근. */
 export const YARD = {
   cx: 0,
   cz: -12,
@@ -316,16 +317,19 @@ export function randomCellSpawn(): [number, number] {
 // 가는 유일한 경사라 점프(최고 1m)로는 2층에 못 오른다.
 // ⚠️ 서버 Collision.java(SLAB2·STAIR·OBSTACLES·groundHeight)와 같은 값 — 한쪽 고치면 양쪽 반영.
 
-/** 계단(수감동 복도 중앙, 북벽에 붙은 직선 계단). 동쪽 끝(x1)이 1층 바닥, 서쪽 끝(x0)이 2층. */
-export const STAIR = { x0: -25.2, z0: 18.6, x1: -18.8, z1: 20 };
+/** 계단(복도 서쪽 끝 중앙, 막다른 벽을 향해 오르는 직선 계단). 동쪽 끝(x1)이 1층 바닥,
+ *  서쪽 끝(x0)이 2층 — 꼭대기 랜딩(서쪽 끝 벽 앞)에서 좌우(남·북) 테라스로 갈라진다.
+ *  양측 난간벽이 옆 진입을 막고, 1층 통행은 계단 남/북의 2m 통로로 지나간다. */
+export const STAIR = { x0: -36, z0: 16, x1: -29.6, z1: 18 };
 
-/** 2층 바닥 슬래브(감방 두 열 + 복도, 계단 개구부 제외). */
+/** 2층 바닥 슬래브: 감방 두 열 위 + 좌우로 뻗은 테라스형 복도(난간) + 계단 상단 랜딩(서쪽 끝).
+ *  복도 가운데(z 16~18)의 계단 동쪽은 아트리움 개구부 — 테라스에서 1층 복도가 내려다보인다. */
 export const SLAB2: Rect[] = [
   { x0: -38, z0: 20, x1: -6, z1: 28 }, // 북측 감방 열 위
+  { x0: -38, z0: STAIR.z1, x1: -6, z1: 20 }, // 북측 테라스(감방 1-1·1-2 앞)
   { x0: -38, z0: 6, x1: -6, z1: 14 }, // 남측 감방 열 위
-  { x0: -38, z0: 14, x1: -6, z1: STAIR.z0 }, // 복도(계단 남쪽)
-  { x0: -38, z0: STAIR.z0, x1: STAIR.x0, z1: 20 }, // 복도(계단 서쪽 — 계단 상단과 이어진다)
-  { x0: STAIR.x1, z0: STAIR.z0, x1: -6, z1: 20 }, // 복도(계단 동쪽)
+  { x0: -38, z0: 14, x1: -6, z1: STAIR.z0 }, // 남측 테라스(감방 1-3·1-4 앞)
+  { x0: -38, z0: STAIR.z0, x1: STAIR.x0, z1: STAIR.z1 }, // 계단 상단 랜딩 — 좌우 테라스를 잇는다
 ];
 
 /**
@@ -395,11 +399,10 @@ export const OBSTACLES: ObstacleBox[] = [
   OB(30, 8.3, 0.6, 1.3),
   OB(34.5, 8.3, 0.6, 1.3),
   OB(36.8, 10, 0.5, 1.5),
-  // 연병장: 연단·깃대·벤치 2·농구골대 기둥
-  OB(-16, 1, 4, 1.3),
-  OB(-24, 1, 0.15, 0.15),
-  OB(-14, -20, 2.5, 0.35),
-  OB(-14, -4, 2.5, 0.35),
+  // 연병장(황량한 마당): 남서 구석의 벤치 셋 + 농구골대 기둥
+  OB(-37, -29.2, 2, 0.35),
+  OB(-31, -29.2, 2, 0.35),
+  OB(-41.3, -25, 0.35, 2),
   OB(7.5, -12, 0.15, 0.15),
   // 정문 기둥 + 연결 복도 철창 기둥(x=-3: 출입구·복도 교차점(x=0) 동선을 비켜 세운다)
   OB(-4.5, -30, 0.5, 0.5),
@@ -411,15 +414,18 @@ export const OBSTACLES: ObstacleBox[] = [
   OB(40.8, -28.8, 0.15, 0.15),
   OB(-40.8, 28.8, 0.15, 0.15),
   OB(40.8, 28.8, 0.15, 0.15),
-  // 계단 구조물 —
-  // 난간벽(계단 남측, 전 높이): 1층 복도에서 옆으로 램프에 오르는 것과 2층에서 추락을 함께 막는다.
+  // 계단 구조물(복도 서쪽 끝 중앙 계단) —
+  // 양측 난간벽(전 높이): 1층 복도에서 옆으로 램프에 오르는 것과 2층 테라스에서 램프 위로
+  // 떨어지는 것을 함께 막는다. 1층 통행은 계단 남/북의 2m 통로로 지나간다(봇 노드도 분리).
   OB((STAIR.x0 + STAIR.x1) / 2, STAIR.z0, (STAIR.x1 - STAIR.x0) / 2, 0.1, -1, 99),
-  // 계단 밑 진입 차단(머리가 계단 밑면에 끼는 구간, 발높이 0.4 미만에서만): 서쪽 높은 구간은
-  // 머리 공간이 넉넉해 지나갈 수 있고, 계단을 오르내리는 사람은 박스에 닿는 지점(반경 포함,
-  // x≈-19.54)에서 발높이가 이미 0.52+라 걸리지 않는다.
-  OB(-21.15, 19.3, 1.21, 0.7, -1, 0.4),
-  // 2층 계단 개구부 동측 난간(2층에서 계단통으로 떨어지지 않게)
-  OB(STAIR.x1, 19.3, 0.08, 0.7, 3, 99),
+  OB((STAIR.x0 + STAIR.x1) / 2, STAIR.z1, (STAIR.x1 - STAIR.x0) / 2, 0.1, -1, 99),
+  // 계단 밑 진입 차단(머리가 계단 밑면에 끼는 구간, 발높이 0.4 미만에서만): 랜딩 아래(서쪽)에서
+  // 들어올 때만 해당 — 서쪽 높은 구간은 머리 공간이 넉넉해 지나갈 수 있고, 계단을 오르내리는
+  // 사람은 박스에 닿는 지점(반경 포함, x≈-30.34)에서 발높이가 이미 0.52+라 걸리지 않는다.
+  OB(-31.95, 17, 1.21, 0.9, -1, 0.4),
+  // 2층 테라스 난간(아트리움 개구부 가장자리, 계단 동쪽): 테라스에서 1층 복도로 추락 방지
+  OB((STAIR.x1 - 6) / 2, STAIR.z0, (-6 - STAIR.x1) / 2, 0.1, 3, 99),
+  OB((STAIR.x1 - 6) / 2, STAIR.z1, (-6 - STAIR.x1) / 2, 0.1, 3, 99),
   // 2층 복도 동측 막이(1층 연결 복도 아치 위): 2층이 연결 복도 쪽으로 뚫려 떨어지는 것을 막는다.
   OB(-6, 17, 0.2, 3, 3, 99),
 ];

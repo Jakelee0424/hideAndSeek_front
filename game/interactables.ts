@@ -5,16 +5,21 @@
 // 감방문(cell-X)이 열린다. 어느 방에 어느 게임이 걸리는지는 방 코드로 정해진다
 // (minigameFor 참고) — 같은 방 사람들은 같은 배치를 본다.
 //
-// 지원 방(작업장·의무실·세탁실)은 방 "밖" 복도의 고전 자물쇠(문자·숫자·색 순서)로 연다.
-// 최종 탈옥문만 코드 입력(dial)으로 남겼다. 감방 밖에 흩어진 쪽지 셋을 모아야 풀리는
-// 협동 단계라, 여기까지 반사신경 게임으로 만들면 "같이 단서를 맞춘다"는 축이 사라진다.
+// 지원 방(작업장·의무실·세탁실)은 방 "밖" 복도의 고전 자물쇠(문자·숫자·색 순서)로 연다 —
+// 시나리오 필수 관문이 아닌 보너스 콘텐츠다.
+//
+// 최종 탈옥문은 코드 입력(dial)이고, 코드·단서는 방 시드로 매판 랜덤 생성된다(escapePlan.ts).
+// 감방마다 지급되는 "표식 + 수"와 해독 조각 문서 3곳(식당·수감동 복도·연병장)을 모아야
+// 풀리는 협동 단계다 — 각자는 자기 자리 숫자만 계산할 수 있어 채팅 공유가 강제된다.
 //
 // 문 열림은 solved에서 파생한다(openDoorsFromSolved). solvedIds는 서버가 매 tick
 // 브로드캐스트하므로 협동 플레이에서 문이 모두에게 함께 열린다 — 별도 문 동기화 불필요.
 import { create } from "zustand";
+import { useGameStore } from "@/store/gameStore";
+import { docText, escapePlan } from "./escapePlan";
 import { assignMinigames } from "./minigames/registry";
 import type { MinigameDef } from "./minigames/types";
-import { cellIdAt } from "./prisonLayout";
+import { CELLS, cellIdAt } from "./prisonLayout";
 
 /** 색 순서 퍼즐에 쓰는 색 키. */
 export type ColorKey = "red" | "yellow" | "green" | "blue";
@@ -49,8 +54,8 @@ export const INTERACT_RANGE = 2.2;
 // 감방 안 쪽지를 전부 없앤 뒤로는 "나가서 뭘 해야 하는지"를 알려줄 곳이 여기뿐이다.
 const CELL_LOCK_HINT =
   "간수가 압수한 게임기를 자물쇠에 박아 놨다. 한 판 이겨야 열린다. " +
-  "나가면 교도소 정문의 탈옥문이 기다린다 — 네 자리 숫자이고, 단서는 별관 방" +
-  "(작업장·의무실·세탁실) 안에 있다. 그 방들부터 열어야 한다.";
+  "문이 열리면 이 방의 표식과 수가 지급된다(화면 왼쪽) — 탈옥문 네 자리 중 네 몫이다. " +
+  "셈법은 감방 밖 낙서 세 곳에 나뉘어 있고, 남의 자리는 남에게 물어야 한다.";
 
 // ── 방별 상호작용 오브젝트 ────────────────────────────────────────
 // 좌표는 prisonLayout BUILDINGS(도면 배치) 기준. 수감동 감방(A~D) 안에는 자물쇠(미니게임) 하나뿐.
@@ -137,23 +142,24 @@ export const INTERACTABLES: Interactable[] = [
     opensDoor: "door-med",
   },
 
-  // ── 최종 탈옥문(교도소 정문, 연병장 남쪽): 감방을 나온 뒤의 목표 ────
+  // ── 해독 조각 문서 3곳(식당·수감동 복도·연병장): 탈옥 코드의 셈법을 나눠 갖는다 ────
   //
-  // 탈옥문 코드(1863) 단서는 잠긴 별관 방 셋 "안"에 하나씩 둔다 — 그래야 "감방 탈출 →
-  // 복도 자물쇠로 공동장소 열기 → 그 안의 단서로 최종 탈출"이라는 흐름이 강제된다.
-  // (예전엔 식당·연병장 개활지에 있어 공동장소를 안 열고도 탈출됐다.) 별관 자물쇠는 복도에
-  // 있고 답도 자기완결이라(TOOL·451·색순서) 혼자서도 세 방을 다 열 수 있다 — 솔로 막힘 없음.
-  // 방 깊숙이 둬서 문이 닫힌 채로는 복도에서 사거리(2.2m)가 닿지 않게 한다.
-  { id: "note-code-work", type: "note", position: [16, 0.6, 10], label: "작업 지시 뒷장", hint: "폐기 번호가 17과 19 사이. 탈옥문 앞 두 자리다." },
-  { id: "note-code-med", type: "note", position: [27, 0.6, 11.5], label: "약장 뒷벽 낙서", hint: "긁어놓은 자국이 여섯 줄. 탈옥문 셋째 자리다." },
-  { id: "note-code-laundry", type: "note", position: [28, 0.6, 24], label: "세탁 순번표", hint: "3번 건조기만 돌아간다. 탈옥문 끝자리다." },
+  // 본문은 방 시드로 생성되고 doc-yard는 빈 감방 폴백(압수 기록)까지 실어야 해서,
+  // 여기엔 자리·라벨만 두고 hint는 findInteractable이 읽는 순간 escapePlan에서 채워 넣는다.
+  // ⚠️ 좌표·id는 서버 Interactables.java(봇 POI)와 일치시킬 것.
+  // (한때 고정 코드(1863) 단서를 잠긴 별관 방 안에 두는 안(4e5b12f)도 있었으나, 시드 랜덤
+  //  + 정보 쪼개기 재설계가 그 흐름을 대체한다 — 별관은 보너스 콘텐츠로 남는다.)
+  { id: "doc-cafe", type: "note", position: [14, 0.6, 24], label: "배식표 뒷면 낙서" },
+  { id: "doc-hall", type: "note", position: [-26, 0.6, 15], label: "복도 벽의 긁힌 흔적" },
+  { id: "doc-yard", type: "note", position: [-34, 0.6, -27.5], label: "담벼락 밑 모래 글씨" },
   {
     id: "escape-gate",
     type: "lockbox",
     position: [0, 0.6, -26], // 파란 정문 앞(최종 탈출구)
     label: "탈옥문",
-    hint: "네 자리. 별관 방들(작업장·의무실·세탁실)을 열어 그 안의 기록을 모아야 한다.",
-    puzzle: { kind: "dial", code: "1863" },
+    hint: "네 자리. 각자의 표식과 낙서 세 곳의 셈법을 모아야 한다.",
+    // code는 자릿수 표시용 자리표시자 — 실제 코드는 findInteractable이 방 시드로 채워 넣는다.
+    puzzle: { kind: "dial", code: "0000" },
     // 풀면 남벽의 파란 정문(gate-main)이 열린다 — 게임의 끝을 눈으로 보여주는 연출.
     // 서버 Room.LOCK_OPENS에도 같은 매핑이 있다(봇이 근접만으로 정문을 열지 못하게 막는 효과도 겸한다).
     opensDoor: "gate-main",
@@ -163,8 +169,36 @@ export const INTERACTABLES: Interactable[] = [
 /** 최종 탈옥문 id. 이게 solved면 게임 클리어. */
 export const ESCAPE_GATE_ID = "escape-gate";
 
+/** 해독 조각 문서 id들(본문이 방 시드로 생성되는 것들). */
+const DOC_IDS = new Set(["doc-cafe", "doc-hall", "doc-yard"]);
+
+/**
+ * 지금 "주인 없는" 감방 id들. 게임 시작 시 감방 안에서 목격된 사람(cellOwners)이 없거나,
+ * 그 사람이 방을 나가 로스터에서 사라졌으면 빈 방이다 — 그 방의 표식·수는 doc-yard가
+ * 압수 기록으로 대신 공개한다(인원이 적어도, 누가 이탈해도 판이 막히지 않게).
+ */
+function emptyCells(): string[] {
+  const gs = useGameStore.getState();
+  const present = new Set(gs.playerIds);
+  return CELLS.filter((c) => {
+    const owner = gs.cellOwners[c.id];
+    return !owner || !present.has(owner);
+  }).map((c) => c.id);
+}
+
 export function findInteractable(id: string | null): Interactable | undefined {
-  return id ? INTERACTABLES.find((it) => it.id === id) : undefined;
+  const base = id ? INTERACTABLES.find((it) => it.id === id) : undefined;
+  if (!base) return undefined;
+  // 시드 의존 내용(탈옥 코드·문서 본문)은 읽는 순간 주입한다 — 방 코드는 입장 후 확정되고,
+  // doc-yard의 압수 기록(빈 감방 폴백)은 인원 이탈에 따라 그때그때 달라진다.
+  const seed = useGameStore.getState().roomId;
+  if (base.id === ESCAPE_GATE_ID) {
+    return { ...base, puzzle: { kind: "dial", code: escapePlan(seed).code } };
+  }
+  if (DOC_IDS.has(base.id)) {
+    return { ...base, hint: docText(escapePlan(seed), base.id, emptyCells()) };
+  }
+  return base;
 }
 
 // 문을 여는 자물쇠 목록(모듈 로드 시 1회 계산).

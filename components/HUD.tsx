@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/store/gameStore";
 import { leaveRoom } from "@/net/session";
+import { escapePlan } from "@/game/escapePlan";
 import { findInteractable, useInteraction } from "@/game/interactables";
 import PhaseBanner from "./PhaseBanner";
 
@@ -41,6 +42,9 @@ export default function HUD() {
       {/* 진행 단계 + 남은 시간 (상단 중앙) */}
       <PhaseBanner />
 
+      {/* 내 감방 단서(표식·수) — 감방을 탈출하면 지급된다 */}
+      <ClueChip />
+
       <div className="absolute bottom-4 left-4 rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-300 backdrop-blur">
         이동 <kbd className="font-mono">W A S D</kbd> · 달리기{" "}
         <kbd className="font-mono">R</kbd> · 상호작용{" "}
@@ -72,6 +76,30 @@ export default function HUD() {
       >
         나가기
       </button>
+    </div>
+  );
+}
+
+// 내 감방 단서 칩: 자기 감방 자물쇠를 풀면(=탈출) 그 방 고유의 "표식 + 수"가 지급된다.
+// 탈옥문 코드에서 내 몫의 자리 하나를 계산하는 재료다 — 셈법은 낙서 3곳에 나뉘어 있고,
+// 남의 몫은 알 수 없으니 채팅으로 모아야 한다(escapePlan.ts 참고).
+function ClueChip() {
+  const roomId = useGameStore((s) => s.roomId);
+  const myCell = useGameStore((s) => s.myCell);
+  const escaped = useInteraction((s) =>
+    myCell ? !!s.solved[`lock-${myCell}`] : false,
+  );
+  if (!myCell || !escaped) return null;
+  const clue = escapePlan(roomId).clues[myCell];
+  if (!clue) return null;
+  return (
+    <div className="absolute left-4 top-16 rounded-lg border border-amber-400/25 bg-black/50 px-3 py-2 text-xs text-amber-100 backdrop-blur">
+      <div className="font-semibold">
+        🔖 내 표식: {clue.symbol} · 수 {clue.value}
+      </div>
+      <div className="mt-0.5 text-[11px] text-amber-200/60">
+        낙서 3곳(식당·복도·연병장)에서 셈법을 찾아라
+      </div>
     </div>
   );
 }

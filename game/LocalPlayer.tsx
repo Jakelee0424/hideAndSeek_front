@@ -29,8 +29,9 @@ import {
   openDoorsFromSolved,
   useInteraction,
 } from "./interactables";
-import { STEP_UP, groundHeightAt, randomCellSpawn } from "./prisonLayout";
+import { STEP_UP, cellIdAt, groundHeightAt, randomCellSpawn } from "./prisonLayout";
 import { pushOutOfPlayer, resolveCollision } from "./collision";
+import { cameraClearT } from "./cameraOcclusion";
 import { localPos } from "./localPos";
 
 // ⚠️ 아래 넷은 백엔드 application.yml의 game.* 와 이중 관리다. 어긋나면 예측이 서버와 벌어져
@@ -40,8 +41,13 @@ const SPEED = 6; // m/s
 const SPRINT_MULT = 1.8; // 달리기 배수 → 10.8 m/s
 const JUMP_SPEED = 6; // 점프 초기 수직 속도(m/s). 최고 높이 = v²/2g = 1.0m
 const GRAVITY = 18; // m/s². 9.8은 게임에선 너무 붕 뜬다
-const CAM_DIST = 6.5; // 카메라~캐릭터 거리(m)
+const CAM_DIST = 6.5; // 카메라~캐릭터 거리(m, 가림 없을 때의 최대)
 const CAM_LOOK_H = 1.4; // 시선 높이(캐릭터 머리 부근)
+const CAM_MARGIN = 0.25; // 가림 보정 시 벽 앞 여유(near plane이 벽을 뚫고 보이지 않게)
+const CAM_MIN = 0.4; // 카메라 최소 거리(등 뒤가 바로 벽이면 준1인칭까지 당긴다)
+// 카메라가 이 거리 안으로 파고들면 내 몸을 숨겨 준1인칭으로 전환한다.
+// 이게 없으면 벽 쪽으로 시점을 돌릴 때 카메라가 캐릭터 머리 내부를 뚫고 지나며 화면을 덮는다.
+const CAM_BODY_HIDE = 1.2;
 const INPUT_HZ = 20;
 
 // 소음 게이지(0~100): 달리면 차오르고, 안 달리면(걷기·정지) 0으로 빠진다.
@@ -67,6 +73,8 @@ export default function LocalPlayer() {
   const punchUntil = useRef(0); // 이 시각(perf.now)까지 펀치 모션 재생
   const punchCdUntil = useRef(0); // 이 시각 전엔 펀치 재발동 억제(쿨다운)
   const punchReq = useRef(false); // 클릭이 펀치를 요청했다(useFrame에서 소비)
+  const camDist = useRef(CAM_DIST); // 가림 보정된 현재 카메라 거리(풀릴 때 감쇠용)
+  const bodyRef = useRef<THREE.Group>(null); // 준1인칭 전환 시 숨길 내 캐릭터(visible 토글)
   const lastAnim = useRef<AnimState>("idle");
   const spawned = useRef(false); // 첫 서버 스냅샷 때 배정된 감방 위치로 스냅
   // 프론트 단독 실행 시 초기 위치: 랜덤 감방 안. 서버 연결 시 첫 스냅샷이 덮어쓴다.
@@ -74,6 +82,13 @@ export default function LocalPlayer() {
     const [x, z] = randomCellSpawn();
     return [x, 0, z] as [number, number, number];
   }, []);
+
+  // 내 감방 기록(탈옥 단서 지급·빈 감방 판정용). 우선 로컬 스폰으로 추정하고,
+  // 서버 스냅샷이 오면 아래 useFrame의 스냅이 실제 배정 감방으로 덮는다.
+  useEffect(() => {
+    const cell = cellIdAt(initPos[0], initPos[2]);
+    if (cell) useGameStore.getState().setMyCell(cell);
+  }, [initPos]);
   const [anim, setAnim] = useState<AnimState>("idle");
   const myNick = useGameStore((s) => s.myNick);
 
@@ -117,6 +132,9 @@ export default function LocalPlayer() {
         g.position.z = t.z;
         g.rotation.y = t.rotationY;
         spawned.current = true;
+        // 서버가 배정한 감방으로 내 감방 기록을 확정한다(로컬 스폰 추정을 덮는다).
+        const cell = cellIdAt(t.x, t.z);
+        if (cell) useGameStore.getState().setMyCell(cell);
       }
     }
 
@@ -254,16 +272,34 @@ export default function LocalPlayer() {
       setAnim(nextAnim);
     }
 
-    // 3인칭 오빗 카메라: yaw/pitch 구면좌표로 캐릭터 주위에 배치(거리 일정).
+    // 3인칭 오빗 카메라: yaw/pitch 구면좌표로 캐릭터 주위에 배치.
+    // 가림 보정 — 머리→카메라 선분이 벽·2층 슬래브에 걸리면 첫 교차점 앞까지 당긴다.
+    // 당길 때는 즉시(벽이 시야를 덮는 프레임이 없게), 풀릴 때는 감쇠로 복귀(팝 방지).
     const cosP = Math.cos(pitch);
     _camDesired.set(
       g.position.x + Math.sin(yaw) * cosP * CAM_DIST,
       g.position.y + Math.sin(pitch) * CAM_DIST,
       g.position.z + Math.cos(yaw) * cosP * CAM_DIST,
     );
-    state.camera.position.copy(_camDesired); // 마우스룩은 지연 없이 즉시 반영
     _lookAt.set(g.position.x, g.position.y + CAM_LOOK_H, g.position.z);
+    const segLen = _camDesired.distanceTo(_lookAt);
+    const clearT = cameraClearT(
+      _lookAt.x, _lookAt.y, _lookAt.z,
+      _camDesired.x, _camDesired.y, _camDesired.z,
+    );
+    const targetD = Math.min(segLen, Math.max(CAM_MIN, clearT * segLen - CAM_MARGIN));
+    camDist.current =
+      targetD < camDist.current
+        ? targetD // 마우스룩·가림은 지연 없이 즉시 반영
+        : THREE.MathUtils.damp(camDist.current, targetD, 6, dt);
+    state.camera.position
+      .copy(_camDesired)
+      .sub(_lookAt)
+      .multiplyScalar(camDist.current / segLen)
+      .add(_lookAt);
     state.camera.lookAt(_lookAt);
+    // 카메라가 머리 반경 안까지 파고들면 내 몸을 숨긴다(준1인칭) — 머리 내부가 화면을 덮지 않게.
+    if (bodyRef.current) bodyRef.current.visible = camDist.current > CAM_BODY_HIDE;
 
     // 다른 컴포넌트(농구공 등)가 근접 판정에 쓸 수 있게 위치를 흘려 준다.
     localPos.x = g.position.x;
@@ -308,7 +344,9 @@ export default function LocalPlayer() {
 
   return (
     <group ref={ref} position={initPos}>
-      <Character anim={anim} ringColor="#38bdf8" nick={myNick} />
+      <group ref={bodyRef}>
+        <Character anim={anim} ringColor="#38bdf8" nick={myNick} />
+      </group>
     </group>
   );
 }

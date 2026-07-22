@@ -41,6 +41,13 @@ interface GameStore {
   patrolEndsAt: number | null;
   /** 이번 순찰에서 걸린 사람의 id. 아무도 안 걸렸으면 null. */
   patrolCaughtId: string | null;
+  /** 내가 배정된 감방 id("A"~"D"). 스폰 위치로 판정한다(서버 스냅샷이 오면 그 값이 덮는다). */
+  myCell: string | null;
+  /**
+   * 감방 점유 기록(감방 id → 처음 그 안에서 목격된 플레이어 id). 시작 직후엔 전원이 자기
+   * 감방에 갇혀 있으므로 첫 스냅샷이 곧 배정표다. 탈옥 단서의 빈 감방 폴백 판정에 쓴다.
+   */
+  cellOwners: Record<string, string>;
 
   setStatus: (s: ConnStatus) => void;
   setReady: (v: boolean) => void;
@@ -63,6 +70,10 @@ interface GameStore {
   applyReady: (ids: string[]) => void;
   /** 서버가 순찰 상태를 실어 보낼 때만 호출. 남은 시간을 로컬 종료 시각으로 환산해 둔다. */
   setPatrol: (state: PatrolState, remainMs: number, caughtId: string | null) => void;
+  /** 내 감방 확정(+점유 기록). 서버 스냅샷이 오면 초기(로컬 스폰) 추정을 덮는다. */
+  setMyCell: (cell: string) => void;
+  /** 감방 점유 기록. 이미 주인이 있거나 그 사람이 딴 방 주인으로 기록돼 있으면 무시. */
+  claimCell: (cellId: string, playerId: string) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -85,9 +96,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
   patrol: "NONE",
   patrolEndsAt: null,
   patrolCaughtId: null,
+  myCell: null,
+  cellOwners: {},
 
   setStatus: (status) => set({ status }),
   setReady: (ready) => set({ ready }),
+
+  setMyCell: (cell) => {
+    const { myId, myCell, cellOwners } = get();
+    if (myCell === cell) return;
+    const owner = myId ?? "local";
+    // 로컬 스폰 추정 → 서버 배정으로 바뀔 수 있으니 내 이전 기록은 지우고 다시 적는다.
+    const next: Record<string, string> = {};
+    for (const [k, v] of Object.entries(cellOwners)) {
+      if (v !== owner) next[k] = v;
+    }
+    next[cell] = owner;
+    set({ myCell: cell, cellOwners: next });
+  },
+
+  claimCell: (cellId, playerId) => {
+    const cur = get().cellOwners;
+    if (cur[cellId]) return; // 최초 목격이 곧 배정(감방문이 잠겨 있어 처음엔 주인만 안에 있다)
+    if (Object.values(cur).includes(playerId)) return; // 감방은 1인 1실
+    set({ cellOwners: { ...cur, [cellId]: playerId } });
+  },
 
   setPhase: (phase, remainMs) => {
     // 같은 단계여도 남은 시간이 바뀔 수 있다 — 순찰에 걸리면 자정이 앞당겨져 서버가
@@ -128,6 +161,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       patrol: "NONE",
       patrolEndsAt: null,
       patrolCaughtId: null,
+      myCell: null,
+      cellOwners: {},
     }),
 
   clear: () =>
@@ -145,6 +180,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       votes: {},
       aiId: null,
       readys: {},
+      myCell: null,
+      cellOwners: {},
     }),
 
   syncPlayers: (ids) => {

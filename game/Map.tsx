@@ -44,13 +44,23 @@ function useMaterials() {
       wood: mk("#6b5636", 0.8, 0.05),
       table: mk("#8a9099", 0.6, 0.2),
       hoop: mk("#d9542b", 0.5, 0.3),
-      track: mk("#7c3b34", 0.9, 0),
       rust: mk("#7a4a32", 0.9, 0.2),
       red: mk("#b4322a", 0.6, 0.2),
       paper: mk("#d8d4c8", 1, 0),
       water: mk("#2a3b4a", 0.15, 0.1),
       ball: mk("#c96a2b", 0.85, 0),
-      cloth: mk("#b23b3b", 0.9, 0),
+      // 감방 철창 색(방마다 다르게 칠해 어느 방인지 한눈에 구분한다)
+      barA: mk("#b1573e", 0.45, 0.6), // 1-1 녹슨 주황
+      barB: mk("#c9a23b", 0.45, 0.6), // 1-2 노랑
+      barC: mk("#4e9153", 0.45, 0.6), // 1-3 초록
+      barD: mk("#7b6ab8", 0.45, 0.6), // 1-4 보라
+      // 별관 문 철창 색(방 액센트와 같은 계열)
+      barLaundry: mk("#5b83b8", 0.45, 0.6), // 세탁실 파랑
+      barWork: mk("#b8963b", 0.45, 0.6), // 작업장 황토
+      barMed: mk("#4fa08b", 0.45, 0.6), // 의무실 청록
+      woodWarm: mk("#7c5f3a", 0.75, 0.05), // 식당 식탁
+      laundryBlue: mk("#7d97b8", 0.5, 0.3), // 세탁기 몸통
+      mint: mk("#7fb8a5", 0.7, 0), // 의무실 담요
     };
   }, []);
 }
@@ -134,19 +144,93 @@ function CellInterior({ b, mat }: { b: Building; mat: ReturnType<typeof useMater
   );
 }
 
-// ── 수감동 2층(복도 중앙 계단으로 올라간다) ────────────────────────
+// 문 id → 창살 색(감방·별관 방마다 다른 색으로 한눈에 구분). 나머지는 무채색 철재.
+function barMatFor(mat: ReturnType<typeof useMaterials>, id: string): THREE.Material {
+  switch (id) {
+    case "cell-A": return mat.barA;
+    case "cell-B": return mat.barB;
+    case "cell-C": return mat.barC;
+    case "cell-D": return mat.barD;
+    case "door-laundry": return mat.barLaundry;
+    case "door-work": return mat.barWork;
+    case "door-med": return mat.barMed;
+    default: return mat.steel;
+  }
+}
+
+// ── 2층 테라스 난간(x축 또는 z축 직선): 손잡이 두 단 + 발끝판 + 기둥.
+// 충돌은 OBSTACLES(y 3~99)가 담당 — 여기는 같은 자리를 그리기만 한다. ──
+function TerraceRail({ x0, z0, x1, z1, mat }: { x0: number; z0: number; x1: number; z1: number; mat: THREE.Material }) {
+  const len = Math.hypot(x1 - x0, z1 - z0);
+  const rotY = Math.abs(x1 - x0) >= Math.abs(z1 - z0) ? 0 : Math.PI / 2;
+  const railH = 1.1;
+  const nPosts = Math.max(2, Math.round(len / 1.6) + 1);
+  return (
+    <group position={[(x0 + x1) / 2, FLOOR2_Y, (z0 + z1) / 2]} rotation={[0, rotY, 0]}>
+      {[0.55, railH].map((ry, i) => (
+        <mesh key={i} position={[0, ry, 0]} material={mat} castShadow>
+          <boxGeometry args={[len, 0.07, 0.07]} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.16, 0]} material={mat}>
+        <boxGeometry args={[len, 0.2, 0.04]} />
+      </mesh>
+      {Array.from({ length: nPosts }, (_, i) => (
+        <mesh key={i} position={[-len / 2 + (i / (nPosts - 1)) * len, railH / 2, 0]} material={mat}>
+          <boxGeometry args={[0.07, railH, 0.07]} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// ── 2층 감방 입구의 활짝 열린 철창 문(시각 전용, 방 색깔): 잠금(DOOR_BOXES)은 1층에서만
+// 유효하고 문 개구부는 전 높이로 뚫려 있다 — 2층 감방은 "철창은 있지만 늘 열린" 방이다. ──
+function OpenCellGate({ meta, mat }: { meta: DoorMeta; mat: THREE.Material }) {
+  const [ax, az] = meta.at;
+  const w = meta.width;
+  // 경첩은 개구부 서쪽 끝. 문짝은 감방 안쪽으로 젖혀 둔다(S면 문=북측 감방 → +z, N면 → -z).
+  const swing = meta.edge === "S" ? -2.1 : 2.1;
+  const nBars = Math.max(3, Math.round(w / 0.55));
+  return (
+    <group position={[ax - w / 2, FLOOR2_Y, az]}>
+      {[0, w].map((dx, i) => (
+        <mesh key={i} position={[dx, WALL_H / 2, 0]} material={mat}>
+          <boxGeometry args={[0.16, WALL_H, 0.2]} />
+        </mesh>
+      ))}
+      <group rotation={[0, swing, 0]}>
+        {[WALL_H - 0.3, 0.25].map((y, i) => (
+          <mesh key={i} position={[w / 2, y, 0]} material={mat}>
+            <boxGeometry args={[w, 0.1, 0.1]} />
+          </mesh>
+        ))}
+        {Array.from({ length: nBars }, (_, i) => (
+          <mesh key={i} position={[((i + 0.5) / nBars) * w, (WALL_H - 0.3) / 2, 0]} material={mat}>
+            <boxGeometry args={[BAR_W, WALL_H - 0.5, BAR_W]} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+// ── 수감동 2층(복도 서쪽 끝의 중앙 계단으로 올라간다) ──────────────
 // 바닥·계단의 **충돌/높이**는 prisonLayout(SLAB2·STAIR·OBSTACLES·groundHeightAt)이 담당하고,
-// 여기는 같은 좌표를 3D로 그리기만 한다. 1층 감방 벽(h=9)이 그대로 2층 칸막이가 되고,
-// 문 개구부는 전 높이로 뚫려 있어 2층 감방은 "문 없는 열린 감방"이 된다.
+// 여기는 같은 좌표를 3D로 그리기만 한다. 막다른 벽을 향해 오르면 꼭대기 랜딩에서 좌우(남·북)
+// 테라스로 복도가 갈라지고, 가운데 아트리움 개구부 너머로 1층 복도가 내려다보인다.
+// 1층 감방 벽(h=9)이 그대로 2층 칸막이가 되고, 입구엔 방 색깔의 활짝 열린 철창 문이 서 있다.
 function SecondFloor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   const nSteps = 15;
   const run = (STAIR.x1 - STAIR.x0) / nSteps;
   const stairW = STAIR.z1 - STAIR.z0;
   const stairZ = (STAIR.z0 + STAIR.z1) / 2;
   const railH = 1.1;
+  const slopeLen = Math.hypot(STAIR.x1 - STAIR.x0, FLOOR2_Y); // 계단 경사 길이
+  const slopeAng = Math.atan2(FLOOR2_Y, STAIR.x0 - STAIR.x1); // 동→서로 오르는 기울기
   return (
     <group>
-      {/* 2층 바닥 슬래브(감방 두 열 + 복도, 계단 개구부 제외) — SLAB2와 같은 사각형 */}
+      {/* 2층 바닥 슬래브(감방 열 + 테라스 복도 + 랜딩) — SLAB2와 같은 사각형 */}
       {SLAB2.map((r, i) => (
         <mesh
           key={i}
@@ -158,7 +242,7 @@ function SecondFloor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
           <boxGeometry args={[r.x1 - r.x0, 0.16, r.z1 - r.z0]} />
         </mesh>
       ))}
-      {/* 계단(복도 중앙, 동쪽에서 올라 서쪽 2층으로) — 높이는 STAIR 램프와 같은 기울기 */}
+      {/* 계단(복도 정중앙, 동쪽에서 올라 서쪽 랜딩으로) — 높이는 STAIR 램프와 같은 기울기 */}
       {Array.from({ length: nSteps }, (_, i) => {
         const h = ((i + 1) / nSteps) * FLOOR2_Y;
         return (
@@ -173,23 +257,42 @@ function SecondFloor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
           </mesh>
         );
       })}
-      {/* 계단 남측 난간벽(전 높이) — OBSTACLES의 난간벽과 같은 자리 */}
-      <mesh
-        position={[(STAIR.x0 + STAIR.x1) / 2, (FLOOR2_Y + railH) / 2, STAIR.z0]}
-        material={mat.concrete}
-        castShadow
-        receiveShadow
-      >
-        <boxGeometry args={[STAIR.x1 - STAIR.x0, FLOOR2_Y + railH, 0.2]} />
-      </mesh>
-      {/* 2층 계단 개구부 동측 난간 */}
-      <mesh position={[STAIR.x1, FLOOR2_Y + railH / 2, stairZ]} material={mat.steel}>
-        <boxGeometry args={[0.1, railH, stairW]} />
-      </mesh>
+      {/* 계단 양측 난간(경사 손잡이 + 기둥). 충돌은 OBSTACLES의 전 높이 난간벽이 담당 */}
+      {[STAIR.z0, STAIR.z1].map((rz, side) => (
+        <group key={side}>
+          {[0.55, railH].map((ry, i) => (
+            <mesh
+              key={i}
+              position={[(STAIR.x0 + STAIR.x1) / 2, FLOOR2_Y / 2 + ry, rz]}
+              rotation={[0, 0, slopeAng]}
+              material={mat.steel}
+              castShadow
+            >
+              <boxGeometry args={[slopeLen, 0.07, 0.07]} />
+            </mesh>
+          ))}
+          {Array.from({ length: 6 }, (_, i) => {
+            const px = STAIR.x1 - ((i + 0.5) / 6) * (STAIR.x1 - STAIR.x0);
+            const base = (FLOOR2_Y * (STAIR.x1 - px)) / (STAIR.x1 - STAIR.x0);
+            return (
+              <mesh key={i} position={[px, base + railH / 2, rz]} material={mat.steel}>
+                <boxGeometry args={[0.07, railH, 0.07]} />
+              </mesh>
+            );
+          })}
+        </group>
+      ))}
+      {/* 테라스 난간(아트리움 가장자리, 계단 동쪽) — OBSTACLES의 2층 난간과 같은 자리 */}
+      <TerraceRail x0={STAIR.x1} z0={STAIR.z0} x1={-6} z1={STAIR.z0} mat={mat.steel} />
+      <TerraceRail x0={STAIR.x1} z0={STAIR.z1} x1={-6} z1={STAIR.z1} mat={mat.steel} />
       {/* 2층 복도 동측 막이(1층 연결 복도 아치 위) — OBSTACLES의 막이와 같은 자리 */}
       <mesh position={[-6, (WALL_H + CELL_BLOCK_H) / 2, 17]} material={mat.concrete} castShadow>
         <boxGeometry args={[0.4, CELL_BLOCK_H - WALL_H, 6.4]} />
       </mesh>
+      {/* 2층 감방 입구: 방 색깔의 활짝 열린 철창 문 */}
+      {DOOR_META.filter((d) => d.id.startsWith("cell-")).map((d) => (
+        <OpenCellGate key={d.id} meta={d} mat={barMatFor(mat, d.id)} />
+      ))}
     </group>
   );
 }
@@ -222,15 +325,27 @@ function ToiletDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMateri
   );
 }
 
-// ── 연병장(남쪽 절반, 모래): 트랙 + 연단 + 깃대 + 벤치 + 농구골대(+공) ──
+// ── 연병장(남쪽 절반, 모래): 실제 교도소처럼 황량한 맨 마당. 남서 구석의 벤치 셋과
+// 농구골대(이스터에그)만 남긴다 — 트랙·연단·깃대 같은 장식은 없다 ──
+function YardBench({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  return (
+    <group>
+      <mesh position={[0, 0.45, 0]} material={mat.wood} castShadow receiveShadow>
+        <boxGeometry args={[4, 0.14, 0.7]} />
+      </mesh>
+      {[-1.6, 1.6].map((dx, i) => (
+        <mesh key={i} position={[dx, 0.22, 0]} material={mat.steel} castShadow>
+          <boxGeometry args={[0.12, 0.44, 0.6]} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 function ParadeDecor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   const { cx: px, cz: pz } = YARD;
   return (
     <group>
-      {/* 러닝 트랙 */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[px, 0.02, pz]} material={mat.track}>
-        <ringGeometry args={[9, 11, 56]} />
-      </mesh>
       {/* 농구골대(동편) — Basketball의 RIM(cx+6.75)과 맞춘 위치 */}
       <group position={[px + 7.5, 0, pz]}>
         <mesh position={[0, 1.5, 0]} material={mat.steel} castShadow>
@@ -244,25 +359,16 @@ function ParadeDecor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
         </mesh>
       </group>
       <Basketball mat={mat.ball} />
-      {/* 연단(북서 — 단지 출입구를 막지 않게 서편으로) */}
-      <mesh position={[px - 16, 0.5, 1]} material={mat.concrete} castShadow receiveShadow>
-        <boxGeometry args={[8, 1, 2.6]} />
-      </mesh>
-      {/* 깃대 */}
-      <group position={[px - 24, 0, 1]}>
-        <mesh position={[0, 4, 0]} material={mat.steel} castShadow>
-          <cylinderGeometry args={[0.08, 0.08, 8, 8]} />
-        </mesh>
-        <mesh position={[0.9, 7, 0]} material={mat.cloth}>
-          <boxGeometry args={[1.6, 1, 0.05]} />
-        </mesh>
+      {/* 남서 구석 벤치 셋(담장 밑) — OBSTACLES의 벤치와 같은 자리 */}
+      <group position={[-37, 0, -29.2]}>
+        <YardBench mat={mat} />
       </group>
-      {/* 벤치 2개(서편) */}
-      {[-20, -4].map((bz, i) => (
-        <mesh key={i} position={[px - 14, 0.45, bz]} material={mat.wood} castShadow receiveShadow>
-          <boxGeometry args={[5, 0.18, 0.7]} />
-        </mesh>
-      ))}
+      <group position={[-31, 0, -29.2]}>
+        <YardBench mat={mat} />
+      </group>
+      <group position={[-41.3, 0, -25]} rotation={[0, Math.PI / 2, 0]}>
+        <YardBench mat={mat} />
+      </group>
     </group>
   );
 }
@@ -335,7 +441,7 @@ function CafeteriaDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMat
     <group>
       {[-4, 4].map((dx) => (
         <group key={dx} position={[x + dx, 0, z - 0.5]}>
-          <mesh position={[0, 0.75, 0]} material={mat.table} castShadow receiveShadow>
+          <mesh position={[0, 0.75, 0]} material={mat.woodWarm} castShadow receiveShadow>
             <boxGeometry args={[3.2, 0.1, 1.4]} />
           </mesh>
           {[-0.95, 0.95].map((bz, i) => (
@@ -365,6 +471,10 @@ function WorkshopDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMate
       <mesh position={[x, 1.9, b.rect.z1 - 0.25]} material={mat.wood} castShadow>
         <boxGeometry args={[8, 1.6, 0.12]} />
       </mesh>
+      {/* 공구함(작업대 위, 작업장 액센트 색) */}
+      <mesh position={[x - 5.5, 1.15, b.rect.z1 - 1.6]} material={mat.barWork} castShadow>
+        <boxGeometry args={[0.8, 0.45, 0.6]} />
+      </mesh>
       {[-4, -2, 0, 2, 4].map((dx, i) => (
         <mesh key={i} position={[x + dx, 0.5, b.rect.z0 + 1.6]} material={mat.wood} castShadow receiveShadow>
           <boxGeometry args={[1, 1, 1]} />
@@ -381,7 +491,7 @@ function LaundryDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMater
     <group>
       {[0, 1, 2, 3].map((i) => (
         <group key={i} position={[b.rect.x0 + 3 + i * 3.2, 0, z]}>
-          <mesh position={[0, 0.7, 0]} material={mat.steel} castShadow receiveShadow>
+          <mesh position={[0, 0.7, 0]} material={mat.laundryBlue} castShadow receiveShadow>
             <boxGeometry args={[1.6, 1.4, 1.8]} />
           </mesh>
           <mesh position={[0, 0.8, -0.92]} rotation={[Math.PI / 2, 0, 0]} material={mat.porcelain}>
@@ -403,9 +513,15 @@ function InfirmaryDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMat
   return (
     <group>
       {[-4.5, 0, 4.5].map((dx, i) => (
-        <mesh key={i} position={[x + dx, 0.5, b.rect.z0 + 2.3]} material={mat.porcelain} castShadow receiveShadow>
-          <boxGeometry args={[1.2, 0.25, 2.6]} />
-        </mesh>
+        <group key={i} position={[x + dx, 0, b.rect.z0 + 2.3]}>
+          <mesh position={[0, 0.5, 0]} material={mat.porcelain} castShadow receiveShadow>
+            <boxGeometry args={[1.2, 0.25, 2.6]} />
+          </mesh>
+          {/* 담요(의무실 액센트 색) */}
+          <mesh position={[0, 0.68, -0.3]} material={mat.mint} castShadow>
+            <boxGeometry args={[1.1, 0.12, 1.6]} />
+          </mesh>
+        </group>
       ))}
       <mesh position={[b.rect.x1 - 1.2, 1, cz(b)]} material={mat.steel} castShadow receiveShadow>
         <boxGeometry args={[1, 2, 3]} />
@@ -533,9 +649,9 @@ export default function GameMap() {
         </mesh>
       ))}
 
-      {/* 잠금 문(방향별). 정문(gate-main)은 MainGate가 따로 그린다 */}
+      {/* 잠금 문(방향별, 방마다 다른 창살 색). 정문(gate-main)은 MainGate가 따로 그린다 */}
       {DOOR_META.filter((d) => d.id !== "gate-main").map((d) => (
-        <BarDoor key={d.id} meta={d} mat={mat.steel} />
+        <BarDoor key={d.id} meta={d} mat={barMatFor(mat, d.id)} />
       ))}
 
       {/* 건물 소품 */}

@@ -2,6 +2,7 @@
 // UI는 joinRoom / leaveRoom 만 호출한다.
 import { useGameStore } from "@/store/gameStore";
 import { ESCAPE_GATE_ID, useInteraction } from "@/game/interactables";
+import { cellIdAt } from "@/game/prisonLayout";
 import { sfxDoor, sfxUnlock } from "@/game/sfx";
 import { worldState } from "./worldState";
 import { punches } from "./punches";
@@ -74,6 +75,18 @@ export function joinRoom(
           clearJoinTimer();
         }
         worldState.apply(snap);
+        // 감방 점유 감지: 시작 직후엔 전원이 자기 감방에 갇혀 있으므로(문이 잠겨 못 나온다)
+        // 1층에서 처음 목격된 감방이 곧 그 사람의 방이다. 탈옥 단서의 빈 감방 폴백
+        // (doc-yard 압수 기록)이 이 기록으로 판정한다. 중간 입장자는 남들이 이미 돌아다녀
+        // 오기록 가능성이 있지만, 결과는 힌트 노출 범위가 조금 어긋나는 정도라 감수한다.
+        if (Object.keys(useGameStore.getState().cellOwners).length < 4) {
+          for (const s of snap.states) {
+            if (s.y < 2) {
+              const cell = cellIdAt(s.x, s.z);
+              if (cell) useGameStore.getState().claimCell(cell, s.id);
+            }
+          }
+        }
         // 로스터(닉네임)는 변경 시에만 실려 온다 → 있을 때만 병합.
         if (snap.roster) useGameStore.getState().applyRoster(snap.roster);
         // 플레이어 목록은 매 tick 상태에서 파생(입·퇴장 즉시 반영).
