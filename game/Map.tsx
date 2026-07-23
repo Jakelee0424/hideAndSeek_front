@@ -4,15 +4,15 @@
 // + 수감동 2층(시각 전용) + 네 모서리 감시탑 + 남벽 중앙의 파란 정문.
 import { Html, Instance, Instances } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { Suspense, useMemo, useRef } from "react";
 import * as THREE from "three";
 import Basketball from "./Basketball";
+import PrisonProps from "./PrisonProps";
 import Interactable from "./Interactable";
 import { INTERACTABLES, isCellDoorOpen, useInteraction } from "./interactables";
 import {
   BUILDINGS,
   CELL_BLOCK_H,
-  CELLS,
   DOOR_META,
   FLOOR2_Y,
   FLOORS,
@@ -127,32 +127,6 @@ function BarDoor({ meta, mat }: { meta: DoorMeta; mat: THREE.Material }) {
           );
         })}
       </group>
-    </group>
-  );
-}
-
-// ── 감방 내부: 이층 침상 + 변기. 문 반대편 구석에 변기를 둔다(북측 감방=남향 문, 남측=북향 문) ──
-function CellInterior({ b, mat }: { b: Building; mat: ReturnType<typeof useMaterials> }) {
-  const z = cz(b);
-  const doorEdge = b.openings?.[0]?.edge ?? "S";
-  const wx = b.rect.x0 + 1.4; // 서쪽 벽 앞(이층 침상)
-  const tx = b.rect.x1 - 1.3; // 동쪽 구석(변기)
-  const tz = doorEdge === "S" ? b.rect.z1 - 1.3 : b.rect.z0 + 1.3; // 문 반대편 구석
-  return (
-    <group>
-      {[0.55, 1.55].map((y, i) => (
-        <mesh key={i} position={[wx, y, z]} material={mat.bunk} castShadow receiveShadow>
-          <boxGeometry args={[0.9, 0.16, 3]} />
-        </mesh>
-      ))}
-      {[-1.3, 1.3].map((dz, i) => (
-        <mesh key={i} position={[wx, 1.05, z + dz]} material={mat.steel} castShadow>
-          <boxGeometry args={[0.08, 2.1, 0.08]} />
-        </mesh>
-      ))}
-      <mesh position={[tx, 0.3, tz]} material={mat.porcelain} castShadow>
-        <cylinderGeometry args={[0.28, 0.32, 0.6, 16]} />
-      </mesh>
     </group>
   );
 }
@@ -775,10 +749,7 @@ function Decor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
 function BuildingDecor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   return (
     <group>
-      {CELLS.map((c) => {
-        const b = getBuilding(c.id)!;
-        return <CellInterior key={c.id} b={b} mat={mat} />;
-      })}
+      {/* 감방 침대·세면변기는 OBJ 소품(PrisonProps)이 대체한다. */}
       <SecondFloor mat={mat} />
       <ToiletDecor b={getBuilding("toilet")!} mat={mat} />
       <ParadeDecor mat={mat} />
@@ -842,6 +813,11 @@ export default function GameMap() {
 
       {/* 장식(빈 구역 채우기): 철조망·조명탑·바닥 페인트·복도 배관·담장 밖 원경 */}
       <Decor mat={mat} />
+
+      {/* OBJ 소품 키트(감방 침대·세면변기·CCTV·열쇠). 로드 전엔 아무것도 안 그린다. */}
+      <Suspense fallback={null}>
+        <PrisonProps />
+      </Suspense>
 
       {/* 라벨 */}
       {BUILDINGS.filter((b) => b.label).map((b) => (
