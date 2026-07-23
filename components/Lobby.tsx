@@ -97,12 +97,12 @@ export default function Lobby({
         >
           {room.trim() ? "방 참가" : "새 방 만들기"}
         </button>
-        <button
+        {/* <button
           onClick={() => enter(randomCode())}
           className="w-full rounded-lg border border-white/10 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5"
         >
           빠른 시작
-        </button>
+        </button> */}
       </div>
     </main>
   );
