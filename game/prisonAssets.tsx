@@ -15,6 +15,20 @@ const MTL_URL = "/models/prison-escape-assets.mtl";
 
 export type AssetKind = "door" | "bunk" | "lavatory" | "camera" | "key";
 
+// MTLLoader는 재질을 MeshPhongMaterial로 만든다 — 씬의 나머지(MeshStandardMaterial/PBR)와 셰이딩이
+// 달라 소품만 "붕 떠" 보인다. 재질명별로 PBR 파라미터를 주고 Standard로 변환해 톤을 통일한다.
+const MAT_PROPS: Record<string, { roughness: number; metalness: number }> = {
+  steel: { roughness: 0.4, metalness: 0.75 },
+  steelDark: { roughness: 0.5, metalness: 0.7 },
+  brass: { roughness: 0.4, metalness: 0.8 },
+  mattress: { roughness: 0.9, metalness: 0 },
+  pillow: { roughness: 0.95, metalness: 0 },
+  porcelain: { roughness: 0.5, metalness: 0.05 },
+  rubber: { roughness: 0.9, metalness: 0 },
+  glass: { roughness: 0.1, metalness: 0 },
+  ledRed: { roughness: 0.5, metalness: 0 },
+};
+
 function kindOf(name: string): AssetKind | null {
   if (name.startsWith("door_") || name === "lock_plate") return "door";
   if (
@@ -45,6 +59,32 @@ export function usePrisonAssets(): Record<AssetKind, THREE.Group> {
   });
 
   return useMemo(() => {
+    // Phong(MTL) → Standard(PBR) 변환. 재질명으로 캐시해 같은 재질은 한 번만 만든다.
+    const cache = new Map<string, THREE.MeshStandardMaterial>();
+    const toStandard = (src: THREE.Material): THREE.MeshStandardMaterial => {
+      const name = src.name || "default";
+      const hit = cache.get(name);
+      if (hit) return hit;
+      const color =
+        (src as THREE.MeshPhongMaterial).color?.clone() ?? new THREE.Color("#888888");
+      const p = MAT_PROPS[name] ?? { roughness: 0.7, metalness: 0.1 };
+      const std = new THREE.MeshStandardMaterial({
+        color,
+        roughness: p.roughness,
+        metalness: p.metalness,
+      });
+      if (name === "glass") {
+        std.transparent = true;
+        std.opacity = 0.5;
+      }
+      if (name === "ledRed") {
+        std.emissive = new THREE.Color("#ff2020");
+        std.emissiveIntensity = 0.9;
+      }
+      cache.set(name, std);
+      return std;
+    };
+
     const groups: Record<AssetKind, THREE.Group> = {
       door: new THREE.Group(),
       bunk: new THREE.Group(),
@@ -58,6 +98,9 @@ export function usePrisonAssets(): Record<AssetKind, THREE.Group> {
       const k = kindOf(o.name);
       if (!k) return;
       const m = mesh.clone();
+      m.material = Array.isArray(mesh.material)
+        ? mesh.material.map(toStandard)
+        : toStandard(mesh.material);
       m.castShadow = true;
       m.receiveShadow = true;
       groups[k].add(m);
