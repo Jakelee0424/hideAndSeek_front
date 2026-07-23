@@ -4,13 +4,16 @@
 import { Html } from "@react-three/drei";
 import { useInteraction, type Interactable as InteractableData } from "./interactables";
 
-// 근접 시 발광색(공통)
+// 근접 시 발광색
 const NEAR_EMISSIVE = "#fde68a";
+// 미해결 오브젝트의 평상시 은은한 발광. 밤 씬은 어두워서 이게 없으면 단서를 눈으로 못 찾는다.
+// (미니맵엔 위치를 안 주는 설계라, 3D에서 빛으로만 유도한다.)
+const IDLE_EMISSIVE = "#ffcf6a";
+const IDLE_I = 0.3;
 
 // ── 자물쇠(padlock): 몸통 + U자 고리 + 열쇠구멍 ──────────────────
-function Padlock({ color, near }: { color: string; near: boolean }) {
-  const emissive = near ? NEAR_EMISSIVE : "#000000";
-  const emissiveIntensity = near ? 0.6 : 0;
+function Padlock({ color, emissive, glow }: { color: string; emissive: string; glow: number }) {
+  const emissiveIntensity = glow;
   return (
     <group>
       {/* U자 고리(스틸). 세로 링의 아랫부분은 몸통에 가려 U자로 보인다. */}
@@ -59,19 +62,22 @@ export default function Interactable({ data }: { data: InteractableData }) {
   // 자물쇠: 잠김=황동색, 해결=초록. 힌트(note): 종이색.
   const color = solved ? "#22c55e" : isLock ? "#b8860b" : "#e5e7eb";
   const promptH = isLock ? 1.5 : 1.0;
+  // 발광: 해결되면 끈다. 미해결이면 은은히(어둠 속 유도), 근접하면 강하게.
+  const glow = solved ? 0 : near ? 0.6 : IDLE_I;
+  const emissive = solved ? "#000000" : near ? NEAR_EMISSIVE : IDLE_EMISSIVE;
 
   return (
     <group position={data.position}>
       {isLock ? (
-        <Padlock color={color} near={near} />
+        <Padlock color={color} emissive={emissive} glow={glow} />
       ) : (
         // 힌트 쪽지(납작한 종이)
         <mesh castShadow receiveShadow rotation={[-0.15, 0, 0]}>
           <boxGeometry args={[0.5, 0.05, 0.7]} />
           <meshStandardMaterial
             color={color}
-            emissive={near ? NEAR_EMISSIVE : "#000000"}
-            emissiveIntensity={near ? 0.6 : 0}
+            emissive={emissive}
+            emissiveIntensity={glow}
             metalness={0.1}
             roughness={0.8}
           />

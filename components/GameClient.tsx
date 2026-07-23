@@ -9,6 +9,7 @@ import HUD from "./HUD";
 import OnboardingOverlay from "./OnboardingOverlay";
 import PatrolOverlay from "./PatrolOverlay";
 import PuzzleOverlay from "./PuzzleOverlay";
+import Vignette from "./Vignette";
 import VoteOverlay from "./VoteOverlay";
 import WebGLGuard from "./WebGLGuard";
 
@@ -20,6 +21,8 @@ export default function GameClient() {
     <WebGLGuard>
       <main className="fixed inset-0 overflow-hidden">
         <Scene />
+        {/* 밤 프레이밍(비네트+그레인). 캔버스 위, HUD 아래. */}
+        <Vignette />
         <HUD />
         {/* 퍼즐·투표보다 아래(z-10) — 그 화면들이 뜨면 어차피 스스로 숨는다. */}
         <ControlHint />
