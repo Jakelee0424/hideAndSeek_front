@@ -301,10 +301,11 @@ export default function LocalPlayer() {
     // 카메라가 머리 반경 안까지 파고들면 내 몸을 숨긴다(준1인칭) — 머리 내부가 화면을 덮지 않게.
     if (bodyRef.current) bodyRef.current.visible = camDist.current > CAM_BODY_HIDE;
 
-    // 다른 컴포넌트(농구공 등)가 근접 판정에 쓸 수 있게 위치를 흘려 준다.
+    // 다른 컴포넌트(농구공·미니맵 등)가 근접 판정·표시에 쓸 수 있게 위치·방향을 흘려 준다.
     localPos.x = g.position.x;
     localPos.y = g.position.y;
     localPos.z = g.position.z;
+    localPos.rot = g.rotation.y;
 
     // 근접 오브젝트 감지(사거리 내 최근접). 남의 감방 자물쇠는 후보에서 뺀다 —
     // 사거리만 보면 복도에서 창살 너머로 닿는다(canInteract 참고).

@@ -6,6 +6,7 @@ import { leaveRoom } from "@/net/session";
 import { escapePlan } from "@/game/escapePlan";
 import { findInteractable, useInteraction } from "@/game/interactables";
 import PhaseBanner from "./PhaseBanner";
+import Minimap from "./Minimap";
 
 export default function HUD() {
   const router = useRouter();
@@ -42,13 +43,18 @@ export default function HUD() {
       {/* 진행 단계 + 남은 시간 (상단 중앙) */}
       <PhaseBanner />
 
+      {/* 맵 개요 미니맵 + 내 위치 (상단 우측, M키로 접기) */}
+      <Minimap />
+
       {/* 내 감방 단서(표식·수) — 감방을 탈출하면 지급된다 */}
       <ClueChip />
 
       <div className="absolute bottom-4 left-4 rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-300 backdrop-blur">
         이동 <kbd className="font-mono">W A S D</kbd> · 달리기{" "}
         <kbd className="font-mono">R</kbd> · 상호작용{" "}
-        <kbd className="font-mono">E</kbd>
+        <kbd className="font-mono">E</kbd> · 채팅{" "}
+        <kbd className="font-mono">Enter</kbd> · 지도{" "}
+        <kbd className="font-mono">M</kbd>
       </div>
 
       {/* 소음 게이지 (하단 우측) */}
