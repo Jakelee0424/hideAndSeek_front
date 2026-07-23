@@ -13,6 +13,7 @@ export default function HUD() {
   const status = useGameStore((s) => s.status);
   const roomId = useGameStore((s) => s.roomId);
   const count = useGameStore((s) => s.playerIds.length);
+  const myNick = useGameStore((s) => s.myNick);
 
   const nearId = useInteraction((s) => s.nearId);
   const openId = useInteraction((s) => s.openId);
@@ -28,6 +29,14 @@ export default function HUD() {
     <div className="pointer-events-none absolute inset-0 select-none">
       <div className="absolute left-4 top-4 flex items-center gap-3 rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-200 backdrop-blur">
         <span className="font-semibold tracking-widest">{roomId}</span>
+        {myNick && (
+          <>
+            <span className="text-slate-400">·</span>
+            {/* 내 죄수번호(=닉네임). 캐릭터 머리 위 이름표는 중앙 겹침 때문에 뺐고, 여기로 옮겼다.
+                발밑 하늘색 링과 같은 색이라 3D의 내 캐릭터와 이어진다. */}
+            <span className="font-semibold text-sky-300">{myNick}</span>
+          </>
+        )}
         <span className="text-slate-400">·</span>
         <span>플레이어 {count}</span>
         <span className="text-slate-400">·</span>
