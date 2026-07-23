@@ -99,9 +99,7 @@ export default function ChatPanel() {
         }`}
       >
         {shown.length === 0 ? (
-          <p className="text-slate-500">
-            <kbd className="rounded bg-white/15 px-1 font-mono">Enter</kbd> 로 대화
-          </p>
+          <p className="text-slate-500">아직 대화가 없어요</p>
         ) : (
           shown.map((l) => (
             <p key={l.key} className="break-words">
@@ -146,11 +144,21 @@ export default function ChatPanel() {
           className="pointer-events-auto mt-1 w-full rounded-lg border border-white/20 bg-black/80 px-3 py-2 text-xs text-white outline-none backdrop-blur placeholder:text-slate-500 focus:border-emerald-400/60"
         />
       ) : (
-        unread > 0 && (
-          <div className="pointer-events-none mt-1 inline-block rounded-md bg-emerald-500/80 px-2 py-0.5 text-[10px] font-semibold text-black">
-            새 메시지 {unread}
-          </div>
-        )
+        // 채팅 여는 법을 항상 보여 준다(예전엔 로그가 빌 때만 안내가 있었다). 클릭으로도 열 수
+        // 있어 포인터락이 풀린 상태(퍼즐 직후 등)에서 마우스 유저도 대화를 시작할 수 있다.
+        <button
+          type="button"
+          onClick={() => setComposing(true)}
+          className="pointer-events-auto mt-1 inline-flex items-center gap-1.5 rounded-md bg-black/50 px-2 py-1 text-[11px] text-slate-300 backdrop-blur transition hover:bg-black/70"
+        >
+          <kbd className="rounded bg-white/15 px-1 font-mono">Enter</kbd>
+          <span>대화하기</span>
+          {unread > 0 && (
+            <span className="rounded bg-emerald-500/80 px-1.5 py-0.5 text-[10px] font-semibold text-black">
+              새 메시지 {unread}
+            </span>
+          )}
+        </button>
       )}
     </div>
   );
