@@ -738,7 +738,7 @@ function Decor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   return (
     <group>
       <RazorWire />
-      <Floodlights mat={mat} />
+      {/* 조명탑은 OBJ light_tower(PrisonProps)로 대체 */}
       <YardMarkings mat={mat} />
       <OverheadPipes mat={mat} />
       <Backdrop mat={mat} />
@@ -749,19 +749,12 @@ function Decor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
 function BuildingDecor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   return (
     <group>
-      {/* 감방 침대·세면변기는 OBJ 소품(PrisonProps)이 대체한다. */}
+      {/* 감방 침대·세면변기·방 세트(식당·작업장·세탁실·의무실)·감시탑은 OBJ 소품(PrisonProps)이 대체. */}
       <SecondFloor mat={mat} />
       <ToiletDecor b={getBuilding("toilet")!} mat={mat} />
       <ParadeDecor mat={mat} />
-      <CafeteriaDecor b={getBuilding("cafeteria")!} mat={mat} />
-      <WorkshopDecor b={getBuilding("workshop")!} mat={mat} />
-      <LaundryDecor b={getBuilding("laundry")!} mat={mat} />
-      <InfirmaryDecor b={getBuilding("infirmary")!} mat={mat} />
       <LinkGate mat={mat.steel} />
       <MainGate mat={mat} />
-      {TOWERS.map((t, i) => (
-        <Watchtower key={i} at={t} mat={mat} />
-      ))}
     </group>
   );
 }
