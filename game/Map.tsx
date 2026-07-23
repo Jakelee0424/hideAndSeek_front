@@ -2,7 +2,7 @@
 // 교도소 캠퍼스 맵. 좌표·벽·문·바닥은 prisonLayout.ts(BUILDINGS 스펙에서 자동 생성)를 따른다.
 // 이 파일은 그 데이터를 3D로 그리기만 한다: 베이스 지면 + 콘크리트 벽 + 방향별 문 + 건물별 소품
 // + 수감동 2층(시각 전용) + 네 모서리 감시탑 + 남벽 중앙의 파란 정문.
-import { Html } from "@react-three/drei";
+import { Html, Instance, Instances } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -61,6 +61,19 @@ function useMaterials() {
       woodWarm: mk("#7c5f3a", 0.75, 0.05), // 식당 식탁
       laundryBlue: mk("#7d97b8", 0.5, 0.3), // 세탁기 몸통
       mint: mk("#7fb8a5", 0.7, 0), // 의무실 담요
+      // ── 장식(데코)용 ──
+      wire: mk("#8a9099", 0.45, 0.7), // 담장 위 철조망
+      pipe: mk("#6b7079", 0.5, 0.6), // 복도 배관
+      lamp: new THREE.MeshStandardMaterial({
+        color: "#fff4d6",
+        emissive: "#ffcf7a",
+        emissiveIntensity: 0.9,
+        roughness: 0.4,
+      }), // 매달린 램프·조명탑 렌즈(발광)
+      paint: mk("#c9cdd4", 1, 0), // 바닥 페인트(흰)
+      paintY: mk("#c4a13a", 1, 0), // 바닥 페인트(노랑 안전선)
+      crate: mk("#6f5836", 0.85, 0), // 나무 상자
+      silhouette: new THREE.MeshBasicMaterial({ color: "#0e1119" }), // 담장 밖 원경(불투명·무광)
     };
   }, []);
 }
@@ -589,6 +602,176 @@ function Label({ pos, text }: { pos: [number, number, number]; text: string }) {
   );
 }
 
+// ── 장식(데코): 빈 구역을 채운다. 전부 시각 전용 + 충돌이 없는 자리(담장 위·담장 밖·머리 위·
+//    바닥 페인트·담장에 붙는 조명탑)라 서버 Collision과 무관하다(플레이어가 통과할 일이 없다). ──
+
+// 담장 위 철조망 코일. 네 외벽 상단을 따라 인스턴스드 토러스로 돌린다(한 번의 드로우콜).
+function RazorWire() {
+  const coils = useMemo(() => {
+    const out: { pos: [number, number, number]; rot: [number, number, number] }[] = [];
+    const y = 5.15;
+    const step = 1.5;
+    for (let x = -41; x <= 41; x += step) {
+      out.push({ pos: [x, y, 30], rot: [0, Math.PI / 2, 0] });
+      out.push({ pos: [x, y, -30], rot: [0, Math.PI / 2, 0] });
+    }
+    for (let z = -29; z <= 29; z += step) {
+      out.push({ pos: [42, y, z], rot: [0, 0, 0] });
+      out.push({ pos: [-42, y, z], rot: [0, 0, 0] });
+    }
+    return out;
+  }, []);
+  return (
+    <Instances limit={320} range={coils.length} castShadow>
+      <torusGeometry args={[0.34, 0.045, 6, 10]} />
+      <meshStandardMaterial color="#8a9099" metalness={0.75} roughness={0.4} />
+      {coils.map((c, i) => (
+        <Instance key={i} position={c.pos} rotation={c.rot} />
+      ))}
+    </Instances>
+  );
+}
+
+// 연병장 조명탑: 담장에 붙는 키 큰 기둥 + 안쪽을 향해 기운 램프 헤드(발광 렌즈).
+function Floodlight({ pos, rotY, mat }: { pos: [number, number, number]; rotY: number; mat: ReturnType<typeof useMaterials> }) {
+  return (
+    <group position={pos} rotation={[0, rotY, 0]}>
+      <mesh position={[0, 4, 0]} material={mat.steel} castShadow>
+        <cylinderGeometry args={[0.16, 0.22, 8, 10]} />
+      </mesh>
+      {/* 붐 + 헤드(아래·안쪽으로 기울임) */}
+      <group position={[0.9, 7.7, 0]} rotation={[0, 0, 0.5]}>
+        <mesh material={mat.steel} castShadow>
+          <boxGeometry args={[1.6, 0.5, 1.4]} />
+        </mesh>
+        <mesh position={[0.1, -0.28, 0]} rotation={[0, 0, Math.PI / 2]} material={mat.lamp}>
+          <boxGeometry args={[0.36, 1.4, 1.2]} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+function Floodlights({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  const poles: { pos: [number, number, number]; rotY: number }[] = [
+    { pos: [-41, 0, -27], rotY: 0 }, // 서벽 → 붐 동쪽(안쪽)
+    { pos: [41, 0, -27], rotY: Math.PI }, // 동벽 → 붐 서쪽
+    { pos: [-41, 0, 2], rotY: 0 },
+    { pos: [41, 0, 2], rotY: Math.PI },
+  ];
+  return (
+    <group>
+      {poles.map((p, i) => (
+        <Floodlight key={i} pos={p.pos} rotY={p.rotY} mat={mat} />
+      ))}
+    </group>
+  );
+}
+
+// 연병장 바닥 페인트: 안전선(노랑 사각 테두리) + 센터/자유투 서클 + 코트 라인. 걸어 지나가는 데칼.
+function YardMarkings({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  const line = (cxp: number, czp: number, w: number, d: number) => (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[cxp, 0, czp]} material={mat.paintY}>
+      <planeGeometry args={[w, d]} />
+    </mesh>
+  );
+  return (
+    <group position={[0, 0.02, 0]}>
+      {/* 노랑 안전선(담장 안쪽 사각 테두리) */}
+      {line(0, -29, 78, 0.25)}
+      {line(0, 5, 78, 0.25)}
+      {line(-39, -12, 0.25, 34)}
+      {line(39, -12, 0.25, 34)}
+      {/* 센터 서클 + 하프라인 */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -12]} material={mat.paint}>
+        <ringGeometry args={[2.4, 2.62, 44]} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -12]} material={mat.paint}>
+        <planeGeometry args={[70, 0.2]} />
+      </mesh>
+      {/* 자유투 서클(농구골대 앞) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[3.5, 0, -12]} material={mat.paint}>
+        <ringGeometry args={[1.7, 1.88, 40]} />
+      </mesh>
+    </group>
+  );
+}
+
+// 복도 머리 위 배관 2줄 + 매달린 케이지 램프. 빈 천장 공간을 채운다(발높이 위라 통행 무관).
+function OverheadPipes({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  const y = 2.78;
+  const runs = [15.4, 18.6];
+  return (
+    <group>
+      {runs.map((z, i) => (
+        <mesh key={i} position={[0, y, z]} rotation={[0, 0, Math.PI / 2]} material={mat.pipe} castShadow>
+          <cylinderGeometry args={[0.12, 0.12, 76, 10]} />
+        </mesh>
+      ))}
+      {/* 세로 연결 배관 몇 개 */}
+      {[-30, -12, 12, 30].map((x, i) => (
+        <mesh key={i} position={[x, y, 17]} rotation={[Math.PI / 2, 0, 0]} material={mat.pipe}>
+          <cylinderGeometry args={[0.1, 0.1, 3.2, 8]} />
+        </mesh>
+      ))}
+      {/* 매달린 케이지 램프 */}
+      {[-33, -21, -9, 9, 21, 33].map((x, i) => (
+        <group key={i} position={[x, y - 0.1, 17]}>
+          <mesh position={[0, -0.18, 0]} material={mat.steel}>
+            <cylinderGeometry args={[0.02, 0.02, 0.36, 6]} />
+          </mesh>
+          <mesh position={[0, -0.46, 0]} material={mat.lamp}>
+            <sphereGeometry args={[0.16, 10, 10]} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+// 담장 밖 원경 실루엣: 사방으로 어두운 건물 덩어리를 흩어 둔다. 포그에 잠겨 원근감을 준다.
+function Backdrop({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  const boxes = useMemo(() => {
+    const out: { pos: [number, number, number]; size: [number, number, number] }[] = [];
+    const h = (i: number) => 9 + ((i * 37) % 8); // 인덱스 기반 높이 변주(재현 가능)
+    let i = 0;
+    for (let x = -48; x <= 48; x += 13) {
+      out.push({ pos: [x, h(i) / 2, 46], size: [9, h(i), 7] });
+      i++;
+      out.push({ pos: [x, h(i) / 2, -46], size: [9, h(i), 7] });
+      i++;
+    }
+    for (let z = -40; z <= 40; z += 13) {
+      out.push({ pos: [54, h(i) / 2, z], size: [7, h(i), 9] });
+      i++;
+      out.push({ pos: [-54, h(i) / 2, z], size: [7, h(i), 9] });
+      i++;
+    }
+    return out;
+  }, []);
+  return (
+    <group>
+      {boxes.map((b, i) => (
+        <mesh key={i} position={b.pos} material={mat.silhouette}>
+          <boxGeometry args={b.size} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function Decor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  return (
+    <group>
+      <RazorWire />
+      <Floodlights mat={mat} />
+      <YardMarkings mat={mat} />
+      <OverheadPipes mat={mat} />
+      <Backdrop mat={mat} />
+    </group>
+  );
+}
+
 function BuildingDecor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   return (
     <group>
@@ -656,6 +839,9 @@ export default function GameMap() {
 
       {/* 건물 소품 */}
       <BuildingDecor mat={mat} />
+
+      {/* 장식(빈 구역 채우기): 철조망·조명탑·바닥 페인트·복도 배관·담장 밖 원경 */}
+      <Decor mat={mat} />
 
       {/* 라벨 */}
       {BUILDINGS.filter((b) => b.label).map((b) => (
