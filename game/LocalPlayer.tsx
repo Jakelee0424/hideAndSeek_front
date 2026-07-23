@@ -90,7 +90,6 @@ export default function LocalPlayer() {
     if (cell) useGameStore.getState().setMyCell(cell);
   }, [initPos]);
   const [anim, setAnim] = useState<AnimState>("idle");
-  const myNick = useGameStore((s) => s.myNick);
 
   // E키: 근접 오브젝트 상호작용(자물쇠/힌트 열기). 자물쇠를 풀면 그 방 감방문이 열린다.
   useEffect(() => {
@@ -346,7 +345,9 @@ export default function LocalPlayer() {
   return (
     <group ref={ref} position={initPos}>
       <group ref={bodyRef}>
-        <Character anim={anim} ringColor="#38bdf8" nick={myNick} />
+        {/* 내 이름표는 띄우지 않는다 — 3인칭 카메라상 화면 중앙에 떠 클릭 안내·자막과 겹친다.
+            자기 식별은 발밑 하늘색 링으로 충분하다(원격 플레이어는 이름표를 유지한다). */}
+        <Character anim={anim} ringColor="#38bdf8" />
       </group>
     </group>
   );
