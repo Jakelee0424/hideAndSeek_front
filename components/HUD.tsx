@@ -7,6 +7,7 @@ import { punches } from "@/net/punches";
 import { reimprison } from "@/net/reimprison";
 import { leaveRoom } from "@/net/session";
 import { escapePlan } from "@/game/escapePlan";
+import { symbolIcon } from "@/game/symbols";
 import {
   findInteractable,
   lockCellOf,
@@ -240,10 +241,22 @@ function ClueChip() {
   if (!myCell || !escaped) return null;
   const clue = escapePlan(roomId).clues[myCell];
   if (!clue) return null;
+  const icon = symbolIcon(clue.symbol);
   return (
     <div className="absolute left-4 top-16 rounded-lg border border-amber-400/25 bg-black/50 px-3 py-2 text-xs text-amber-100 backdrop-blur">
-      <div className="font-semibold">
-        🔖 내 표식: {clue.symbol} · 수 {clue.value}
+      <div className="flex items-center gap-1.5 font-semibold">
+        <span>🔖 내 표식:</span>
+        {icon && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={icon}
+            alt={clue.symbol}
+            className="inline-block h-5 w-5 object-contain drop-shadow"
+          />
+        )}
+        <span>
+          {clue.symbol} · 수 {clue.value}
+        </span>
       </div>
       <div className="mt-0.5 text-[11px] text-amber-200/60">
         낙서 3곳(식당·복도·연병장)에서 셈법을 찾아라
