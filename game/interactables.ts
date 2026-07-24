@@ -239,10 +239,24 @@ const LOCK_CELL: Record<string, string> = Object.fromEntries(
  * 감방 자물쇠는 **그 감방 안에 있을 때만** 만질 수 있다. 사거리(2.2m)만 보면 문 밖에서
  * 창살 너머로 손이 닿아 남의 방을 밖에서 열어 주게 된다 — 각자 자기 방을 푼다는 전제가 깨진다.
  * 별관 문 자물쇠·탈옥문은 감방이 아니므로 제한이 없다(LOCK_CELL에 없어 undefined).
+ *
+ * 단, **협동 구제가 열리면**(assistOpen — 개인 탈출이 오래 걸려 서버가 개방) 이 제한이 풀려
+ * 복도에서 창살 너머로 남의 감방 자물쇠를 대신 풀 수 있다. 손이 막혀 오래 갇힌 사람을
+ * 방 전체가 도울 수 있게 하려는 것이다.
  */
-export function canInteract(it: Interactable, x: number, z: number): boolean {
+export function canInteract(
+  it: Interactable,
+  x: number,
+  z: number,
+  assistOpen = false,
+): boolean {
   const cell = LOCK_CELL[it.id];
-  return cell === undefined || cell === cellIdAt(x, z);
+  return cell === undefined || cell === cellIdAt(x, z) || assistOpen;
+}
+
+/** 이 자물쇠가 속한 감방 id("lock-B" → "B"). 감방 자물쇠가 아니면(별관·탈옥문) undefined. */
+export function lockCellOf(id: string): string | undefined {
+  return LOCK_CELL[id];
 }
 
 /** 미니게임이 걸린 자물쇠 id들(배치 순서 = 감방 A~D 순서). */

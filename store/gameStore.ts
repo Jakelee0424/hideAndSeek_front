@@ -44,6 +44,11 @@ interface GameStore {
   /** 내가 배정된 감방 id("A"~"D"). 스폰 위치로 판정한다(서버 스냅샷이 오면 그 값이 덮는다). */
   myCell: string | null;
   /**
+   * 협동 구제 개방 여부. 개인 탈출이 오래 걸리면 서버가 연다 — 열리면 복도에서 남의 감방
+   * 자물쇠를 대신 풀 수 있다. 서버는 열리는 순간에만 알려주므로 여기 눌러둔다(한 번 true면 유지).
+   */
+  assistOpen: boolean;
+  /**
    * 감방 점유 기록(감방 id → 처음 그 안에서 목격된 플레이어 id). 시작 직후엔 전원이 자기
    * 감방에 갇혀 있으므로 첫 스냅샷이 곧 배정표다. 탈옥 단서의 빈 감방 폴백 판정에 쓴다.
    */
@@ -72,6 +77,8 @@ interface GameStore {
   setPatrol: (state: PatrolState, remainMs: number, caughtId: string | null) => void;
   /** 내 감방 확정(+점유 기록). 서버 스냅샷이 오면 초기(로컬 스폰) 추정을 덮는다. */
   setMyCell: (cell: string) => void;
+  /** 협동 구제 개방 반영. 서버가 열렸다고 알려줄 때만 호출(한 번 열리면 계속 열림). */
+  setAssistOpen: (open: boolean) => void;
   /** 감방 점유 기록. 이미 주인이 있거나 그 사람이 딴 방 주인으로 기록돼 있으면 무시. */
   claimCell: (cellId: string, playerId: string) => void;
 }
@@ -98,9 +105,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   patrolCaughtId: null,
   myCell: null,
   cellOwners: {},
+  assistOpen: false,
 
   setStatus: (status) => set({ status }),
   setReady: (ready) => set({ ready }),
+
+  setAssistOpen: (open) => {
+    if (get().assistOpen === open) return;
+    set({ assistOpen: open });
+  },
 
   setMyCell: (cell) => {
     const { myId, myCell, cellOwners } = get();
@@ -163,6 +176,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       patrolCaughtId: null,
       myCell: null,
       cellOwners: {},
+      assistOpen: false,
     }),
 
   clear: () =>
@@ -182,6 +196,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       readys: {},
       myCell: null,
       cellOwners: {},
+      assistOpen: false,
     }),
 
   syncPlayers: (ids) => {

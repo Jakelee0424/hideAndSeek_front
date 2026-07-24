@@ -7,7 +7,11 @@ import { punches } from "@/net/punches";
 import { reimprison } from "@/net/reimprison";
 import { leaveRoom } from "@/net/session";
 import { escapePlan } from "@/game/escapePlan";
-import { findInteractable, useInteraction } from "@/game/interactables";
+import {
+  findInteractable,
+  lockCellOf,
+  useInteraction,
+} from "@/game/interactables";
 import PhaseBanner from "./PhaseBanner";
 import Minimap from "./Minimap";
 
@@ -22,6 +26,12 @@ export default function HUD() {
   const openId = useInteraction((s) => s.openId);
   const solvedNear = useInteraction((s) => (nearId ? s.solved[nearId] : false));
   const near = findInteractable(nearId);
+  const assistOpen = useGameStore((s) => s.assistOpen);
+  const myCell = useGameStore((s) => s.myCell);
+  // 지금 근처의 자물쇠가 "남의 감방"이면(내 감방이 아닌 감방 자물쇠) 대신 풀어 주는 것이다.
+  // 협동 구제가 열려야 후보에 드는 대상이라, 열림 여부를 따로 볼 필요는 없다.
+  const nearCell = nearId ? lockCellOf(nearId) : undefined;
+  const helping = nearCell !== undefined && nearCell !== myCell;
 
   function exit() {
     leaveRoom();
@@ -78,6 +88,13 @@ export default function HUD() {
       {/* 소음 게이지 (하단 우측) */}
       <NoiseGauge />
 
+      {/* 협동 구제 개방 안내 — 열리면 갇힌 동료의 감방 자물쇠를 대신 풀 수 있다 */}
+      {assistOpen && (
+        <div className="absolute left-1/2 top-24 -translate-x-1/2 rounded-lg border border-sky-400/30 bg-black/55 px-3 py-1.5 text-xs text-sky-100 backdrop-blur">
+          🔓 구제 개방 — 아직 갇힌 동료의 감방 자물쇠를 대신 풀 수 있다
+        </div>
+      )}
+
       {/* 상호작용 프롬프트 */}
       {near && !openId && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 rounded-lg bg-black/70 px-4 py-2 text-sm text-white backdrop-blur">
@@ -88,7 +105,11 @@ export default function HUD() {
               <kbd className="mr-2 rounded bg-white/15 px-1.5 py-0.5 font-mono">
                 E
               </kbd>
-              {near.label}
+              {helping ? (
+                <span className="text-sky-200">대신 열기 · {near.label}</span>
+              ) : (
+                near.label
+              )}
             </>
           )}
         </div>

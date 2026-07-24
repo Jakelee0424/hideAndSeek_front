@@ -90,6 +90,12 @@ export interface WorldSnapshot {
   patrolRemainMs?: number | null;
   /** 이번 순찰에서 걸린 사람의 id. 아무도 안 걸렸으면 없다. */
   patrolCaughtId?: string | null;
+  /**
+   * 협동 구제 개방. 개인 감방 탈출이 오래 걸리면 서버가 열어 준다 — 열리면 복도에서
+   * 남의 감방 자물쇠를 대신 풀 수 있다(canInteract). 로스터와 같은 규약 — 열리는 순간·
+   * 입장 시에만 true로 오고, 그 외엔 생략된다(한 번 열리면 닫히지 않는다).
+   */
+  assist?: boolean | null;
 }
 
 /**

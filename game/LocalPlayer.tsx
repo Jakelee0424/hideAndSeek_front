@@ -334,16 +334,18 @@ export default function LocalPlayer() {
     localPos.rot = g.rotation.y;
 
     // 근접 오브젝트 감지(사거리 내 최근접). 남의 감방 자물쇠는 후보에서 뺀다 —
-    // 사거리만 보면 복도에서 창살 너머로 닿는다(canInteract 참고).
+    // 사거리만 보면 복도에서 창살 너머로 닿는다(canInteract 참고). 단 협동 구제가 열리면
+    // (개인 탈출 지연) 남의 감방 자물쇠도 대신 풀 수 있게 후보에 든다.
     // 상호작용 오브젝트는 전부 1층에 있다 — 2층(감방 위 슬래브)에서 XZ가 겹쳐도 닿지 않아야 한다.
     let nearId: string | null = null;
     if (g.position.y < 2) {
+      const assistOpen = useGameStore.getState().assistOpen;
       let best = INTERACT_RANGE * INTERACT_RANGE;
       for (const it of INTERACTABLES) {
         const ex = it.position[0] - g.position.x;
         const ez = it.position[2] - g.position.z;
         const d2 = ex * ex + ez * ez;
-        if (d2 < best && canInteract(it, g.position.x, g.position.z)) {
+        if (d2 < best && canInteract(it, g.position.x, g.position.z, assistOpen)) {
           best = d2;
           nearId = it.id;
         }
