@@ -13,7 +13,8 @@ import Character, { type AnimState } from "./Character";
 import { sendInput, sendPunch } from "@/net/stompClient";
 import { worldState, INTERP_DELAY_MS } from "@/net/worldState";
 import { punches } from "@/net/punches";
-import { sfxPunch } from "./sfx";
+import { reimprison } from "@/net/reimprison";
+import { sfxPunch, sfxHit } from "./sfx";
 import {
   KNOCKBACK_SPEED,
   KNOCKBACK_TAU,
@@ -75,7 +76,9 @@ export default function LocalPlayer() {
   const punchReq = useRef(false); // 클릭이 펀치를 요청했다(useFrame에서 소비)
   const camDist = useRef(CAM_DIST); // 가림 보정된 현재 카메라 거리(풀릴 때 감쇠용)
   const bodyRef = useRef<THREE.Group>(null); // 준1인칭 전환 시 숨길 내 캐릭터(visible 토글)
+  const shake = useRef(0); // 피격 카메라 흔들림(0~1). 맞으면 1로 튀고 감쇠
   const lastAnim = useRef<AnimState>("idle");
+  const [hitAt, setHitAt] = useState(0); // 내 캐릭터 피격 플래시 트리거(맞을 때만 갱신)
   const spawned = useRef(false); // 첫 서버 스냅샷 때 배정된 감방 위치로 스냅
   // 프론트 단독 실행 시 초기 위치: 랜덤 감방 안. 서버 연결 시 첫 스냅샷이 덮어쓴다.
   const initPos = useMemo(() => {
@@ -137,6 +140,18 @@ export default function LocalPlayer() {
       }
     }
 
+    // 정문 함정 재수감: 서버가 나를 감방으로 돌려보냈다 — 예측 위치를 그 자리로 하드 스냅한다.
+    // (넉백처럼 작은 임펄스가 아니라 큰 순간이동이라 결정론적 복제로는 못 맞춘다.) 속도·넉백도 끊는다.
+    const tp = reimprison.takeTeleport();
+    if (tp) {
+      g.position.x = tp.x;
+      g.position.z = tp.z;
+      g.position.y = groundHeightAt(tp.x, tp.z, 0);
+      vy.current = 0;
+      kx.current = 0;
+      kz.current = 0;
+    }
+
     // 퍼즐 오버레이가 열려 있거나 채팅을 치는 중이면 이동을 멈춘다.
     // (채팅 중엔 useKeyboard가 키를 안 먹지만, 열기 직전에 눌려 있던 값이 남을 수 있어
     //  여기서도 한 번 더 잠근다 — 순찰 중이라면 한 걸음이 그대로 적발이다.)
@@ -174,6 +189,10 @@ export default function LocalPlayer() {
     if (kb) {
       kx.current += KNOCKBACK_SPEED * kb.x;
       kz.current += KNOCKBACK_SPEED * kb.z;
+      // 내가 맞았다 — 타격음 + 몸 플래시 + 카메라 흔들림으로 피격을 알린다.
+      sfxHit();
+      shake.current = 1;
+      setHitAt(performance.now());
     }
     const knocked = kx.current !== 0 || kz.current !== 0;
 
@@ -297,6 +316,14 @@ export default function LocalPlayer() {
       .multiplyScalar(camDist.current / segLen)
       .add(_lookAt);
     state.camera.lookAt(_lookAt);
+    // 피격 카메라 흔들림: 맞은 직후 잠깐 카메라를 무작위로 떨어 충격을 준다(빠르게 감쇠).
+    if (shake.current > 0) {
+      shake.current = Math.max(0, shake.current - dt / 0.22);
+      const amp = shake.current * shake.current * 0.18; // 제곱 감쇠로 끝을 부드럽게
+      state.camera.position.x += (Math.random() - 0.5) * amp;
+      state.camera.position.y += (Math.random() - 0.5) * amp;
+      state.camera.position.z += (Math.random() - 0.5) * amp;
+    }
     // 카메라가 머리 반경 안까지 파고들면 내 몸을 숨긴다(준1인칭) — 머리 내부가 화면을 덮지 않게.
     if (bodyRef.current) bodyRef.current.visible = camDist.current > CAM_BODY_HIDE;
 
@@ -347,7 +374,7 @@ export default function LocalPlayer() {
       <group ref={bodyRef}>
         {/* 내 이름표는 띄우지 않는다 — 3인칭 카메라상 화면 중앙에 떠 클릭 안내·자막과 겹친다.
             자기 식별은 발밑 하늘색 링으로 충분하다(원격 플레이어는 이름표를 유지한다). */}
-        <Character anim={anim} ringColor="#38bdf8" />
+        <Character anim={anim} ringColor="#38bdf8" hitAt={hitAt} />
       </group>
     </group>
   );

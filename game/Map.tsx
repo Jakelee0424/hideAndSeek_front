@@ -17,6 +17,7 @@ import {
   FLOOR2_Y,
   FLOORS,
   GATE,
+  PIPE,
   SLAB2,
   STAIR,
   TOWERS,
@@ -521,7 +522,8 @@ function InfirmaryDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMat
   );
 }
 
-// ── 교도소 정문(남벽 중앙): 파란 철문 두 짝, 닫혀 있다. 탈옥문(escape-gate)을 풀면 열린다 ──
+// ── 교도소 정문(남벽 중앙): 파란 철문 두 짝, 닫혀 있다. 정문 자물쇠(gate-lock)를 풀면 열린다 —
+//    가장 그럴듯한 출구지만 함정이다. 여는 순간 서버가 무작위 2명을 재수감한다 ──
 function MainGate({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   const open = useInteraction((s) => isCellDoorOpen("gate-main", s.solved));
   const left = useRef<THREE.Group>(null);
@@ -562,6 +564,86 @@ function MainGate({ mat }: { mat: ReturnType<typeof useMaterials> }) {
       <group ref={left} position={[-half, 0, GATE.z]}>{panel}</group>
       <group ref={right} position={[half, 0, GATE.z]} rotation={[0, Math.PI, 0]}>{panel}</group>
       <Label pos={[GATE.x, 5.2, GATE.z + 1]} text="정문" />
+    </group>
+  );
+}
+
+// ── 배수관 아웃폴(세탁실 뒤 북벽): 진짜 최종 탈출구. 콘크리트 헤드월에 큰 컬버트 관 입구가
+//    박혀 있고, 위로는 굵은 배관이 벽을 타고 올라가 꺾인다. 바닥엔 얕은 배수로가 관 입구로
+//    이어지고 흥건한 물 자국이 남는다. 해치(pipe-hatch) 창살은 DOOR_META의 문으로 따로 그려진다
+//    (배수관 코드를 풀면 열린다). 충돌은 OBSTACLES의 관 입구 박스가 담당 — 여긴 그리기만 한다. ──
+function DrainPipe({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  const X = PIPE.x; // 30
+  const wallZ = 29.8; // 북벽 안쪽 면
+  const R = 0.92; // 관 입구 반경
+  const dark = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: "#05070a", roughness: 1 }),
+    [],
+  );
+  return (
+    <group>
+      {/* 콘크리트 헤드월(벽에 붙는 옹벽) + 상단 두겁 */}
+      <mesh position={[X, 1.6, wallZ - 0.15]} material={mat.concrete} castShadow receiveShadow>
+        <boxGeometry args={[5, 3.2, 0.5]} />
+      </mesh>
+      <mesh position={[X, 3.28, wallZ - 0.05]} material={mat.concrete} castShadow>
+        <boxGeometry args={[5.4, 0.3, 0.8]} />
+      </mesh>
+
+      {/* 컬버트 관 입구: 벽을 관통하는 관(열린 실린더) + 녹슨 테두리 링 + 안쪽 어둠.
+          입구 앞면을 충돌면(z≈29.5)에 맞춰 캐릭터 몸과 겹치지 않게 벽 쪽으로 당긴다. */}
+      <mesh position={[X, R, wallZ + 0.1]} rotation={[Math.PI / 2, 0, 0]} material={mat.pipe} castShadow>
+        <cylinderGeometry args={[R, R, 0.9, 28, 1, true]} />
+      </mesh>
+      <mesh position={[X, R, wallZ - 0.35]} rotation={[Math.PI / 2, 0, 0]} material={mat.rust}>
+        <torusGeometry args={[R, 0.14, 12, 28]} />
+      </mesh>
+      <mesh position={[X, R, wallZ - 0.3]} material={dark}>
+        <circleGeometry args={[R - 0.05, 28]} />
+      </mesh>
+
+      {/* 벽을 타고 오르는 굵은 배관 + 상단으로 꺾이는 오버헤드 관(머리 위라 통행 무관) */}
+      <mesh position={[X - 1.7, 2.2, wallZ - 0.55]} material={mat.pipe} castShadow>
+        <cylinderGeometry args={[0.34, 0.34, 3.2, 16]} />
+      </mesh>
+      <mesh position={[X - 1.7, 3.9, wallZ - 0.7]} rotation={[0, 0, Math.PI / 2]} material={mat.pipe} castShadow>
+        <cylinderGeometry args={[0.34, 0.34, 16, 16]} />
+      </mesh>
+      {/* 배관 엘보(입구 위에서 세로관으로 합류) */}
+      <mesh position={[X - 1.7, 0.9, wallZ - 0.55]} material={mat.rust} castShadow>
+        <boxGeometry args={[0.9, 0.9, 0.7]} />
+      </mesh>
+      {/* 벽 고정 밴드 둘 */}
+      {[1.2, 3.0].map((y, i) => (
+        <mesh key={i} position={[X - 1.7, y, wallZ - 0.55]} rotation={[Math.PI / 2, 0, 0]} material={mat.steel}>
+          <torusGeometry args={[0.4, 0.06, 8, 16]} />
+        </mesh>
+      ))}
+
+      {/* 녹슨 밸브 휠(헤드월 옆 — 상호작용 지점 근처) */}
+      <group position={[X + 1.6, 1.3, wallZ - 0.45]} rotation={[Math.PI / 2, 0, 0]}>
+        <mesh material={mat.steel}>
+          <torusGeometry args={[0.42, 0.06, 8, 20]} />
+        </mesh>
+        {[0, Math.PI / 2].map((r, i) => (
+          <mesh key={i} rotation={[0, 0, r]} material={mat.steel}>
+            <boxGeometry args={[0.82, 0.06, 0.06]} />
+          </mesh>
+        ))}
+        <mesh material={mat.rust}>
+          <cylinderGeometry args={[0.1, 0.1, 0.5, 10]} />
+        </mesh>
+      </group>
+
+      {/* 바닥 배수로(관 입구에서 남쪽으로 이어지는 얕은 콘크리트 트로프) + 물 자국 */}
+      <mesh position={[X, 0.03, wallZ - 2.4]} material={mat.concrete} receiveShadow>
+        <boxGeometry args={[2.2, 0.08, 4]} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[X, 0.08, wallZ - 2.4]} material={mat.water}>
+        <planeGeometry args={[1.3, 3.8]} />
+      </mesh>
+
+      <Label pos={[X, 3.9, wallZ - 0.9]} text="배수관" />
     </group>
   );
 }
@@ -755,6 +837,7 @@ function BuildingDecor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
       <ParadeDecor mat={mat} />
       <LinkGate mat={mat.steel} />
       <MainGate mat={mat} />
+      <DrainPipe mat={mat} />
     </group>
   );
 }

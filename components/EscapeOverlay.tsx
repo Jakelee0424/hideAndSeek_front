@@ -5,7 +5,7 @@
 // 내내 검은 막 뒤에 가려 있었다. 여기는 한 판의 끝이 아니라 중간 고비다 —
 // 진짜 마무리는 EndingOverlay가 맡는다.
 import { useEffect, useState } from "react";
-import { ESCAPE_GATE_ID, useInteraction } from "@/game/interactables";
+import { ESCAPE_PIPE_ID, useInteraction } from "@/game/interactables";
 import { sfxEscape } from "@/game/sfx";
 import { useGameStore } from "@/store/gameStore";
 
@@ -13,7 +13,7 @@ import { useGameStore } from "@/store/gameStore";
 const HOLD_MS = 5200;
 
 export default function EscapeOverlay() {
-  const escaped = useInteraction((s) => !!s.solved[ESCAPE_GATE_ID]);
+  const escaped = useInteraction((s) => !!s.solved[ESCAPE_PIPE_ID]);
   const phase = useGameStore((s) => s.phase);
   const [done, setDone] = useState(false);
 
@@ -35,10 +35,10 @@ export default function EscapeOverlay() {
           ESCAPE COMPLETE
         </p>
         <h1 className="mb-4 text-5xl font-black text-white drop-shadow-lg">
-          탈출로가 열렸다
+          배수관이 뚫렸다
         </h1>
         <p className="text-slate-300">
-          담을 넘었다. 하지만 아직 끝이 아니다 — 누가 사람이었는지 밝혀야 한다.
+          세탁실 뒤 배수관으로 빠져나왔다. 하지만 아직 끝이 아니다 — 누가 사람이었는지 밝혀야 한다.
         </p>
       </div>
     </div>

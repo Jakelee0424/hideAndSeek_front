@@ -220,6 +220,15 @@ export function sfxPunch(): void {
   tone(c, { freq: 200, to: 90, dur: 0.1, gain: 0.1, type: "sine" }); // 맞는 툭
 }
 
+/** 피격(내가 맞았다) — 묵직하게 내려꽂는 퍽. 휘두르는 소리(sfxPunch)보다 세고 낮다. */
+export function sfxHit(): void {
+  const c = ready();
+  if (!c) return;
+  tone(c, { freq: 160, to: 55, dur: 0.16, gain: 0.2, type: "sine" }); // 몸에 박히는 저음
+  noise(c, { dur: 0.13, gain: 0.16, cutoff: 900 }); // 둔탁한 충격
+  tone(c, { at: 0.02, freq: 90, to: 45, dur: 0.12, gain: 0.12, type: "triangle" }); // 배음(무게감)
+}
+
 /** AI 정체 공개 — 무겁게 내려꽂는 한 방. */
 export function sfxReveal(): void {
   const c = ready();

@@ -7,6 +7,7 @@
 import type { PunchEvent } from "./types";
 
 const punchAt = new Map<string, number>();
+const hitAt = new Map<string, number>(); // victim id → 마지막으로 맞은 시각(피격 연출용)
 let pendingKnockback: { x: number; z: number } | null = null;
 
 export const punches = {
@@ -15,11 +16,15 @@ export const punches = {
     const now = performance.now();
     for (const e of events) {
       punchAt.set(e.attacker, now);
-      if (e.victim && e.victim === myId) {
-        pendingKnockback = {
-          x: (pendingKnockback?.x ?? 0) + e.dirX,
-          z: (pendingKnockback?.z ?? 0) + e.dirZ,
-        };
+      if (e.victim) {
+        // 맞은 사람(원격·본인 모두)에게 피격 연출 타임스탬프를 남긴다.
+        hitAt.set(e.victim, now);
+        if (e.victim === myId) {
+          pendingKnockback = {
+            x: (pendingKnockback?.x ?? 0) + e.dirX,
+            z: (pendingKnockback?.z ?? 0) + e.dirZ,
+          };
+        }
       }
     }
   },
@@ -27,6 +32,11 @@ export const punches = {
   /** attacker가 마지막으로 편치를 날린 시각(없으면 0). 렌더가 갱신 여부만 보면 된다. */
   lastPunchAt(id: string): number {
     return punchAt.get(id) ?? 0;
+  },
+
+  /** victim이 마지막으로 맞은 시각(없으면 0). 피격 플래시가 갱신 여부만 보면 된다. */
+  lastHitAt(id: string): number {
+    return hitAt.get(id) ?? 0;
   },
 
   /** 대기 중인 넉백 방향을 가져가고 비운다(단위 벡터 근사; 세기는 호출부가 곱한다). */
@@ -38,6 +48,7 @@ export const punches = {
 
   clear(): void {
     punchAt.clear();
+    hitAt.clear();
     pendingKnockback = null;
   },
 };

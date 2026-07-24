@@ -45,10 +45,11 @@ export default function Minimap() {
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    // 월드(x,z) → 캔버스(px). z+ = 북 = 화면 위, x+ = 동 = 화면 오른쪽.
+    // 월드(x,z) → 캔버스(px). z+ = 북 = 화면 위, 동(-x) = 화면 오른쪽.
+    // three.js 좌표계에선 +Z를 위로 놓으면 +X가 서쪽이라, x축을 뒤집어야 실제 방위(동=오른쪽)와 맞는다.
     const iw = CSS_W - 2 * PAD;
     const ih = CSS_H - 2 * PAD;
-    const sx = (x: number) => PAD + ((x - X0) / (X1 - X0)) * iw;
+    const sx = (x: number) => PAD + ((X1 - x) / (X1 - X0)) * iw;
     const sy = (z: number) => PAD + ((Z1 - z) / (Z1 - Z0)) * ih;
     const scaleX = iw / (X1 - X0);
     const scaleZ = ih / (Z1 - Z0);
@@ -65,13 +66,14 @@ export default function Minimap() {
       const { x0, z0, x1, z1 } = f.rect;
       b.fillStyle = f.color;
       b.globalAlpha = 0.55;
-      b.fillRect(sx(x0), sy(z1), (x1 - x0) * scaleX, (z1 - z0) * scaleZ);
+      // x축 반전이라 화면 왼쪽 모서리는 큰 x(x1) 쪽.
+      b.fillRect(sx(x1), sy(z1), (x1 - x0) * scaleX, (z1 - z0) * scaleZ);
     }
     b.globalAlpha = 1;
     // 벽(WALL_BOXES): 어두운 선으로. cx,cz,hx,hz → 사각.
     b.fillStyle = "#05070b";
     for (const w of WALL_BOXES) {
-      const px = sx(w.cx - w.hx);
+      const px = sx(w.cx + w.hx); // x축 반전 → 왼쪽 모서리는 +hx 쪽
       const py = sy(w.cz + w.hz);
       const pw = Math.max(1, w.hx * 2 * scaleX);
       const ph = Math.max(1, w.hz * 2 * scaleZ);
@@ -82,7 +84,7 @@ export default function Minimap() {
     b.lineWidth = 1;
     b.strokeRect(PAD, PAD, iw, ih);
     b.fillStyle = "#38bdf8";
-    b.fillRect(sx(GATE.x - GATE.width / 2), sy(GATE.z) - 1.5, GATE.width * scaleX, 3);
+    b.fillRect(sx(GATE.x + GATE.width / 2), sy(GATE.z) - 1.5, GATE.width * scaleX, 3);
 
     let raf = 0;
     const draw = () => {
@@ -103,16 +105,16 @@ export default function Minimap() {
         ctx.fill();
       }
 
-      // 나(하늘색) + 시선 화살표. 월드 방향 (sin,cos) → 화면 (sin,-cos).
+      // 나(하늘색) + 시선 화살표. 월드 방향 (sin,cos) → 화면 (-sin,-cos)(x축 반전 반영).
       const mx = sx(localPos.x);
       const my = sy(localPos.z);
       const dx = Math.sin(localPos.rot);
       const dz = Math.cos(localPos.rot);
       ctx.fillStyle = "#38bdf8";
       ctx.beginPath();
-      ctx.moveTo(mx + dx * 6, my - dz * 6); // 앞끝
-      ctx.lineTo(mx - dz * 3.2, my - dx * 3.2); // 좌
-      ctx.lineTo(mx + dz * 3.2, my + dx * 3.2); // 우
+      ctx.moveTo(mx - dx * 6, my - dz * 6); // 앞끝
+      ctx.lineTo(mx + dz * 3.2, my - dx * 3.2); // 좌
+      ctx.lineTo(mx - dz * 3.2, my + dx * 3.2); // 우
       ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = "rgba(0,0,0,0.55)";

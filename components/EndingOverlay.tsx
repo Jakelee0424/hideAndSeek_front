@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { resolveEnding, type EndingKey } from "@/game/endings";
-import { ESCAPE_GATE_ID, useInteraction } from "@/game/interactables";
+import { ESCAPE_PIPE_ID, useInteraction } from "@/game/interactables";
 import { sfxBell, sfxDawn, sfxReveal, sfxSiren } from "@/game/sfx";
 import { leaveRoom } from "@/net/session";
 import { useGameStore } from "@/store/gameStore";
@@ -25,7 +25,7 @@ const LINE_GAP = 2100;
 export default function EndingOverlay() {
   const phase = useGameStore((s) => s.phase);
   const aiId = useGameStore((s) => s.aiId);
-  const escaped = useInteraction((s) => !!s.solved[ESCAPE_GATE_ID]);
+  const escaped = useInteraction((s) => !!s.solved[ESCAPE_PIPE_ID]);
 
   // 연출 본체는 결말이 확정된 뒤에만 마운트한다. 상태 초기화를 마운트에 맡기면
   // "다시 보일 때 beat를 0으로 되돌리는" 효과가 필요 없어진다.

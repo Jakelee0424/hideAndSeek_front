@@ -23,7 +23,9 @@ export default function RemotePlayer({
   const lastAnim = useRef<AnimState>("idle");
   const seenPunchAt = useRef(0); // 마지막으로 처리한 펀치 수신 시각
   const punchUntil = useRef(0); // 이 시각까지 펀치 모션 재생
+  const seenHitAt = useRef(0); // 마지막으로 처리한 피격 수신 시각
   const [anim, setAnim] = useState<AnimState>("idle");
+  const [hitAt, setHitAt] = useState(0); // 피격 플래시 트리거(맞을 때만 갱신 → 리렌더도 그때만)
 
   useFrame((_, delta) => {
     const g = ref.current;
@@ -59,6 +61,13 @@ export default function RemotePlayer({
     }
     const punching = now < punchUntil.current;
 
+    // 이 원격 플레이어가 맞았으면(스냅샷 이벤트) 피격 플래시를 트리거한다.
+    const hAt = punches.lastHitAt(id);
+    if (hAt > seenHitAt.current) {
+      seenHitAt.current = hAt;
+      setHitAt(hAt);
+    }
+
     // 걷기(6m/s)와 달리기(10.8m/s)의 중간(≈8.4m/s)을 경계로 삼는다. 펀치가 최우선.
     // 접지는 그 좌표의 바닥(2층·계단 포함) 기준 — 절대 y로 보면 2층에 서 있는 사람이 늘 점프다.
     const speed = moved / Math.max(delta, 1e-4);
@@ -81,7 +90,7 @@ export default function RemotePlayer({
 
   return (
     <group ref={ref}>
-      <Character anim={anim} ringColor="#f472b6" nick={nick} />
+      <Character anim={anim} ringColor="#f472b6" nick={nick} hitAt={hitAt} />
     </group>
   );
 }

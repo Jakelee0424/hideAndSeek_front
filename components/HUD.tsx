@@ -1,7 +1,10 @@
 "use client";
 // 게임 화면 위 오버레이 HUD.
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/store/gameStore";
+import { punches } from "@/net/punches";
+import { reimprison } from "@/net/reimprison";
 import { leaveRoom } from "@/net/session";
 import { escapePlan } from "@/game/escapePlan";
 import { findInteractable, useInteraction } from "@/game/interactables";
@@ -27,6 +30,12 @@ export default function HUD() {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
+      {/* 피격 시 화면 가장자리 붉은 플래시 */}
+      <HitVignette />
+
+      {/* 정문 함정 발동 연출 */}
+      <TrapOverlay />
+
       <div className="absolute left-4 top-4 flex items-center gap-3 rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-200 backdrop-blur">
         <span className="font-semibold tracking-widest">{roomId}</span>
         {myNick && (
@@ -91,6 +100,109 @@ export default function HUD() {
       >
         나가기
       </button>
+    </div>
+  );
+}
+
+// 피격 비네트: 내가 맞으면 화면 가장자리가 붉게 번쩍였다 잦아든다.
+// store를 매 프레임 건드리지 않도록 자체 rAF로 punches 버스(내 id의 마지막 피격 시각)를 폰다.
+function HitVignette() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    let seen = 0;
+    let inited = false; // 입장 직후 과거 피격으로 헛번쩍이지 않게 첫 값은 그냥 동기화
+    let flash = 0;
+    let last = performance.now();
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      const now = performance.now();
+      const dt = now - last;
+      last = now;
+      const myId = useGameStore.getState().myId;
+      if (myId) {
+        const h = punches.lastHitAt(myId);
+        if (!inited) {
+          seen = h;
+          inited = true;
+        } else if (h > seen) {
+          seen = h;
+          flash = 1;
+        }
+      }
+      if (flash > 0) {
+        flash = Math.max(0, flash - dt / 450); // ~0.45s 감쇠
+        if (ref.current) ref.current.style.opacity = String(flash);
+      } else if (ref.current && ref.current.style.opacity !== "0") {
+        ref.current.style.opacity = "0";
+      }
+    };
+    loop();
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return (
+    <div
+      ref={ref}
+      className="pointer-events-none absolute inset-0"
+      style={{
+        opacity: 0,
+        boxShadow: "inset 0 0 130px 35px rgba(220,20,20,0.7)",
+      }}
+    />
+  );
+}
+
+// 정문 함정 연출: 누군가 정문을 통과하려다 함정을 밟으면 방 전체에 경보 배너가 잠깐 뜬다.
+// 내가 재수감된 경우엔 "다시 갇혔다"까지 함께 뜬다. store를 매 프레임 건드리지 않도록
+// 자체 rAF로 reimprison 버스를 폴링한다(피격 비네트와 같은 패턴).
+const TRAP_HOLD_MS = 3600;
+function TrapOverlay() {
+  const [msg, setMsg] = useState<{ victim: boolean } | null>(null);
+  useEffect(() => {
+    let raf = 0;
+    let seenTrap = reimprison.trapAt();
+    let seenVictim = reimprison.victimAt();
+    let inited = false;
+    let hideAt = 0;
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      const now = performance.now();
+      const t = reimprison.trapAt();
+      const v = reimprison.victimAt();
+      if (!inited) {
+        seenTrap = t;
+        seenVictim = v;
+        inited = true;
+      } else if (t > seenTrap) {
+        const victim = v > seenVictim;
+        seenTrap = t;
+        seenVictim = v;
+        hideAt = now + TRAP_HOLD_MS;
+        setMsg({ victim });
+      }
+      if (hideAt && now >= hideAt) {
+        hideAt = 0;
+        setMsg(null);
+      }
+    };
+    loop();
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  if (!msg) return null;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-28 flex flex-col items-center gap-2 text-center">
+      <div className="rounded-lg bg-rose-950/80 px-5 py-2.5 backdrop-blur">
+        <p className="text-xs font-medium tracking-[0.3em] text-rose-300/80">TRAP</p>
+        <p className="mt-1 text-lg font-bold text-white">
+          정문이 열렸다 — 하지만 함정이었다. 보는 눈이 너무 많았다
+        </p>
+      </div>
+      {msg.victim && (
+        <div className="rounded-md bg-black/70 px-4 py-1.5 text-sm font-semibold text-rose-200 backdrop-blur">
+          당신은 붙잡혀 다시 감방에 갇혔다
+        </div>
+      )}
     </div>
   );
 }

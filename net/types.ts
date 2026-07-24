@@ -82,6 +82,8 @@ export interface WorldSnapshot {
   readyIds?: string[] | null;
   /** 이 tick에 성사된 펀치들. 일어난 순간에만 존재(그 외 생략). */
   punches?: PunchEvent[] | null;
+  /** 이 tick에 정문 함정으로 재수감된 사람들. 함정이 발동한 순간에만 존재(그 외 생략). */
+  reimprisons?: ReimprisonEvent[] | null;
   /** 정기 순찰 상태. 로스터와 같은 규약 — 바뀔 때·입장 시에만 존재. */
   patrol?: PatrolState | null;
   /** 그 상태가 끝나기까지 남은 시간(ms). patrol과 함께만 온다. 카운트다운은 클라 몫. */
@@ -115,6 +117,19 @@ export interface PunchEvent {
   victim?: string | null;
   dirX: number;
   dirZ: number;
+}
+
+/**
+ * 서버 → 클라: 정문 함정에 걸려 재수감된 한 명. 백엔드 ReimprisonEvent record와 필드명 일치.
+ *   victim:  다시 갇힌 사람 id. 본인이면 클라가 자기 예측 위치를 감방으로 하드 스냅한다.
+ *   x, z:    보내진 감방 위치(서버 권위). victim 본인 클라가 여기로 순간이동한다.
+ *   relock:  다시 잠긴 자물쇠 id("lock-A"…). 클라는 이걸 unmarkSolved 해 감방문을 도로 닫는다.
+ */
+export interface ReimprisonEvent {
+  victim: string;
+  x: number;
+  z: number;
+  relock: string;
 }
 
 /**

@@ -1,11 +1,12 @@
 // stompClient + gameStore + worldState 를 묶는 세션 오케스트레이션.
 // UI는 joinRoom / leaveRoom 만 호출한다.
 import { useGameStore } from "@/store/gameStore";
-import { ESCAPE_GATE_ID, useInteraction } from "@/game/interactables";
+import { ESCAPE_PIPE_ID, useInteraction } from "@/game/interactables";
 import { cellIdAt } from "@/game/prisonLayout";
-import { sfxDoor, sfxUnlock } from "@/game/sfx";
+import { sfxDoor, sfxUnlock, sfxSiren } from "@/game/sfx";
 import { worldState } from "./worldState";
 import { punches } from "./punches";
+import { reimprison } from "./reimprison";
 import { useChat } from "./chat";
 import * as stomp from "./stompClient";
 
@@ -97,8 +98,8 @@ export function joinRoom(
           for (const id of snap.solvedIds) {
             if (heardSolved.has(id)) continue;
             heardSolved.add(id);
-            // 탈옥문은 클리어 화면이 따로 팡파르를 울린다 — 여기서 겹쳐 내지 않는다.
-            if (id !== ESCAPE_GATE_ID) sfxUnlock();
+            // 배수관(최종 탈출)은 클리어 화면이 따로 팡파르를 울린다 — 여기서 겹쳐 내지 않는다.
+            if (id !== ESCAPE_PIPE_ID) sfxUnlock();
           }
         }
         if (snap.openDoors) {
@@ -123,6 +124,16 @@ export function joinRoom(
         if (snap.readyIds) useGameStore.getState().applyReady(snap.readyIds);
         // 펀치는 일어난 tick에만 실려 온다 → 모션·넉백을 렌더 컴포넌트에 흘려 준다.
         if (snap.punches) punches.ingest(snap.punches, myId);
+        // 정문 함정 재수감도 발동 tick에만 실려 온다. 다시 잠긴 자물쇠는 solved에서 지워(감방문
+        // 닫힘), 해제음이 다시 울리도록 heard 기록도 비운다. 순간이동은 LocalPlayer가 소비한다.
+        if (snap.reimprisons && snap.reimprisons.length > 0) {
+          reimprison.ingest(snap.reimprisons, myId, (lockId) => {
+            useInteraction.getState().unmarkSolved(lockId);
+            heardSolved.delete(lockId);
+            heardDoors.delete("cell-" + lockId.slice("lock-".length));
+          });
+          sfxSiren();
+        }
         // 정기 순찰도 바뀔 때·입장 시에만 실려 온다. 이후 카운트다운은 클라 몫.
         if (snap.patrol) {
           useGameStore
@@ -145,6 +156,7 @@ export function leaveRoom(): void {
   stomp.disconnect();
   worldState.clear();
   punches.clear();
+  reimprison.clear();
   useChat.getState().clear();
   useGameStore.getState().clear();
 }

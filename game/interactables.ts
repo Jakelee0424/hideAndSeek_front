@@ -152,22 +152,39 @@ export const INTERACTABLES: Interactable[] = [
   { id: "doc-cafe", type: "note", position: [14, 0.6, 24], label: "배식표 뒷면 낙서" },
   { id: "doc-hall", type: "note", position: [-26, 0.6, 15], label: "복도 벽의 긁힌 흔적" },
   { id: "doc-yard", type: "note", position: [-34, 0.6, -27.5], label: "담벼락 밑 모래 글씨" },
+
+  // ── 정문(함정): 닫힌 정문의 코드 자물쇠 + 감시탑 힌트 둘 ────────────────────────
+  // 가장 눈에 띄는 출구라 다들 여기부터 노린다. 힌트를 모아 코드를 맞춰 정문을 여는 순간,
+  // 바로 그게 함정이다 — 서버가 무작위 2명을 재수감한다. 진짜 출구는 세탁실 뒤 배수관.
+  // (서버 Room.GATE_LOCK_ID = "gate-lock". solve가 곧 함정 발동 신호다.)
+  { id: "gate-note1", type: "note", position: [-9, 0.6, -27], label: "서쪽 감시탑 각인", hint: "정문 코드 앞 두 자리 — 서쪽 감시탑 기둥에 '19'가 새겨져 있다." },
+  { id: "gate-note2", type: "note", position: [9, 0.6, -27], label: "동쪽 감시탑 각인", hint: "정문 코드 뒤 두 자리 — 동쪽 감시탑 기둥에 '84'가 새겨져 있다." },
   {
-    id: "escape-gate",
+    id: "gate-lock",
     type: "lockbox",
-    position: [0, 0.6, -26], // 파란 정문 앞(최종 탈출구)
-    label: "탈옥문",
-    hint: "네 자리. 각자의 표식과 낙서 세 곳의 셈법을 모아야 한다.",
+    position: [0, 0.6, -26], // 파란 정문 앞
+    label: "정문 잠금장치",
+    hint: "네 자리. 감시탑 두 곳에 새겨진 수를 모아라.",
+    puzzle: { kind: "dial", code: "1984" },
+    opensDoor: "gate-main", // 풀면 정문이 열린다 — 그 순간 함정이 발동한다(서버).
+  },
+  {
+    id: "escape-pipe",
+    type: "lockbox",
+    position: [30, 0.6, 29], // 세탁실 뒤 북쪽 2m 순찰로(배수관 앞) — 진짜 최종 탈출구
+    label: "배수관 잠금장치",
+    hint: "세탁실 뒤로 이어진 배수관. 네 자리. 각자의 표식과 낙서 세 곳의 셈법을 모아야 한다.",
     // code는 자릿수 표시용 자리표시자 — 실제 코드는 findInteractable이 방 시드로 채워 넣는다.
     puzzle: { kind: "dial", code: "0000" },
-    // 풀면 남벽의 파란 정문(gate-main)이 열린다 — 게임의 끝을 눈으로 보여주는 연출.
-    // 서버 Room.LOCK_OPENS에도 같은 매핑이 있다(봇이 근접만으로 정문을 열지 못하게 막는 효과도 겸한다).
-    opensDoor: "gate-main",
+    // 풀면 북벽 배수관 해치(pipe-hatch)가 열린다 — 진짜 탈출 연출.
+    // 서버 Room.LOCK_OPENS에도 같은 매핑이 있다(봇이 근접만으로 해치를 열지 못하게 막는 효과도 겸한다).
+    // ⚠️ 정문(gate-main)은 더 이상 탈출구가 아니라 함정이다 — 코드가 없고, 통과하면 재수감된다.
+    opensDoor: "pipe-hatch",
   },
 ];
 
-/** 최종 탈옥문 id. 이게 solved면 게임 클리어. */
-export const ESCAPE_GATE_ID = "escape-gate";
+/** 최종 탈출구(배수관) id. 이게 solved면 게임 클리어(진짜 탈출). */
+export const ESCAPE_PIPE_ID = "escape-pipe";
 
 /** 해독 조각 문서 id들(본문이 방 시드로 생성되는 것들). */
 const DOC_IDS = new Set(["doc-cafe", "doc-hall", "doc-yard"]);
@@ -192,7 +209,7 @@ export function findInteractable(id: string | null): Interactable | undefined {
   // 시드 의존 내용(탈옥 코드·문서 본문)은 읽는 순간 주입한다 — 방 코드는 입장 후 확정되고,
   // doc-yard의 압수 기록(빈 감방 폴백)은 인원 이탈에 따라 그때그때 달라진다.
   const seed = useGameStore.getState().roomId;
-  if (base.id === ESCAPE_GATE_ID) {
+  if (base.id === ESCAPE_PIPE_ID) {
     return { ...base, puzzle: { kind: "dial", code: escapePlan(seed).code } };
   }
   if (DOC_IDS.has(base.id)) {
@@ -273,6 +290,8 @@ interface InteractionStore {
   open: (id: string) => void;
   close: () => void;
   markSolved: (id: string) => void;
+  /** 재수감 함정: 특정 자물쇠를 다시 잠근다(감방문이 solved에서 파생 → 함께 닫힌다). */
+  unmarkSolved: (id: string) => void;
   /** 서버 스냅샷의 solvedIds를 병합(협동). 실제로 늘어날 때만 갱신. */
   syncSolved: (ids: string[]) => void;
 }
@@ -289,6 +308,14 @@ export const useInteraction = create<InteractionStore>((set, get) => ({
   close: () => set({ openId: null }),
   markSolved: (id) =>
     set((s) => ({ solved: { ...s.solved, [id]: true }, openId: null })),
+
+  unmarkSolved: (id) => {
+    const cur = get().solved;
+    if (!cur[id]) return;
+    const next = { ...cur };
+    delete next[id];
+    set({ solved: next });
+  },
 
   syncSolved: (ids) => {
     const cur = get().solved;
