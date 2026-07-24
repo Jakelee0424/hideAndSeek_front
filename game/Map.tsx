@@ -2,7 +2,7 @@
 // 교도소 캠퍼스 맵. 좌표·벽·문·바닥은 prisonLayout.ts(BUILDINGS 스펙에서 자동 생성)를 따른다.
 // 이 파일은 그 데이터를 3D로 그리기만 한다: 베이스 지면 + 콘크리트 벽 + 방향별 문 + 건물별 소품
 // + 수감동 2층(시각 전용) + 네 모서리 감시탑 + 남벽 중앙의 파란 정문.
-import { Html, Instance, Instances } from "@react-three/drei";
+import { Html, Instance, Instances, useTexture } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { Suspense, useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -31,34 +31,96 @@ import {
 
 const BAR_W = 0.08;
 
+// 사용자 제작 텍스처(albedo + normal). Downloads/textures → public/textures 로 복사해 둔다.
+const TEX = {
+  concrete: "/textures/concrete_wall.png",
+  concreteN: "/textures/concrete_wall_normal.png",
+  steel: "/textures/steel_bars.png",
+  steelN: "/textures/steel_bars_normal.png",
+  gate: "/textures/gate_blue.png",
+  gateN: "/textures/gate_blue_normal.png",
+  floorCell: "/textures/floor_cell.png",
+  floorCellN: "/textures/floor_cell_normal.png",
+  floorYard: "/textures/floor_yard.png",
+  floorYardN: "/textures/floor_yard_normal.png",
+  wood: "/textures/wood_old.png",
+  woodN: "/textures/wood_old_normal.png",
+  water: "/textures/wet_drain.png",
+  waterN: "/textures/wet_drain_normal.png",
+} as const;
+
 function useMaterials() {
+  const t = useTexture(TEX);
   return useMemo(() => {
     const mk = (color: string, roughness: number, metalness: number) =>
       new THREE.MeshStandardMaterial({ color, roughness, metalness });
+
+    // 타일 반복 설정. albedo만 sRGB(법선맵은 기본 선형 유지). 넓은 면에 이음매 없이 깔린다.
+    //   ⚠️ 각 소스 텍스처는 한 가지 repeat로만 쓰인다(공유해도 충돌 없음). repeat는 1차 근사값 —
+    //      면 크기 대비 밀도는 화면 보고 튜닝.
+    const tile = (map: THREE.Texture, rx: number, ry: number, srgb = false) => {
+      map.wrapS = map.wrapT = THREE.RepeatWrapping;
+      map.repeat.set(rx, ry);
+      map.anisotropy = 4;
+      if (srgb) map.colorSpace = THREE.SRGBColorSpace;
+      map.needsUpdate = true;
+      return map;
+    };
+    // 텍스처 재질: albedo는 흰색 곱(텍스처 톤 그대로 노출), normalMap으로 요철.
+    const mkTex = (
+      map: THREE.Texture,
+      normalMap: THREE.Texture,
+      rx: number,
+      ry: number,
+      roughness: number,
+      metalness: number,
+    ) =>
+      new THREE.MeshStandardMaterial({
+        color: "#ffffff",
+        map: tile(map, rx, ry, true),
+        normalMap: tile(normalMap, rx, ry),
+        roughness,
+        metalness,
+      });
+
+    // 창살: 방 구분 색은 유지하고(map 안 물림) normalMap으로 금속 요철만 얹는다.
+    const bar = (color: string) =>
+      new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.45,
+        metalness: 0.6,
+        normalMap: tile(t.steelN, 1, 2),
+      });
+
     return {
-      concrete: mk("#3b3f47", 0.95, 0),
-      steel: mk("#9aa0aa", 0.4, 0.8),
-      gateBlue: mk("#2b52c8", 0.45, 0.5), // 정문(파란 철문)
-      slab: mk("#454a54", 0.9, 0.05), // 2층 바닥·계단
+      concrete: mkTex(t.concrete, t.concreteN, 2, 2, 0.95, 0),
+      steel: mkTex(t.steel, t.steelN, 1, 2, 0.4, 0.8),
+      gateBlue: mkTex(t.gate, t.gateN, 2, 2, 0.45, 0.5), // 정문(파란 철문)
+      slab: mkTex(t.floorCell, t.floorCellN, 4, 4, 0.9, 0.05), // 2층 바닥·계단
+      wood: mkTex(t.wood, t.woodN, 1, 1, 0.8, 0.05),
+      water: mkTex(t.water, t.waterN, 1, 1, 0.15, 0.1),
+      // 베이스 지면(연병장 톤). 100×76 면이라 촘촘히 반복한다.
+      ground: mkTex(t.floorYard, t.floorYardN, 25, 19, 1, 0),
+      // 구역 바닥은 방별 색을 유지해야 해서 map 대신 normalMap만 얹는다(색 틴트 보존).
+      floorN: tile(t.floorCellN, 4, 4),
+
       bunk: mk("#4a5568", 0.7, 0.1),
       porcelain: mk("#cbd5e1", 0.5, 0.05),
-      wood: mk("#6b5636", 0.8, 0.05),
       table: mk("#8a9099", 0.6, 0.2),
       hoop: mk("#d9542b", 0.5, 0.3),
       rust: mk("#7a4a32", 0.9, 0.2),
       red: mk("#b4322a", 0.6, 0.2),
       paper: mk("#d8d4c8", 1, 0),
-      water: mk("#2a3b4a", 0.15, 0.1),
       ball: mk("#c96a2b", 0.85, 0),
       // 감방 철창 색(방마다 다르게 칠해 어느 방인지 한눈에 구분한다)
-      barA: mk("#b1573e", 0.45, 0.6), // 1-1 녹슨 주황
-      barB: mk("#c9a23b", 0.45, 0.6), // 1-2 노랑
-      barC: mk("#4e9153", 0.45, 0.6), // 1-3 초록
-      barD: mk("#7b6ab8", 0.45, 0.6), // 1-4 보라
+      barA: bar("#b1573e"), // 1-1 녹슨 주황
+      barB: bar("#c9a23b"), // 1-2 노랑
+      barC: bar("#4e9153"), // 1-3 초록
+      barD: bar("#7b6ab8"), // 1-4 보라
       // 별관 문 철창 색(방 액센트와 같은 계열)
-      barLaundry: mk("#5b83b8", 0.45, 0.6), // 세탁실 파랑
-      barWork: mk("#b8963b", 0.45, 0.6), // 작업장 황토
-      barMed: mk("#4fa08b", 0.45, 0.6), // 의무실 청록
+      barLaundry: bar("#5b83b8"), // 세탁실 파랑
+      barWork: bar("#b8963b"), // 작업장 황토
+      barMed: bar("#4fa08b"), // 의무실 청록
       woodWarm: mk("#7c5f3a", 0.75, 0.05), // 식당 식탁
       laundryBlue: mk("#7d97b8", 0.5, 0.3), // 세탁기 몸통
       mint: mk("#7fb8a5", 0.7, 0), // 의무실 담요
@@ -76,7 +138,7 @@ function useMaterials() {
       crate: mk("#6f5836", 0.85, 0), // 나무 상자
       silhouette: new THREE.MeshBasicMaterial({ color: "#0e1119" }), // 담장 밖 원경(불투명·무광)
     };
-  }, []);
+  }, [t]);
 }
 
 const cx = (b: Building) => (b.rect.x0 + b.rect.x1) / 2;
@@ -848,12 +910,11 @@ export default function GameMap() {
   return (
     <group>
       {/* 베이스 지면(개활지) — 건물 바닥은 이 위에 색으로 얹힌다. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} material={mat.ground} receiveShadow>
         <planeGeometry args={[100, 76]} />
-        <meshStandardMaterial color="#20242c" roughness={1} metalness={0} />
       </mesh>
 
-      {/* 구역 바닥(건물별 색 — 연병장은 모래색) */}
+      {/* 구역 바닥(건물별 색 — 연병장은 모래색). 색 틴트는 유지하고 콘크리트 법선맵으로 요철만 얹는다. */}
       {FLOORS.map((f, i) => (
         <mesh
           key={i}
@@ -862,7 +923,7 @@ export default function GameMap() {
           receiveShadow
         >
           <planeGeometry args={[Math.abs(f.rect.x1 - f.rect.x0), Math.abs(f.rect.z1 - f.rect.z0)]} />
-          <meshStandardMaterial color={f.color} roughness={1} metalness={0} />
+          <meshStandardMaterial color={f.color} normalMap={mat.floorN} roughness={1} metalness={0} />
         </mesh>
       ))}
 

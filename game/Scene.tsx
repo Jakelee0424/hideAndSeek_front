@@ -35,7 +35,9 @@ export default function Scene() {
       {/* 순찰 서치라이트 + 붉은 경광(순찰 중에만 켜진다) */}
       <PatrolLight />
 
-      <GameMap />
+      <Suspense fallback={null}>
+        <GameMap />
+      </Suspense>
       <Suspense fallback={null}>
         <LocalPlayer />
         <RemotePlayers />
