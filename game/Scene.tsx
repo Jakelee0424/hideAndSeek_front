@@ -5,6 +5,7 @@ import GameMap from "./Map";
 import LocalPlayer from "./LocalPlayer";
 import RemotePlayers from "./RemotePlayers";
 import PatrolLight from "./PatrolLight";
+import PatrolGuards from "./PatrolGuards";
 
 // 조명은 밝은 기본값(2026-07-23 밤 톤 실험은 "너무 어둡다"로 롤백). 순찰 연출(PatrolLight)과
 // 단서 발광·비네트는 조명과 무관해 그대로 둔다.
@@ -32,8 +33,11 @@ export default function Scene() {
         shadow-camera-bottom={-15}
       />
 
-      {/* 순찰 서치라이트 + 붉은 경광(순찰 중에만 켜진다) */}
+      {/* 순찰 경광(예고·순찰 중에만 켜진다) */}
       <PatrolLight />
+
+      {/* 순찰 간수 + 시야 부채꼴. 적발 판정이 이 시야로 결정된다 */}
+      <PatrolGuards />
 
       <Suspense fallback={null}>
         <GameMap />

@@ -41,6 +41,11 @@ interface GameStore {
   patrolEndsAt: number | null;
   /** 이번 순찰에서 걸린 사람의 id. 아무도 안 걸렸으면 null. */
   patrolCaughtId: string | null;
+  /**
+   * 지금 도는 간수 수. 좌표는 20Hz라 store에 담지 않고 worldState 버퍼로 흘린다 —
+   * 여기 있는 건 "몇 명을 렌더할지"뿐이라 순찰이 시작·종료할 때만 바뀐다.
+   */
+  guardCount: number;
   /** 내가 배정된 감방 id("A"~"D"). 스폰 위치로 판정한다(서버 스냅샷이 오면 그 값이 덮는다). */
   myCell: string | null;
   /**
@@ -75,6 +80,8 @@ interface GameStore {
   applyReady: (ids: string[]) => void;
   /** 서버가 순찰 상태를 실어 보낼 때만 호출. 남은 시간을 로컬 종료 시각으로 환산해 둔다. */
   setPatrol: (state: PatrolState, remainMs: number, caughtId: string | null) => void;
+  /** 순찰 간수 수. 값이 바뀔 때만 실제로 set 한다(매 tick 불린다). */
+  setGuardCount: (n: number) => void;
   /** 내 감방 확정(+점유 기록). 서버 스냅샷이 오면 초기(로컬 스폰) 추정을 덮는다. */
   setMyCell: (cell: string) => void;
   /** 협동 구제 개방 반영. 서버가 열렸다고 알려줄 때만 호출(한 번 열리면 계속 열림). */
@@ -103,6 +110,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   patrol: "NONE",
   patrolEndsAt: null,
   patrolCaughtId: null,
+  guardCount: 0,
   myCell: null,
   cellOwners: {},
   assistOpen: false,
@@ -153,6 +161,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       patrolCaughtId: caughtId,
     }),
 
+  // 매 tick 불리지만 값이 그대로면 set을 건너뛴다 — 안 그러면 20Hz로 리렌더가 돈다.
+  setGuardCount: (n) => {
+    if (get().guardCount !== n) set({ guardCount: n });
+  },
+
   reset: (roomId, myId, nick) =>
     set({
       roomId,
@@ -174,6 +187,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       patrol: "NONE",
       patrolEndsAt: null,
       patrolCaughtId: null,
+      guardCount: 0,
       myCell: null,
       cellOwners: {},
       assistOpen: false,
@@ -194,6 +208,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       votes: {},
       aiId: null,
       readys: {},
+      guardCount: 0,
       myCell: null,
       cellOwners: {},
       assistOpen: false,

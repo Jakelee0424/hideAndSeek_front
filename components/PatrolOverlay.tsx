@@ -2,8 +2,13 @@
 // 정기 순찰 경고. 서버가 순찰 상태를 실어 보내면 뜬다.
 //
 // 규칙상 조작을 막지 않는다 — 멈추는 건 플레이어 몫이다. 그래서 이 화면은 시야를 가리지도,
-// 클릭을 먹지도 않는다(pointer-events-none). 대신 "지금 움직이면 걸린다"를 놓칠 수 없게
+// 클릭을 먹지도 않는다(pointer-events-none). 대신 순찰이 도는 동안임을 놓칠 수 없게
 // 화면 가장자리를 붉게 물들이고 남은 시간을 크게 센다.
+//
+// ⚠️ 적발 조건이 바뀌었다. 예전엔 "순찰 중 맵 어디서든 움직이면"이라 이 배너가 곧 규칙이었지만,
+//    지금은 **간수 시야 안에서** 움직여야 걸린다. 시야 밖이면 뛰어도 안전하다 —
+//    실제로 어디가 위험한지는 바닥의 노란 부채꼴(PatrolGuards)이 알려 준다.
+//    그래서 여기 문구는 "움직이지 마라"가 아니라 "시야를 피해라"여야 한다.
 //
 // 카운트다운은 서버가 준 남은 시간에서 로컬로 진행한다(단계 카운트다운과 같은 규약).
 import { useEffect, useRef, useState } from "react";
@@ -93,15 +98,15 @@ export default function PatrolOverlay() {
               {active ? "순 찰 중" : "순찰이 다가온다"}
             </p>
             <p className="mt-1 text-2xl font-black text-white">
-              {active ? "움직이지 마라" : "멈출 준비"}
+              {active ? "간수를 피해라" : "숨을 준비"}
             </p>
             <p className="mt-1 font-mono text-3xl tabular-nums text-white/90">
               {remainSec}
             </p>
             <p className="mt-1 text-[11px] text-white/50">
               {active
-                ? "이동·상호작용이 감지되면 자정이 앞당겨진다"
-                : "곧 순찰이 시작된다"}
+                ? "노란 부채꼴 안에서 움직이면 자정이 앞당겨진다"
+                : "곧 간수가 복도를 돈다"}
             </p>
           </div>
         </div>
@@ -117,7 +122,7 @@ export default function PatrolOverlay() {
               들켰다
             </p>
             <p className="mt-1 text-xl font-black text-white">
-              {caughtNick}의 움직임이 발각됐다
+              {caughtNick}의 움직임이 간수에게 들켰다
             </p>
             <p className="mt-1 text-sm text-rose-200/80">자정이 앞당겨진다</p>
           </div>

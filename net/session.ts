@@ -146,6 +146,9 @@ export function joinRoom(
               snap.patrolCaughtId ?? null,
             );
         }
+        // 간수는 "몇 명인지"만 store로 올린다. 좌표는 worldState.apply가 이미 버퍼에
+        // 넣었다 — 여기서 store에 담으면 20Hz로 리렌더가 돈다.
+        useGameStore.getState().setGuardCount(snap.guards?.length ?? 0);
       },
     },
   );

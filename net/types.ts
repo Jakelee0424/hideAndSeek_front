@@ -23,6 +23,27 @@ export interface PlayerTick {
   y: number;
 }
 
+/**
+ * 서버 → 클라: 순찰 간수 하나의 tick 상태. 순찰이 도는 동안에만 온다.
+ *
+ * 예전 순찰은 "도는 동안 맵 어디서 움직이든 적발"이라 화면에 그릴 게 배너뿐이었다.
+ * 지금은 간수가 실제로 복도를 걷고 **그 시야 안에서** 움직여야만 걸리므로,
+ * 어디를 보고 있는지가 곧 규칙이다.
+ *
+ * range/fovDeg는 서버 설정(game.patrol.view-*)이 그대로 실려 온다 — 상수를 여기 베껴 두면
+ * 서버 값을 바꿨을 때 화면의 부채꼴만 옛 값으로 남는다(이 프로젝트가 여러 번 겪은 이중 관리).
+ */
+export interface GuardTick {
+  x: number;
+  z: number;
+  /** PlayerTick과 같은 규약(+z가 0). */
+  rot: number;
+  /** 시야 거리(m). */
+  range: number;
+  /** 시야각(도, 부채꼴 전체 폭). */
+  fovDeg: number;
+}
+
 /** 서버 → 클라: 정적 정보(닉네임). 입·퇴장으로 로스터가 바뀔 때만 전송된다. */
 export interface RosterEntry {
   id: string;
@@ -90,6 +111,11 @@ export interface WorldSnapshot {
   patrolRemainMs?: number | null;
   /** 이번 순찰에서 걸린 사람의 id. 아무도 안 걸렸으면 없다. */
   patrolCaughtId?: string | null;
+  /**
+   * 순찰 간수들. 순찰이 도는 동안 **매 tick** 온다(그 밖에는 생략).
+   * states와 같은 핫패스라 store가 아니라 worldState 버퍼로 흘린다(20Hz 리렌더 방지).
+   */
+  guards?: GuardTick[] | null;
   /**
    * 협동 구제 개방. 개인 감방 탈출이 오래 걸리면 서버가 열어 준다 — 열리면 복도에서
    * 남의 감방 자물쇠를 대신 풀 수 있다(canInteract). 로스터와 같은 규약 — 열리는 순간·

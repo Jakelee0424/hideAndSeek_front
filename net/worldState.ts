@@ -30,6 +30,13 @@ export interface Transform {
 
 const buffers = new Map<string, Sample[]>();
 
+// ── 순찰 간수 ──────────────────────────────────────────────────────
+// 플레이어 버퍼(buffers)와 **따로** 둔다. ids()를 로컬 플레이어의 대인 충돌 예측이 순회하는데,
+// 거기 간수가 섞이면 통과해야 할 대상에 부딪힌다.
+const guardBuffers: Sample[][] = [];
+/** 서버가 실어 준 시야 파라미터(순찰 중 고정값). 부채꼴을 그릴 때 쓴다. */
+let guardView = { range: 0, fovDeg: 0 };
+
 export const worldState = {
   /** 서버 스냅샷의 tick 상태를 수신 시각과 함께 버퍼에 반영. 사라진 플레이어 버퍼는 제거. */
   apply(snap: WorldSnapshot): void {
@@ -51,6 +58,39 @@ export const worldState = {
     for (const id of [...buffers.keys()]) {
       if (!seen.has(id)) buffers.delete(id);
     }
+
+    // 간수는 순찰이 도는 동안에만 실려 온다. 안 오면 순찰이 끝난 것이므로 버퍼를 비운다.
+    if (snap.guards && snap.guards.length > 0) {
+      guardView = { range: snap.guards[0].range, fovDeg: snap.guards[0].fovDeg };
+      guardBuffers.length = snap.guards.length;
+      snap.guards.forEach((g, i) => {
+        let buf = guardBuffers[i];
+        if (!buf) {
+          buf = [];
+          guardBuffers[i] = buf;
+        }
+        buf.push({ t, x: g.x, z: g.z, rot: g.rot, y: 0 });
+        const cutoff = t - MAX_BUFFER_MS;
+        while (buf.length > 2 && buf[0].t < cutoff) buf.shift();
+      });
+    } else if (guardBuffers.length > 0) {
+      guardBuffers.length = 0;
+    }
+  },
+
+  /** 지금 보고된 간수 수(순찰이 없으면 0). 리렌더 트리거는 store의 guardCount가 맡는다. */
+  guardCount(): number {
+    return guardBuffers.length;
+  },
+
+  /** 서버가 준 시야 파라미터. 부채꼴 크기를 여기서 받아 그린다. */
+  guardView(): { range: number; fovDeg: number } {
+    return guardView;
+  },
+
+  /** 간수 i의 보간 트랜스폼. 플레이어와 같은 지연·같은 방식이라 함께 움직여도 어긋나지 않는다. */
+  sampleGuard(index: number, renderTime: number): Transform | null {
+    return sampleBuffer(guardBuffers[index], renderTime);
   },
 
   /**
@@ -60,32 +100,7 @@ export const worldState = {
    *   - 그 사이 → 감싸는 두 샘플 선형 보간
    */
   sample(id: string, renderTime: number): Transform | null {
-    const buf = buffers.get(id);
-    if (!buf || buf.length === 0) return null;
-
-    const first = buf[0];
-    if (renderTime <= first.t) {
-      return { x: first.x, z: first.z, rotationY: first.rot, y: first.y };
-    }
-    const last = buf[buf.length - 1];
-    if (renderTime >= last.t) {
-      return { x: last.x, z: last.z, rotationY: last.rot, y: last.y };
-    }
-    for (let i = 0; i < buf.length - 1; i++) {
-      const a = buf[i];
-      const b = buf[i + 1];
-      if (renderTime >= a.t && renderTime <= b.t) {
-        const span = b.t - a.t;
-        const alpha = span > 0 ? (renderTime - a.t) / span : 0;
-        return {
-          x: a.x + (b.x - a.x) * alpha,
-          z: a.z + (b.z - a.z) * alpha,
-          rotationY: lerpAngle(a.rot, b.rot, alpha),
-          y: a.y + (b.y - a.y) * alpha,
-        };
-      }
-    }
-    return { x: last.x, z: last.z, rotationY: last.rot, y: last.y };
+    return sampleBuffer(buffers.get(id), renderTime);
   },
 
   /** 버퍼에 있는 플레이어 id들(로컬 플레이어의 대인 충돌 예측이 순회한다). */
@@ -95,8 +110,38 @@ export const worldState = {
 
   clear(): void {
     buffers.clear();
+    guardBuffers.length = 0;
   },
 };
+
+/** 버퍼 하나를 renderTime에서 샘플링. 플레이어·간수가 같은 보간을 쓰도록 여기로 묶었다. */
+function sampleBuffer(buf: Sample[] | undefined, renderTime: number): Transform | null {
+  if (!buf || buf.length === 0) return null;
+
+  const first = buf[0];
+  if (renderTime <= first.t) {
+    return { x: first.x, z: first.z, rotationY: first.rot, y: first.y };
+  }
+  const last = buf[buf.length - 1];
+  if (renderTime >= last.t) {
+    return { x: last.x, z: last.z, rotationY: last.rot, y: last.y };
+  }
+  for (let i = 0; i < buf.length - 1; i++) {
+    const a = buf[i];
+    const b = buf[i + 1];
+    if (renderTime >= a.t && renderTime <= b.t) {
+      const span = b.t - a.t;
+      const alpha = span > 0 ? (renderTime - a.t) / span : 0;
+      return {
+        x: a.x + (b.x - a.x) * alpha,
+        z: a.z + (b.z - a.z) * alpha,
+        rotationY: lerpAngle(a.rot, b.rot, alpha),
+        y: a.y + (b.y - a.y) * alpha,
+      };
+    }
+  }
+  return { x: last.x, z: last.z, rotationY: last.rot, y: last.y };
+}
 
 /** 최단 경로 각도 보간(래핑 처리). */
 function lerpAngle(a: number, b: number, t: number): number {
