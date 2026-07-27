@@ -46,7 +46,7 @@ function pbrFor(name: string): { roughness: number; metalness: number; emissive:
   return { roughness, metalness, emissive, glass };
 }
 
-type Src = "kit" | "t1" | "t2" | "t3";
+type Src = "kit" | "t1" | "t2" | "t3" | "rooms" | "locks";
 interface Def {
   key: string;
   src: Src;
@@ -87,18 +87,62 @@ const DEFS: Def[] = [
   { key: "vent", src: "t3", prefixes: ["vent_"] },
   { key: "rope", src: "t3", prefixes: ["rope_"] },
   { key: "ladder3", src: "t3", prefixes: ["ladder_"] },
+  // 방 채우기 세트(rooms)·자물쇠 변형(locks)은 익스포트 때 이름을 `그룹__부품`으로 박아 뒀다.
+  // → 접두사는 반드시 `__`까지 쓴다(`drain_pipe_`는 `drain_pipe_flange_`까지 먹는다).
+  { key: "toolRack", src: "rooms", prefixes: ["tool_rack__"] },
+  { key: "partsBins", src: "rooms", prefixes: ["parts_bins__"] },
+  { key: "jumpsuitCabinet", src: "rooms", prefixes: ["jumpsuit_cabinet__"] },
+  { key: "cellShelf", src: "rooms", prefixes: ["cell_shelf__"] },
+  { key: "wallGraffiti", src: "rooms", prefixes: ["wall_graffiti__"] },
+  { key: "smallWindow", src: "rooms", prefixes: ["small_window__"] },
+  { key: "mirrorTowel", src: "rooms", prefixes: ["mirror_towel_rail__"] },
+  { key: "canteenTableA", src: "rooms", prefixes: ["canteen_table_1__"] },
+  { key: "canteenTableB", src: "rooms", prefixes: ["canteen_table_2__"] },
+  { key: "fountain", src: "rooms", prefixes: ["drinking_fountain__"] },
+  { key: "razorFence", src: "rooms", prefixes: ["razor_fence__"] },
+  { key: "ivStand", src: "rooms", prefixes: ["iv_stand__"] },
+  { key: "curtainPartition", src: "rooms", prefixes: ["curtain_partition__"] },
+  { key: "laundryBasket", src: "rooms", prefixes: ["laundry_basket__"] },
+  // ⚠️ rooms의 serving_line·tray_stack은 일부러 뺐다 — tier1 cafeteria 프리팹이 이미
+  //    배식대(counter_)와 식판 더미(tray_stack)를 들고 있어 그대로 놓으면 겹친다.
+  // 자물쇠 9종: 게임의 잠금과 1:1 (감방 4 + 별관 색/문자/숫자 3 + 정문 + 배수관)
+  { key: "lockCellA", src: "locks", prefixes: ["cell_lock_1__"] },
+  { key: "lockCellB", src: "locks", prefixes: ["cell_lock_2__"] },
+  { key: "lockCellC", src: "locks", prefixes: ["cell_lock_3__"] },
+  { key: "lockCellD", src: "locks", prefixes: ["cell_lock_4__"] },
+  { key: "lockColor", src: "locks", prefixes: ["annex_lock_color__"] },
+  { key: "lockLetter", src: "locks", prefixes: ["annex_lock_letter__"] },
+  { key: "lockNumber", src: "locks", prefixes: ["annex_lock_number__"] },
+  { key: "lockGate", src: "locks", prefixes: ["front_gate_lock__"] },
+  { key: "lockDrain", src: "locks", prefixes: ["drain_lock__"] },
 ];
 
 export type AssetKey = (typeof DEFS)[number]["key"];
+
+// OBJ/MTL은 텍스처를 싣지 않는다(tier1~3도 마찬가지). 원본이 캔버스 텍스처의 **알파**로
+// 모양을 내던 면은 맵이 빠지면 불투명한 판때기로 남아 오히려 흉하다 — 통째로 뺀다.
+//   - chainlink_panel: 철망. 빼도 기둥·레일·철조망 코일이 남아 울타리로 읽힌다
+//     (남기면 연병장에 회색 벽이 하나 선다)
+//   - graffiti_decal / mirror_smudge: 벽 낙서·거울 얼룩. 무늬가 없으면 회색 얼룩일 뿐이다
+const SKIP_UNTEXTURED = /(chainlink_panel|graffiti_decal|mirror_smudge)$/;
+
+// 프리팹 분해는 소스 6개(메시 1500+)를 전수 순회하는 무거운 작업이다. useLoader 캐시 덕에
+// 소스 그룹은 앱 전체에 하나뿐이므로, 그걸 키로 한 번만 만들고 컴포넌트끼리 공유한다
+// (자물쇠마다 이 훅을 부르는데, 캐시가 없으면 자물쇠 수만큼 되풀이된다).
+const prefabCache = new WeakMap<THREE.Group, Record<string, THREE.Group>>();
 
 export function usePrisonAssets(): Record<string, THREE.Group> {
   const kit = useObj("/models/prison-escape-assets.obj");
   const t1 = useObj("/models/prison-tier1.obj");
   const t2 = useObj("/models/prison-tier2.obj");
   const t3 = useObj("/models/prison-tier3.obj");
+  const rooms = useObj("/models/prison-rooms.obj");
+  const locks = useObj("/models/prison-locks.obj");
 
   return useMemo(() => {
-    const srcs: Record<Src, THREE.Group> = { kit, t1, t2, t3 };
+    const cached = prefabCache.get(kit);
+    if (cached) return cached;
+    const srcs: Record<Src, THREE.Group> = { kit, t1, t2, t3, rooms, locks };
     const cache = new Map<string, THREE.MeshStandardMaterial>();
     const toStd = (src: THREE.Material): THREE.MeshStandardMaterial => {
       const name = src.name || "default";
@@ -126,6 +170,7 @@ export function usePrisonAssets(): Record<string, THREE.Group> {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
         if (!def.prefixes.some((p) => o.name === p || o.name.startsWith(p))) return;
+        if (SKIP_UNTEXTURED.test(o.name)) return;
         const m = mesh.clone();
         m.material = Array.isArray(mesh.material) ? mesh.material.map(toStd) : toStd(mesh.material);
         m.castShadow = true;
@@ -141,8 +186,9 @@ export function usePrisonAssets(): Record<string, THREE.Group> {
       }
       out[def.key] = g;
     }
+    prefabCache.set(kit, out);
     return out;
-  }, [kit, t1, t2, t3]);
+  }, [kit, t1, t2, t3, rooms, locks]);
 }
 
 /** 프리팹 하나를 복제해 배치. 지오메트리·재질 공유(정적 소품). */

@@ -45,6 +45,47 @@ export default function PrisonProps() {
         );
       })}
 
+      {/* 감방 안 채우기(방 채우기 세트): 뒷벽에 창·선반·거울, 옆벽에 낙서.
+          뒷벽 x 배치는 이미 자리 잡은 것들을 피한다 —
+          x0+1.4 이층침대(옆벽), x0+8(=중앙) 표식 낙인(Map.tsx), x1-1.3 세면변기. */}
+      {CELLS.map((c) => {
+        const b = getBuilding(c.id)!;
+        const doorS = b.openings?.[0]?.edge === "S";
+        const backZ = doorS ? b.rect.z1 - 0.28 : b.rect.z0 + 0.28; // 뒷벽 안쪽 면
+        const faceIn = doorS ? Math.PI : 0; // 뒷벽 물건이 방 안을 보게
+        const frontZ = doorS ? b.rect.z0 + 2.6 : b.rect.z1 - 2.6; // 문 쪽
+        const x0 = b.rect.x0;
+        return (
+          <group key={`fill-${c.id}`}>
+            <AssetProp template={a.smallWindow} position={[x0 + 4, 0, backZ]} rotationY={faceIn} />
+            <AssetProp template={a.cellShelf} position={[x0 + 11, 0, backZ]} rotationY={faceIn} />
+            <AssetProp template={a.mirrorTowel} position={[x0 + 13.2, 0, backZ]} rotationY={faceIn} />
+            {/* 낙서는 동쪽 벽(문 쪽) — 서쪽 벽엔 이층침대가 붙어 있다 */}
+            <AssetProp template={a.wallGraffiti} position={[b.rect.x1 - 0.28, 0, frontZ]} rotationY={-Math.PI / 2} />
+          </group>
+        );
+      })}
+
+      {/* 방별 채우기(작업장·세탁실·의무실·식당). 전부 시각 전용이라 서버 충돌과 무관 —
+          걸어서 통과되므로 되도록 벽에 붙이고 동선 한가운데는 비운다. */}
+      {/* 작업장(6..22 × 6..14, 문 N) */}
+      <AssetProp template={a.toolRack} position={[10, 0, 6.4]} />
+      <AssetProp template={a.partsBins} position={[21.4, 0, 8.5]} rotationY={-Math.PI / 2} />
+      {/* 세탁실(22..38 × 20..28, 문 S) */}
+      <AssetProp template={a.jumpsuitCabinet} position={[25, 0, 27.5]} rotationY={Math.PI} />
+      <AssetProp template={a.laundryBasket} position={[35.8, 0, 21.4]} />
+      {/* 의무실(22..38 × 6..14, 문 N) */}
+      <AssetProp template={a.ivStand} position={[23.8, 0, 8.4]} />
+      <AssetProp template={a.curtainPartition} position={[26.4, 0, 9.6]} />
+      {/* 식당(6..22 × 20..28, 문 S) — 동편이 비어 있어 식탁 둘을 더 놓는다 */}
+      <AssetProp template={a.canteenTableA} position={[19, 0, 22.6]} rotationY={Math.PI / 2} />
+      <AssetProp template={a.canteenTableB} position={[19, 0, 25.4]} rotationY={Math.PI / 2} />
+      {/* 연결 복도 남벽(출입구 x=0은 비운다) */}
+      <AssetProp template={a.fountain} position={[-4, 0, 14.4]} />
+      {/* 연병장: 정문 앞을 좁히는 철망 두 짝 */}
+      <AssetProp template={a.razorFence} position={[-6.5, 0, -26]} />
+      <AssetProp template={a.razorFence} position={[6.5, 0, -26]} />
+
       {/* 감방 번호판: 문 옆 벽(복도 쪽), 높이 1.6 */}
       {DOOR_META.filter((d) => d.id.startsWith("cell-")).map((d) => {
         const [ax, az] = d.at;

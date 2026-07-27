@@ -1,0 +1,343 @@
+"use client";
+// 힌트 오브젝트(note/doc/gate-note)의 물체별 3D 비주얼.
+//
+// 예전엔 모든 쪽지가 똑같은 납작한 종이 박스였다 — 배식표든 모래 글씨든 감시탑 각인이든
+// 전부 같은 모양이라 정체성이 뭉개졌다. 여기서 id별로 성격에 맞는 메시로 분화한다.
+//   - 종이류(안내문·지시서·라벨·처방·젖은 쪽지): 세워 둔 종이/카드. 감옥 밤이 어두워
+//     찾기 힘드니 발광(emissive/glow)을 읽는 면에 얹는다(자물쇠와 같은 유도 방식).
+//   - 환경물(각인 금속판·배식판·긁힌 벽·모래 글씨·감시탑 돌기둥): 바닥에 붙이거나 세운다.
+//
+// 좌표 계약(서버 Interactables.java와 맞춰야 하는 것)은 interactables.ts에 그대로 두고,
+// 여기선 "id → 어떻게 보일지"만 든다(symbols.ts가 UI 자원을 분리한 것과 같은 방침).
+import type { JSX } from "react";
+
+// 힌트 오브젝트가 놓인 group의 로컬 원점은 지면 위 0.6m다(interactables position y=0.6).
+// 바닥에 깔아야 하는 환경물은 이만큼 내려 지면에 붙인다.
+const GROUND_Y = -0.6;
+
+export type NoteKind =
+  | "notice" // 벽에 핀으로 꽂은 안내문
+  | "clipboard" // 클립보드에 끼운 지시서
+  | "label" // 약장용 작은 라벨 카드
+  | "chart" // 괘선 그어진 기록지
+  | "wet" // 물에 젖어 축 늘어진 쪽지
+  | "plate" // 각인된 금속판
+  | "tray" // 뒷면에 낙서된 배식판
+  | "scratch" // 긁힌 자국이 남은 벽 조각
+  | "sand" // 바닥 모래에 그은 글씨
+  | "stone"; // 감시탑 돌기둥의 각인
+
+// id → 비주얼 종류. 매핑 없으면 기본 안내문.
+const NOTE_KIND: Record<string, NoteKind> = {
+  "note-laundry1": "notice", // 세탁 안내문
+  "note-laundry2": "wet", // 젖은 쪽지
+  "note-work1": "clipboard", // 작업 지시서
+  "note-work2": "plate", // 공구함 각인
+  "note-med1": "label", // 약장 라벨
+  "note-med2": "chart", // 처방 기록
+  "doc-cafe": "tray", // 배식표 뒷면 낙서
+  "doc-hall": "scratch", // 복도 벽의 긁힌 흔적
+  "doc-yard": "sand", // 담벼락 밑 모래 글씨
+  "gate-note1": "stone", // 서쪽 감시탑 각인
+  "gate-note2": "stone", // 동쪽 감시탑 각인
+};
+
+export function noteKind(id: string): NoteKind {
+  return NOTE_KIND[id] ?? "notice";
+}
+
+interface VisualProps {
+  emissive: string; // 근접/평상시 발광색
+  glow: number; // 발광 세기(어둠 속 유도)
+}
+
+// 읽는 면(종이·라벨 표면)에 얹는 은은한 발광 재질 값 공통.
+function readMat(color: string, emissive: string, glow: number) {
+  return { color, emissive, emissiveIntensity: glow };
+}
+
+// ── 종이류 ────────────────────────────────────────────────────────
+// 벽에 핀으로 꽂은 안내문: 살짝 기운 종이 + 위쪽 붉은 핀.
+function Notice({ emissive, glow }: VisualProps): JSX.Element {
+  return (
+    <group rotation={[-0.15, 0, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.5, 0.02, 0.7]} />
+        <meshStandardMaterial
+          {...readMat("#efe7d3", emissive, glow)}
+          metalness={0.05}
+          roughness={0.85}
+        />
+      </mesh>
+      {/* 위쪽 압정 */}
+      <mesh position={[0, 0.04, 0.3]}>
+        <sphereGeometry args={[0.045, 12, 12]} />
+        <meshStandardMaterial color="#dc2626" metalness={0.3} roughness={0.4} />
+      </mesh>
+    </group>
+  );
+}
+
+// 클립보드에 끼운 작업 지시서: 짙은 판 + 종이 + 위쪽 금속 클립.
+function Clipboard({ emissive, glow }: VisualProps): JSX.Element {
+  return (
+    <group rotation={[-0.2, 0, 0]}>
+      {/* 판 */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.56, 0.03, 0.8]} />
+        <meshStandardMaterial color="#3a3f47" metalness={0.4} roughness={0.6} />
+      </mesh>
+      {/* 종이 */}
+      <mesh position={[0, 0.026, -0.02]} receiveShadow>
+        <boxGeometry args={[0.46, 0.02, 0.66]} />
+        <meshStandardMaterial
+          {...readMat("#f2ede0", emissive, glow)}
+          metalness={0.05}
+          roughness={0.85}
+        />
+      </mesh>
+      {/* 클립 */}
+      <mesh position={[0, 0.05, 0.34]}>
+        <boxGeometry args={[0.18, 0.05, 0.07]} />
+        <meshStandardMaterial color="#c7ccd4" metalness={0.9} roughness={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+// 약장 라벨: 작고 흰 임상용 카드 + 위쪽 청록 띠.
+function Label({ emissive, glow }: VisualProps): JSX.Element {
+  return (
+    <group rotation={[-0.12, 0, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.44, 0.02, 0.52]} />
+        <meshStandardMaterial
+          {...readMat("#f8fafc", emissive, glow)}
+          metalness={0.05}
+          roughness={0.8}
+        />
+      </mesh>
+      {/* 위쪽 청록 띠(의무실 색) */}
+      <mesh position={[0, 0.012, 0.2]}>
+        <boxGeometry args={[0.44, 0.021, 0.1]} />
+        <meshStandardMaterial color="#14b8a6" roughness={0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+// 처방 기록지: 괘선(가로줄) 몇 줄 그어진 종이.
+function Chart({ emissive, glow }: VisualProps): JSX.Element {
+  const lines = [-0.22, -0.07, 0.08, 0.23];
+  return (
+    <group rotation={[-0.15, 0, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.5, 0.02, 0.7]} />
+        <meshStandardMaterial
+          {...readMat("#f4f1e8", emissive, glow)}
+          metalness={0.05}
+          roughness={0.85}
+        />
+      </mesh>
+      {lines.map((z) => (
+        <mesh key={z} position={[0, 0.012, z]}>
+          <boxGeometry args={[0.4, 0.006, 0.012]} />
+          <meshStandardMaterial color="#94a3b8" roughness={0.9} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// 젖은 쪽지: 물에 젖어 색이 죽고 축 늘어진(더 눕고 낮은) 종이 + 얼룩.
+function Wet({ emissive, glow }: VisualProps): JSX.Element {
+  return (
+    <group rotation={[-0.7, 0, 0]} position={[0, -0.15, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.48, 0.02, 0.66]} />
+        <meshStandardMaterial
+          {...readMat("#6b7a8f", emissive, glow * 0.7)}
+          metalness={0.1}
+          roughness={0.95}
+        />
+      </mesh>
+      {/* 번진 물얼룩 */}
+      <mesh position={[0.06, 0.012, -0.08]}>
+        <boxGeometry args={[0.22, 0.006, 0.24]} />
+        <meshStandardMaterial color="#455160" roughness={1} />
+      </mesh>
+    </group>
+  );
+}
+
+// ── 환경물 ────────────────────────────────────────────────────────
+// 공구함 각인: 세워 둔 금속판 + 파인 홈(글자 자국).
+function Plate({ emissive, glow }: VisualProps): JSX.Element {
+  return (
+    <group position={[0, -0.1, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.58, 0.44, 0.05]} />
+        <meshStandardMaterial
+          color="#9aa2ad"
+          metalness={0.9}
+          roughness={0.4}
+          emissive={emissive}
+          emissiveIntensity={glow * 0.4}
+        />
+      </mesh>
+      {/* 각인 홈 4획(T _ _ L 느낌의 파인 자국) */}
+      {[-0.18, -0.06, 0.06, 0.18].map((x) => (
+        <mesh key={x} position={[x, 0, 0.026]}>
+          <boxGeometry args={[0.07, 0.24, 0.02]} />
+          <meshStandardMaterial color="#2a2e35" metalness={0.6} roughness={0.7} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// 배식판: 칸이 파인 금속 식판을 바닥에 눕히고, 위쪽 면에 낙서 자국.
+function Tray({ emissive, glow }: VisualProps): JSX.Element {
+  return (
+    <group position={[0, GROUND_Y + 0.04, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.74, 0.06, 0.52]} />
+        <meshStandardMaterial
+          color="#b8bec8"
+          metalness={0.85}
+          roughness={0.4}
+          emissive={emissive}
+          emissiveIntensity={glow * 0.4}
+        />
+      </mesh>
+      {/* 파인 칸 3개 */}
+      {[-0.22, 0.02, 0.26].map((x, i) => (
+        <mesh key={x} position={[x, 0.032, 0]}>
+          <boxGeometry args={[i === 1 ? 0.18 : 0.16, 0.02, 0.36]} />
+          <meshStandardMaterial color="#7d838d" metalness={0.7} roughness={0.5} />
+        </mesh>
+      ))}
+      {/* 낙서 자국(뒷면 긁힘) */}
+      <mesh position={[0.28, 0.034, 0.16]} rotation={[0, 0.5, 0]}>
+        <boxGeometry args={[0.2, 0.006, 0.012]} />
+        <meshStandardMaterial color="#2a2e35" roughness={0.9} />
+      </mesh>
+    </group>
+  );
+}
+
+// 복도 벽의 긁힌 흔적: 세운 콘크리트 조각에 밝은 사선 긁힘 몇 줄.
+function Scratch({ emissive, glow }: VisualProps): JSX.Element {
+  return (
+    <group position={[0, -0.05, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.6, 0.52, 0.07]} />
+        <meshStandardMaterial
+          color="#7b7f86"
+          roughness={0.95}
+          emissive={emissive}
+          emissiveIntensity={glow * 0.5}
+        />
+      </mesh>
+      {/* 사선 긁힘 */}
+      {[
+        { x: -0.14, r: 0.5 },
+        { x: 0.02, r: 0.35 },
+        { x: 0.16, r: 0.6 },
+      ].map((s) => (
+        <mesh key={s.x} position={[s.x, 0, 0.037]} rotation={[0, 0, s.r]}>
+          <boxGeometry args={[0.02, 0.4, 0.012]} />
+          <meshStandardMaterial
+            color="#d2d6db"
+            roughness={0.6}
+            emissive={emissive}
+            emissiveIntensity={glow * 0.4}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// 담벼락 밑 모래 글씨: 바닥에 깐 모래 판 + 파인 글씨 홈. 눕는다(수평).
+function Sand({ emissive, glow }: VisualProps): JSX.Element {
+  return (
+    <group position={[0, GROUND_Y + 0.015, 0]}>
+      <mesh receiveShadow>
+        <boxGeometry args={[0.92, 0.03, 0.72]} />
+        <meshStandardMaterial
+          color="#c2a878"
+          roughness={1}
+          emissive={emissive}
+          emissiveIntensity={glow * 0.45}
+        />
+      </mesh>
+      {/* 손가락으로 그은 홈 */}
+      {[
+        { x: -0.2, z: 0, r: 0.3 },
+        { x: 0.05, z: -0.1, r: -0.4 },
+        { x: 0.24, z: 0.12, r: 0.2 },
+      ].map((g) => (
+        <mesh key={`${g.x}-${g.z}`} position={[g.x, 0.016, g.z]} rotation={[0, g.r, 0]}>
+          <boxGeometry args={[0.28, 0.008, 0.03]} />
+          <meshStandardMaterial color="#8a734f" roughness={1} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// 감시탑 돌기둥의 각인: 세운 화강암 블록 + 앞면에 파인 각인 자리.
+function Stone({ emissive, glow }: VisualProps): JSX.Element {
+  return (
+    <group position={[0, GROUND_Y + 0.4, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.5, 0.8, 0.5]} />
+        <meshStandardMaterial
+          color="#6a6f77"
+          roughness={0.95}
+          metalness={0.05}
+          emissive={emissive}
+          emissiveIntensity={glow * 0.4}
+        />
+      </mesh>
+      {/* 각인 자리(앞면 파임) */}
+      <mesh position={[0, 0.05, 0.26]}>
+        <boxGeometry args={[0.34, 0.34, 0.03]} />
+        <meshStandardMaterial
+          color="#3c4046"
+          roughness={0.9}
+          emissive={emissive}
+          emissiveIntensity={glow * 0.6}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+const BUILDERS: Record<string, (p: VisualProps) => JSX.Element> = {
+  notice: Notice,
+  clipboard: Clipboard,
+  label: Label,
+  chart: Chart,
+  wet: Wet,
+  plate: Plate,
+  tray: Tray,
+  scratch: Scratch,
+  sand: Sand,
+  stone: Stone,
+};
+
+/** id에 맞는 힌트 물체 비주얼. 발광(emissive/glow)은 어둠 속 유도용으로 이어받는다. */
+export default function NoteVisual({
+  id,
+  emissive,
+  glow,
+}: {
+  id: string;
+  emissive: string;
+  glow: number;
+}): JSX.Element {
+  const Builder = BUILDERS[noteKind(id)] ?? Notice;
+  return <Builder emissive={emissive} glow={glow} />;
+}
