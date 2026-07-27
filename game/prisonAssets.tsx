@@ -18,40 +18,89 @@ function useObj(url: string): THREE.Group {
 }
 
 /**
- * 원본 에셋(prison-kit.js makeKit)의 공용 팔레트 값.
+ * 원본 에셋의 재질값 표(아티팩트 html + prison-kit.js에서 추출한 실제 값 65개).
  *
  * MTL은 metalness·emissive를 싣지 못한다 — 익스포터(three-d-stage)가 Kd/Ks/Ns/d만 쓴다.
- * 대신 **재질 이름은 그대로 남으므로** 이름으로 원본 값을 되찾는다. 이름으로 "추측"하던 걸
- * 원본 표로 바꾼 것이다(추측값은 실제로 어긋났다 — gold는 m 0.3인데 0.8을, wood는 0인데 0을
- * 주면서 roughness는 0.7 대신 0.85를 줬다).
+ * 대신 **재질 이름은 그대로 남으므로** 이름으로 원본 값을 되찾는다.
+ *
+ * ⚠️ 이걸 이름 키워드로 "추측"하면 안 된다. 씬에 환경맵이 없어서 metalness가 높으면 반사할
+ *    게 없어 **검게 죽는다** — 원본이 금속을 0~0.4로 낮게 잡은 이유다. 추측 시절엔
+ *    /steel|brass|gold/에 0.8을 줘서 침대 난간(steelDark, 원본 0.35)이 새까맣게 나왔다.
  *
  * roughness는 여기 없다 — MTL의 Ns에 원본이 그대로 들어 있다(Ns = (1-roughness)*200,
  * 실측: steel r0.45 → Ns 110 / gold r0.5 → Ns 100). toStd가 역산한다.
+ * 투명도도 여기 없다 — MTL의 d가 원본 opacity를 그대로 싣는다.
  */
-const KIT_MAT: Record<
+const ASSET_MAT: Record<
   string,
   { metalness: number; emissive?: string; emissiveIntensity?: number }
 > = {
-  gold: { metalness: 0.3 },
-  steel: { metalness: 0.4 },
-  steelD: { metalness: 0.4 },
+  basin_hollow: { metalness: 0.35 },
+  basket: { metalness: 0 },
   black: { metalness: 0.3 },
-  white: { metalness: 0.15 },
+  blue: { metalness: 0 },
+  brass: { metalness: 0.4 },
+  cab_inner: { metalness: 0.2 },
+  cap: { metalness: 0.1 },
+  chainlink_mesh: { metalness: 0.4 },
   concrete: { metalness: 0 },
   concreteD: { metalness: 0 },
-  wood: { metalness: 0 },
-  woodD: { metalness: 0 },
-  orange: { metalness: 0.1 },
-  red: { metalness: 0.1 },
-  redGlow: { metalness: 0, emissive: "#ff2a2a", emissiveIntensity: 0.7 },
+  console_screen: { metalness: 0, emissive: "#0a2a15", emissiveIntensity: 0.5 },
+  curtain: { metalness: 0 },
+  curtain_hem: { metalness: 0 },
+  curtain_mesh: { metalness: 0 },
+  cyan: { metalness: 0, emissive: "#22b6da", emissiveIntensity: 0.9 },
+  darkGlass: { metalness: 0.4 },
+  drip_chamber: { metalness: 0 },
+  flood_glow: { metalness: 0, emissive: "#ffe487", emissiveIntensity: 1 },
+  food_greens: { metalness: 0 },
+  food_mash: { metalness: 0 },
+  food_stew: { metalness: 0 },
+  frame_void: { metalness: 0.2 },
+  glass: { metalness: 0.25 },
+  gold: { metalness: 0.3 },
+  graffiti_decal: { metalness: 0 },
   green: { metalness: 0.1 },
   greenGlow: { metalness: 0, emissive: "#39d05f", emissiveIntensity: 0.8 },
-  glass: { metalness: 0.25 },
-  darkGlass: { metalness: 0.4 },
-  cyan: { metalness: 0, emissive: "#22b6da", emissiveIntensity: 0.9 },
-  yellow: { metalness: 0.1 },
-  blue: { metalness: 0 },
+  heat_lamp: { metalness: 0.1, emissive: "#e07a1e", emissiveIntensity: 0.85 },
+  iv_bag: { metalness: 0 },
+  iv_fluid: { metalness: 0 },
+  iv_tube: { metalness: 0 },
+  jumpsuit: { metalness: 0 },
+  ledRed: { metalness: 0, emissive: "#ff2a2a", emissiveIntensity: 0.6 },
+  letter_wheel_face: { metalness: 0.3 },
+  mattress: { metalness: 0 },
+  mirror: { metalness: 0.85 },
+  mirror_smudge: { metalness: 0.3 },
+  number_dial_face: { metalness: 0.3 },
+  orange: { metalness: 0.1 },
+  pillow: { metalness: 0 },
+  porcelain: { metalness: 0 },
+  puddle: { metalness: 0.2 },
+  red: { metalness: 0.1 },
+  redGlow: { metalness: 0, emissive: "#ff2a2a", emissiveIntensity: 0.7 },
   rubber: { metalness: 0.1 },
+  rust: { metalness: 0.2 },
+  rustSteel: { metalness: 0.3 },
+  searchlight_glow: { metalness: 0, emissive: "#ffe487", emissiveIntensity: 1 },
+  skin: { metalness: 0 },
+  sky_beyond: { metalness: 0, emissive: "#4a6b88", emissiveIntensity: 0.25 },
+  soap: { metalness: 0 },
+  spill: { metalness: 0 },
+  steel: { metalness: 0.4 },
+  steelD: { metalness: 0.4 },
+  steelDark: { metalness: 0.35 },
+  suit_split: { metalness: 0 },
+  towel: { metalness: 0 },
+  uniform: { metalness: 0.05 },
+  uniformD: { metalness: 0.05 },
+  warning_sign_face: { metalness: 0 },
+  wheel_window: { metalness: 0.4 },
+  white: { metalness: 0.15 },
+  wire: { metalness: 0.5 },
+  wood: { metalness: 0 },
+  woodD: { metalness: 0 },
+  yellow: { metalness: 0.1 },
 };
 
 /** 익스포터가 이름 충돌을 피하려 붙인 꼬리(`uniform_1`, `flood_glow_0`)를 떼고 원본 이름을 얻는다. */
@@ -72,8 +121,10 @@ function pbrFor(name: string): { roughness: number; metalness: number; emissive:
     roughness = 0.1;
     metalness = 0;
   } else if (/steel|metal|brass|gold|chrome|buckle|badge|ring|screw|bar\b/.test(n)) {
+    // ⚠️ 0.8을 주면 안 된다. 환경맵이 없어 반사할 게 없으므로 금속일수록 검게 죽는다.
+    //    원본 에셋의 금속 상한(0.4)에 맞춘다 — 표에 없는 재질도 최소한 원본 범위 안에 든다.
     roughness = 0.4;
-    metalness = 0.8;
+    metalness = 0.4;
   } else if (/wood/.test(n)) {
     roughness = 0.85;
     metalness = 0;
@@ -206,7 +257,7 @@ export function usePrisonAssets(): Record<string, THREE.Group> {
       const color =
         phong.color?.clone().convertLinearToSRGB() ?? new THREE.Color("#888888");
       const p = pbrFor(name);
-      const kit = KIT_MAT[baseName(name)];
+      const kit = ASSET_MAT[baseName(name)];
       // roughness는 MTL Ns에 원본이 그대로 있다(Ns = (1-roughness)*200). 이름으로 추측하지 말 것.
       const ns = (phong as { shininess?: number }).shininess;
       const roughness =
