@@ -10,8 +10,12 @@ import Basketball from "./Basketball";
 import PrisonProps from "./PrisonProps";
 import Interactable from "./Interactable";
 import { INTERACTABLES, isCellDoorOpen, useInteraction } from "./interactables";
+import { SYMBOLS, escapePlan } from "./escapePlan";
+import { symbolIcon } from "./symbols";
+import { useGameStore } from "@/store/gameStore";
 import {
   BUILDINGS,
+  CELLS,
   CELL_BLOCK_H,
   DOOR_META,
   FLOOR2_Y,
@@ -23,6 +27,7 @@ import {
   TOWERS,
   WALL_BOXES,
   WALL_H,
+  WALL_T,
   YARD,
   getBuilding,
   type Building,
@@ -49,6 +54,19 @@ const TEX = {
   waterN: "/textures/wet_drain_normal.png",
 } as const;
 
+// 타일 하나가 덮는 실제 길이(m). 밀도는 텍스처 repeat이 아니라 **지오메트리 UV를 면 크기에
+// 비례시켜** 잡는다(mat.box / mat.plane) — box·plane의 UV는 면 크기와 무관하게 0~1이라
+// repeat만 쓰면 5m 감방 벽과 84m 담장이 같은 횟수로 반복돼 긴 벽·큰 바닥이 늘어난다.
+// 이 값을 키우면 무늬가 커지고, 줄이면 촘촘해진다.
+// (값은 텍스처의 이음매 격자를 실측해서 잡았다 — 무늬 크기가 실제 치수로 그럴듯해야 한다)
+const TILE = {
+  concrete: 3, // 이음매가 타일당 3단 → 한 단 1m. 실내 벽 높이 3m가 정확히 1타일
+  floor: 2.5, // 이음매가 타일당 2×2 → 슬래브 한 장 1.25m
+  ground: 4, // 격자 없는 모래 노이즈(기존 100×76 ÷ 25×19 와 같은 밀도)
+  wood: 1.2, // 널 결이 타일당 8줄 → 널 폭 15cm
+  water: 2, // 배수로 물 자국
+} as const;
+
 function useMaterials() {
   const t = useTexture(TEX);
   return useMemo(() => {
@@ -56,15 +74,54 @@ function useMaterials() {
       new THREE.MeshStandardMaterial({ color, roughness, metalness });
 
     // 타일 반복 설정. albedo만 sRGB(법선맵은 기본 선형 유지). 넓은 면에 이음매 없이 깔린다.
-    //   ⚠️ 각 소스 텍스처는 한 가지 repeat로만 쓰인다(공유해도 충돌 없음). repeat는 1차 근사값 —
-    //      면 크기 대비 밀도는 화면 보고 튜닝.
+    //   ⚠️ 각 소스 텍스처는 한 가지 repeat로만 쓰인다(공유해도 충돌 없음).
+    //      월드 스케일 UV를 쓰는 재질은 repeat=1로 두고 TILE로 밀도를 정한다.
     const tile = (map: THREE.Texture, rx: number, ry: number, srgb = false) => {
       map.wrapS = map.wrapT = THREE.RepeatWrapping;
       map.repeat.set(rx, ry);
-      map.anisotropy = 4;
+      map.anisotropy = 8; // 월드 스케일 UV라 반복이 늘어 스치는 각도에서 더 필요해졌다
       if (srgb) map.colorSpace = THREE.SRGBColorSpace;
       map.needsUpdate = true;
       return map;
+    };
+
+    // ── 월드 스케일 UV 지오메트리 ────────────────────────────────────
+    // 면 크기 ÷ tile 만큼 UV를 늘려 둔다. 같은 치수는 캐시해 지오메트리를 공유한다.
+    // (캐시는 이 useMemo 안에 있어 GameMap 수명과 함께 간다 — 전역에 남기지 않는다)
+    const cache = new Map<string, THREE.BufferGeometry>();
+    const box = (w: number, h: number, d: number, tileM: number) => {
+      const key = `b|${w}|${h}|${d}|${tileM}`;
+      let g = cache.get(key);
+      if (!g) {
+        g = new THREE.BoxGeometry(w, h, d);
+        // BoxGeometry 정점 순서: +x, -x, +y, -y, +z, -z (면당 4개). 면마다 실제 크기가 다르다.
+        const faces: [number, number][] = [
+          [d, h], [d, h], [w, d], [w, d], [w, h], [w, h],
+        ];
+        const uv = g.attributes.uv as THREE.BufferAttribute;
+        faces.forEach(([fw, fh], f) => {
+          for (let i = f * 4; i < f * 4 + 4; i++) {
+            uv.setXY(i, uv.getX(i) * (fw / tileM), uv.getY(i) * (fh / tileM));
+          }
+        });
+        uv.needsUpdate = true;
+        cache.set(key, g);
+      }
+      return g;
+    };
+    const plane = (w: number, h: number, tileM: number) => {
+      const key = `p|${w}|${h}|${tileM}`;
+      let g = cache.get(key);
+      if (!g) {
+        g = new THREE.PlaneGeometry(w, h);
+        const uv = g.attributes.uv as THREE.BufferAttribute;
+        for (let i = 0; i < uv.count; i++) {
+          uv.setXY(i, uv.getX(i) * (w / tileM), uv.getY(i) * (h / tileM));
+        }
+        uv.needsUpdate = true;
+        cache.set(key, g);
+      }
+      return g;
     };
     // 텍스처 재질: albedo는 흰색 곱(텍스처 톤 그대로 노출), normalMap으로 요철.
     const mkTex = (
@@ -93,16 +150,19 @@ function useMaterials() {
       });
 
     return {
-      concrete: mkTex(t.concrete, t.concreteN, 2, 2, 0.95, 0),
-      steel: mkTex(t.steel, t.steelN, 1, 2, 0.4, 0.8),
-      gateBlue: mkTex(t.gate, t.gateN, 2, 2, 0.45, 0.5), // 정문(파란 철문)
-      slab: mkTex(t.floorCell, t.floorCellN, 4, 4, 0.9, 0.05), // 2층 바닥·계단
-      wood: mkTex(t.wood, t.woodN, 1, 1, 0.8, 0.05),
-      water: mkTex(t.water, t.waterN, 1, 1, 0.15, 0.1),
-      // 베이스 지면(연병장 톤). 100×76 면이라 촘촘히 반복한다.
-      ground: mkTex(t.floorYard, t.floorYardN, 25, 19, 1, 0),
+      // ⚠️ 아래 월드 스케일 UV 재질(repeat=1)을 쓰는 mesh는 반드시 mat.box / mat.plane 로
+      //    지오메트리를 만들 것. 그냥 <boxGeometry>를 쓰면 타일 하나가 면 전체로 늘어난다.
+      box,
+      plane,
+      concrete: mkTex(t.concrete, t.concreteN, 1, 1, 0.95, 0), // → mat.box(.., TILE.concrete)
+      steel: mkTex(t.steel, t.steelN, 1, 2, 0.4, 0.8), // 창살·기둥 등 가는 부재라 repeat 유지
+      gateBlue: mkTex(t.gate, t.gateN, 2, 2, 0.45, 0.5), // 정문(파란 철문) — 문짝 크기 고정
+      slab: mkTex(t.floorCell, t.floorCellN, 1, 1, 0.9, 0.05), // 2층 바닥·계단 → TILE.floor
+      wood: mkTex(t.wood, t.woodN, 1, 1, 0.8, 0.05), // → TILE.wood
+      water: mkTex(t.water, t.waterN, 1, 1, 0.15, 0.1), // → TILE.water
+      ground: mkTex(t.floorYard, t.floorYardN, 1, 1, 1, 0), // 베이스 지면 → TILE.ground
       // 구역 바닥은 방별 색을 유지해야 해서 map 대신 normalMap만 얹는다(색 틴트 보존).
-      floorN: tile(t.floorCellN, 4, 4),
+      floorN: tile(t.floorCellN, 1, 1),
 
       bunk: mk("#4a5568", 0.7, 0.1),
       porcelain: mk("#cbd5e1", 0.5, 0.05),
@@ -285,12 +345,11 @@ function SecondFloor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
         <mesh
           key={i}
           position={[(r.x0 + r.x1) / 2, FLOOR2_Y, (r.z0 + r.z1) / 2]}
+          geometry={mat.box(r.x1 - r.x0, 0.16, r.z1 - r.z0, TILE.floor)}
           material={mat.slab}
           castShadow
           receiveShadow
-        >
-          <boxGeometry args={[r.x1 - r.x0, 0.16, r.z1 - r.z0]} />
-        </mesh>
+        />
       ))}
       {/* 계단(복도 정중앙, 동쪽에서 올라 서쪽 랜딩으로) — 높이는 STAIR 램프와 같은 기울기 */}
       {Array.from({ length: nSteps }, (_, i) => {
@@ -299,12 +358,11 @@ function SecondFloor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
           <mesh
             key={i}
             position={[STAIR.x1 - (i + 0.5) * run, h / 2, stairZ]}
+            geometry={mat.box(run, h, stairW, TILE.floor)}
             material={mat.slab}
             castShadow
             receiveShadow
-          >
-            <boxGeometry args={[run, h, stairW]} />
-          </mesh>
+          />
         );
       })}
       {/* 계단 양측 난간(경사 손잡이 + 기둥). 충돌은 OBSTACLES의 전 높이 난간벽이 담당 */}
@@ -336,9 +394,12 @@ function SecondFloor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
       <TerraceRail x0={STAIR.x1} z0={STAIR.z0} x1={-6} z1={STAIR.z0} mat={mat.steel} />
       <TerraceRail x0={STAIR.x1} z0={STAIR.z1} x1={-6} z1={STAIR.z1} mat={mat.steel} />
       {/* 2층 복도 동측 막이(1층 연결 복도 아치 위) — OBSTACLES의 막이와 같은 자리 */}
-      <mesh position={[-6, (WALL_H + CELL_BLOCK_H) / 2, 17]} material={mat.concrete} castShadow>
-        <boxGeometry args={[0.4, CELL_BLOCK_H - WALL_H, 6.4]} />
-      </mesh>
+      <mesh
+        position={[-6, (WALL_H + CELL_BLOCK_H) / 2, 17]}
+        geometry={mat.box(0.4, CELL_BLOCK_H - WALL_H, 6.4, TILE.concrete)}
+        material={mat.concrete}
+        castShadow
+      />
       {/* 2층 감방 입구: 방 색깔의 활짝 열린 철창 문 */}
       {DOOR_META.filter((d) => d.id.startsWith("cell-")).map((d) => (
         <OpenCellGate key={d.id} meta={d} mat={barMatFor(mat, d.id)} />
@@ -380,9 +441,13 @@ function ToiletDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMateri
 function YardBench({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   return (
     <group>
-      <mesh position={[0, 0.45, 0]} material={mat.wood} castShadow receiveShadow>
-        <boxGeometry args={[4, 0.14, 0.7]} />
-      </mesh>
+      <mesh
+        position={[0, 0.45, 0]}
+        geometry={mat.box(4, 0.14, 0.7, TILE.wood)}
+        material={mat.wood}
+        castShadow
+        receiveShadow
+      />
       {[-1.6, 1.6].map((dx, i) => (
         <mesh key={i} position={[dx, 0.22, 0]} material={mat.steel} castShadow>
           <boxGeometry args={[0.12, 0.44, 0.6]} />
@@ -495,9 +560,13 @@ function CafeteriaDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMat
             <boxGeometry args={[3.2, 0.1, 1.4]} />
           </mesh>
           {[-0.95, 0.95].map((bz, i) => (
-            <mesh key={i} position={[0, 0.42, bz]} material={mat.wood} castShadow>
-              <boxGeometry args={[3, 0.1, 0.4]} />
-            </mesh>
+            <mesh
+              key={i}
+              position={[0, 0.42, bz]}
+              geometry={mat.box(3, 0.1, 0.4, TILE.wood)}
+              material={mat.wood}
+              castShadow
+            />
           ))}
         </group>
       ))}
@@ -518,17 +587,25 @@ function WorkshopDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMate
       <mesh position={[x - 4, 0.85, b.rect.z1 - 1.6]} material={mat.table} castShadow receiveShadow>
         <boxGeometry args={[6, 0.12, 1.4]} />
       </mesh>
-      <mesh position={[x, 1.9, b.rect.z1 - 0.25]} material={mat.wood} castShadow>
-        <boxGeometry args={[8, 1.6, 0.12]} />
-      </mesh>
+      <mesh
+        position={[x, 1.9, b.rect.z1 - 0.25]}
+        geometry={mat.box(8, 1.6, 0.12, TILE.wood)}
+        material={mat.wood}
+        castShadow
+      />
       {/* 공구함(작업대 위, 작업장 액센트 색) */}
       <mesh position={[x - 5.5, 1.15, b.rect.z1 - 1.6]} material={mat.barWork} castShadow>
         <boxGeometry args={[0.8, 0.45, 0.6]} />
       </mesh>
       {[-4, -2, 0, 2, 4].map((dx, i) => (
-        <mesh key={i} position={[x + dx, 0.5, b.rect.z0 + 1.6]} material={mat.wood} castShadow receiveShadow>
-          <boxGeometry args={[1, 1, 1]} />
-        </mesh>
+        <mesh
+          key={i}
+          position={[x + dx, 0.5, b.rect.z0 + 1.6]}
+          geometry={mat.box(1, 1, 1, TILE.wood)}
+          material={mat.wood}
+          castShadow
+          receiveShadow
+        />
       ))}
     </group>
   );
@@ -615,13 +692,20 @@ function MainGate({ mat }: { mat: ReturnType<typeof useMaterials> }) {
     <group>
       {/* 콘크리트 기둥 둘 + 상인방 */}
       {[-(half + 0.5), half + 0.5].map((gx, i) => (
-        <mesh key={i} position={[gx, 2.8, GATE.z]} material={mat.concrete} castShadow>
-          <boxGeometry args={[1, 5.6, 1]} />
-        </mesh>
+        <mesh
+          key={i}
+          position={[gx, 2.8, GATE.z]}
+          geometry={mat.box(1, 5.6, 1, TILE.concrete)}
+          material={mat.concrete}
+          castShadow
+        />
       ))}
-      <mesh position={[GATE.x, 5.4, GATE.z]} material={mat.concrete} castShadow>
-        <boxGeometry args={[GATE.width + 2, 0.8, 1]} />
-      </mesh>
+      <mesh
+        position={[GATE.x, 5.4, GATE.z]}
+        geometry={mat.box(GATE.width + 2, 0.8, 1, TILE.concrete)}
+        material={mat.concrete}
+        castShadow
+      />
       {/* 문짝(경첩 = 기둥 안쪽). 왼짝은 +x로, 오른짝은 -x로 뻗는다 */}
       <group ref={left} position={[-half, 0, GATE.z]}>{panel}</group>
       <group ref={right} position={[half, 0, GATE.z]} rotation={[0, Math.PI, 0]}>{panel}</group>
@@ -645,12 +729,19 @@ function DrainPipe({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   return (
     <group>
       {/* 콘크리트 헤드월(벽에 붙는 옹벽) + 상단 두겁 */}
-      <mesh position={[X, 1.6, wallZ - 0.15]} material={mat.concrete} castShadow receiveShadow>
-        <boxGeometry args={[5, 3.2, 0.5]} />
-      </mesh>
-      <mesh position={[X, 3.28, wallZ - 0.05]} material={mat.concrete} castShadow>
-        <boxGeometry args={[5.4, 0.3, 0.8]} />
-      </mesh>
+      <mesh
+        position={[X, 1.6, wallZ - 0.15]}
+        geometry={mat.box(5, 3.2, 0.5, TILE.concrete)}
+        material={mat.concrete}
+        castShadow
+        receiveShadow
+      />
+      <mesh
+        position={[X, 3.28, wallZ - 0.05]}
+        geometry={mat.box(5.4, 0.3, 0.8, TILE.concrete)}
+        material={mat.concrete}
+        castShadow
+      />
 
       {/* 컬버트 관 입구: 벽을 관통하는 관(열린 실린더) + 녹슨 테두리 링 + 안쪽 어둠.
           입구 앞면을 충돌면(z≈29.5)에 맞춰 캐릭터 몸과 겹치지 않게 벽 쪽으로 당긴다. */}
@@ -698,14 +789,111 @@ function DrainPipe({ mat }: { mat: ReturnType<typeof useMaterials> }) {
       </group>
 
       {/* 바닥 배수로(관 입구에서 남쪽으로 이어지는 얕은 콘크리트 트로프) + 물 자국 */}
-      <mesh position={[X, 0.03, wallZ - 2.4]} material={mat.concrete} receiveShadow>
-        <boxGeometry args={[2.2, 0.08, 4]} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[X, 0.08, wallZ - 2.4]} material={mat.water}>
-        <planeGeometry args={[1.3, 3.8]} />
-      </mesh>
+      <mesh
+        position={[X, 0.03, wallZ - 2.4]}
+        geometry={mat.box(2.2, 0.08, 4, TILE.concrete)}
+        material={mat.concrete}
+        receiveShadow
+      />
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[X, 0.08, wallZ - 2.4]}
+        geometry={mat.plane(1.3, 3.8, TILE.water)}
+        material={mat.water}
+      />
 
       <Label pos={[X, 3.9, wallZ - 0.9]} text="배수관" />
+    </group>
+  );
+}
+
+// ── 감방 벽 낙인(표식 데칼) ───────────────────────────────────────
+// 감방마다 배정된 표식(escapePlan)을 그 방 **문 맞은편 벽**에 크게 찍는다. 방에 들어서면
+// 정면으로 보이고, 복도에서도 창살 너머로 어렴풋이 읽힌다. 자기 표식을 HUD 칩으로만 알던 걸
+// 월드 안에서도 확인하게 해 준다(칩 아이콘 = 같은 표식의 작은 변형).
+//   ⚠️ 노출되는 건 **표식뿐**이다. 코드 자릿수(position)와 수(value)는 여전히 낙서 3곳과
+//      본인 HUD에만 있으므로, 남의 낙인을 봐도 그 사람 몫의 숫자는 계산할 수 없다
+//      — 채팅 공유를 강제하는 구조가 그대로 유지된다.
+const STAMP_PATHS = SYMBOLS.map((s) => symbolIcon(s, true)!);
+const STAMP_PAINT: [number, number, number] = [0xd8, 0xc7, 0xa4]; // 바랜 흰 페인트
+
+function CellStamps() {
+  const roomId = useGameStore((s) => s.roomId);
+  const texes = useTexture(STAMP_PATHS);
+  const plan = useMemo(() => escapePlan(roomId), [roomId]);
+
+  // 낙인 원본은 거의 검정(#1b1d22)이라 어두운 콘크리트 벽에서 뭉개진다. 알파(모양)만 살리고
+  // 색은 바랜 페인트로 바꿔 굽는다. 원본에서 밝은 얼룩은 알파를 더 깎아 벗겨진 자국으로 남긴다.
+  const painted = useMemo(
+    () =>
+      texes.map((t) => {
+        const img = t.image as HTMLImageElement;
+        const cv = document.createElement("canvas");
+        cv.width = img.width;
+        cv.height = img.height;
+        const ctx = cv.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        const data = ctx.getImageData(0, 0, cv.width, cv.height);
+        const p = data.data;
+        for (let i = 0; i < p.length; i += 4) {
+          const lum = (p[i] + p[i + 1] + p[i + 2]) / 765; // 0(잉크) ~ 1(벗겨진 얼룩)
+          [p[i], p[i + 1], p[i + 2]] = STAMP_PAINT;
+          p[i + 3] = Math.round(p[i + 3] * (1 - lum * 0.55));
+        }
+        ctx.putImageData(data, 0, 0);
+        const out = new THREE.CanvasTexture(cv);
+        out.colorSpace = THREE.SRGBColorSpace;
+        out.anisotropy = 8;
+        return out;
+      }),
+    [texes],
+  );
+
+  const mats = useMemo(
+    () =>
+      painted.map(
+        (map) =>
+          new THREE.MeshStandardMaterial({
+            map,
+            transparent: true,
+            opacity: 0.82, // 벽에 스며든 정도
+            depthWrite: false,
+            roughness: 1,
+            metalness: 0,
+            // 벽면과 같은 깊이라 z-fighting이 나기 쉽다. 0.02m 띄우고 오프셋도 건다.
+            polygonOffset: true,
+            polygonOffsetFactor: -2,
+            polygonOffsetUnits: -2,
+          }),
+      ),
+    [painted],
+  );
+
+  const SIZE = 2.2;
+  return (
+    <group>
+      {CELLS.map((c) => {
+        const clue = plan.clues[c.id];
+        if (!clue) return null;
+        const m = mats[SYMBOLS.indexOf(clue.symbol as (typeof SYMBOLS)[number])];
+        if (!m) return null;
+        // 문이 남쪽 벽이면 낙인은 북벽(맞은편), 문이 북쪽이면 남벽. 벽 안쪽 면에서 2cm 띄운다.
+        const doorS = DOOR_META.find((d) => d.id === `cell-${c.id}`)?.edge === "S";
+        const z = doorS
+          ? c.rect.z1 - WALL_T / 2 - 0.02
+          : c.rect.z0 + WALL_T / 2 + 0.02;
+        return (
+          <mesh
+            key={c.id}
+            position={[c.cx, 2.1, z]}
+            rotation={[0, doorS ? Math.PI : 0, 0]}
+            material={m}
+          >
+            {/* 데칼이라 UV는 0~1 그대로 둔다(월드 스케일 UV 대상이 아니다) */}
+            <planeGeometry args={[SIZE, SIZE]} />
+          </mesh>
+        );
+      })}
     </group>
   );
 }
@@ -910,34 +1098,43 @@ export default function GameMap() {
   return (
     <group>
       {/* 베이스 지면(개활지) — 건물 바닥은 이 위에 색으로 얹힌다. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} material={mat.ground} receiveShadow>
-        <planeGeometry args={[100, 76]} />
-      </mesh>
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -0.02, 0]}
+        geometry={mat.plane(100, 76, TILE.ground)}
+        material={mat.ground}
+        receiveShadow
+      />
 
-      {/* 구역 바닥(건물별 색 — 연병장은 모래색). 색 틴트는 유지하고 콘크리트 법선맵으로 요철만 얹는다. */}
+      {/* 구역 바닥(건물별 색 — 연병장은 모래색). 색 틴트는 유지하고 콘크리트 법선맵으로 요철만 얹는다.
+          방마다 크기가 크게 다르므로(감방 16×8 ↔ 연병장 84×36) UV도 크기에 비례시킨다. */}
       {FLOORS.map((f, i) => (
         <mesh
           key={i}
           rotation={[-Math.PI / 2, 0, 0]}
           position={[(f.rect.x0 + f.rect.x1) / 2, 0, (f.rect.z0 + f.rect.z1) / 2]}
+          geometry={mat.plane(
+            Math.abs(f.rect.x1 - f.rect.x0),
+            Math.abs(f.rect.z1 - f.rect.z0),
+            TILE.floor,
+          )}
           receiveShadow
         >
-          <planeGeometry args={[Math.abs(f.rect.x1 - f.rect.x0), Math.abs(f.rect.z1 - f.rect.z0)]} />
           <meshStandardMaterial color={f.color} normalMap={mat.floorN} roughness={1} metalness={0} />
         </mesh>
       ))}
 
-      {/* 콘크리트 벽(자동 생성) */}
+      {/* 콘크리트 벽(자동 생성). 감방 벽(5m)부터 외벽(84m)까지 길이가 제각각이라
+          월드 스케일 UV가 가장 크게 효과를 보는 자리다. */}
       {WALL_BOXES.map((w, i) => (
         <mesh
           key={i}
           position={[w.cx, w.h / 2, w.cz]}
+          geometry={mat.box(w.hx * 2, w.h, w.hz * 2, TILE.concrete)}
           material={mat.concrete}
           castShadow
           receiveShadow
-        >
-          <boxGeometry args={[w.hx * 2, w.h, w.hz * 2]} />
-        </mesh>
+        />
       ))}
 
       {/* 잠금 문(방향별, 방마다 다른 창살 색). 정문(gate-main)은 MainGate가 따로 그린다 */}
@@ -954,6 +1151,11 @@ export default function GameMap() {
       {/* OBJ 소품 키트(감방 침대·세면변기·CCTV·열쇠). 로드 전엔 아무것도 안 그린다. */}
       <Suspense fallback={null}>
         <PrisonProps />
+      </Suspense>
+
+      {/* 감방 벽 낙인(표식). 자체 Suspense — 낙인 8장 로딩이 맵 전체를 되돌리지 않게 한다. */}
+      <Suspense fallback={null}>
+        <CellStamps />
       </Suspense>
 
       {/* 라벨 */}
