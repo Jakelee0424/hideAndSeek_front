@@ -151,7 +151,8 @@ export const BUILDINGS: Building[] = [
   // 바닥에 방마다 다른 색을 깔아 구분한다(식당=따뜻한 갈색, 세탁실=파랑, 작업장=황토, 의무실=청록).
   { id: "cafeteria", kind: "room", label: "식당", rect: { x0: 6, z0: 20, x1: 22, z1: 28 }, color: "#4a4033", openings: [{ edge: "S", at: 14, width: 4 }] },
   { id: "laundry", kind: "room", label: "세탁실", rect: { x0: 22, z0: 20, x1: 38, z1: 28 }, color: "#33455c", openings: [{ edge: "S", at: 30, width: DOOR_W, door: "door-laundry" }, { edge: "W", at: 24, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
-  { id: "workshop", kind: "room", label: "작업장", rect: { x0: 6, z0: 6, x1: 22, z1: 14 }, color: "#4b452a", openings: [{ edge: "N", at: 14, width: DOOR_W, door: "door-work" }] },
+  // 작업장 문은 상시 개방(door 없음) — 방 안 퀴즈(quiz-work)를 풀어 표식을 드러내는 구조로 바뀌었다.
+  { id: "workshop", kind: "room", label: "작업장", rect: { x0: 6, z0: 6, x1: 22, z1: 14 }, color: "#4b452a", openings: [{ edge: "N", at: 14, width: DOOR_W }] },
   { id: "infirmary", kind: "room", label: "의무실", rect: { x0: 22, z0: 6, x1: 38, z1: 14 }, color: "#2f4a44", openings: [{ edge: "N", at: 30, width: DOOR_W, door: "door-med" }, { edge: "W", at: 10, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
   // 별관 복도: 동쪽 벽만 소유(서쪽은 연결 복도로 열림, 북/남은 방 벽이 담당).
   {

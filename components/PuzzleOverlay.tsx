@@ -15,6 +15,9 @@ import {
   type Puzzle,
 } from "@/game/interactables";
 import { sendDoor, sendSolve } from "@/net/stompClient";
+import { toolCode } from "@/game/toolCode";
+import { liarPuzzle } from "@/game/liarPuzzle";
+import { symbolIcon } from "@/game/symbols";
 import { useGameStore } from "@/store/gameStore";
 
 const COLORS: Record<ColorKey, { bg: string; ring: string; label: string }> = {
@@ -188,7 +191,175 @@ function PuzzleInput({
           clearError={clearError}
         />
       );
+    case "toolcode":
+      return (
+        <ToolCodeLock
+          // 표·답은 방 코드로 정해진다 — 같은 방이면 모두 같은 문제를 본다.
+          tc={toolCode(roomId)}
+          error={error}
+          onSolve={onSolve}
+          onFail={onFail}
+          clearError={clearError}
+        />
+      );
+    case "liar":
+      return (
+        <LiarLock
+          // 문제·정답은 방 코드로 정해진다 — 같은 방이면 모두 같은 문제를 본다.
+          lp={liarPuzzle(roomId)}
+          error={error}
+          onSolve={onSolve}
+          onFail={onFail}
+          clearError={clearError}
+        />
+      );
   }
+}
+
+// ── 거짓말 탐정(배수관 최종 퍼즐) ─────────────────────────────────
+// 화자들의 진술 + "진실은 정확히 K명" 제약으로 누가 진실인지 가려, 표식 4개를 진짜 자리에 배열.
+function LiarLock({
+  lp,
+  error,
+  onSolve,
+  onFail,
+  clearError,
+}: {
+  lp: ReturnType<typeof liarPuzzle>;
+  error: boolean;
+  onSolve: () => void;
+  onFail: () => void;
+  clearError: () => void;
+}) {
+  // 각 자리(1~4번째)에 놓인 표식의 인덱스(lp.symbols 기준). 초기값은 후보 순서 그대로.
+  const [slots, setSlots] = useState<number[]>(() =>
+    lp.symbols.map((_, i) => i),
+  );
+
+  function cycle(slot: number, dir: number) {
+    clearError();
+    setSlots((prev) => {
+      const next = [...prev];
+      next[slot] = (next[slot] + dir + lp.symbols.length) % lp.symbols.length;
+      return next;
+    });
+  }
+
+  const chosen = slots.map((i) => lp.symbols[i]);
+  const dup = new Set(chosen).size !== chosen.length;
+
+  return (
+    <>
+      {/* 제약 */}
+      <div className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+        진실을 말하는 사람은 <b>정확히 {lp.truthCount}명</b>, 나머지는 거짓말쟁이다.
+      </div>
+
+      {/* 화자 진술 */}
+      <div className="mb-4 space-y-1 rounded-lg border border-white/10 bg-black/30 p-3 text-sm">
+        {lp.speakers.map((s) => (
+          <div key={s.label} className="flex gap-2">
+            <span className="w-4 font-mono font-semibold text-sky-300">
+              {s.label}
+            </span>
+            <span className="text-slate-200">{s.text}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* 배열 입력 */}
+      <p className="mb-2 text-xs text-slate-400">표식 4개를 진짜 자리에 배열하라.</p>
+      <div className="mb-4 space-y-2">
+        {slots.map((symIdx, slot) => {
+          const sym = lp.symbols[symIdx];
+          const icon = symbolIcon(sym);
+          return (
+            <div key={slot} className="flex items-center gap-2">
+              <span className="w-12 text-xs text-slate-400">{slot + 1}번째</span>
+              <button
+                onClick={() => cycle(slot, -1)}
+                className="h-8 w-8 rounded bg-white/5 text-slate-300 hover:bg-white/10"
+              >
+                ◀
+              </button>
+              <div className="flex min-w-[96px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-black/40 px-2 py-1.5 text-sm">
+                {icon && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={icon}
+                    alt={sym}
+                    className="h-5 w-5 object-contain drop-shadow"
+                  />
+                )}
+                <span className="text-slate-100">{sym}</span>
+              </div>
+              <button
+                onClick={() => cycle(slot, +1)}
+                className="h-8 w-8 rounded bg-white/5 text-slate-300 hover:bg-white/10"
+              >
+                ▶
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {dup && (
+        <p className="mb-2 text-center text-xs text-amber-400">
+          같은 표식이 중복됐다 — 넷을 서로 다르게 놓아야 한다.
+        </p>
+      )}
+      <SubmitRow
+        error={error}
+        onSubmit={() => (chosen.join("") === lp.answer.join("") ? onSolve() : onFail())}
+      />
+    </>
+  );
+}
+
+// ── 도구 이름→숫자 퀴즈(작업장 비밀번호) ──────────────────────────
+// 규칙을 보여줄 표(도구 3개 + 값) + 물음표 도구 + 숫자 휠 입력. 답은 toolCode가 방 코드로 정한다.
+function ToolCodeLock({
+  tc,
+  error,
+  onSolve,
+  onFail,
+  clearError,
+}: {
+  tc: ReturnType<typeof toolCode>;
+  error: boolean;
+  onSolve: () => void;
+  onFail: () => void;
+  clearError: () => void;
+}) {
+  return (
+    <>
+      <div className="mb-4 space-y-1.5 rounded-lg border border-white/10 bg-black/30 p-3 font-mono text-base">
+        {tc.rows.map((r) => (
+          <div key={r.name} className="flex items-center justify-between">
+            <span className="text-slate-200">{r.name}</span>
+            <span className="text-slate-500">→</span>
+            <span className="w-12 text-right text-sky-300">{r.value}</span>
+          </div>
+        ))}
+        <div className="flex items-center justify-between border-t border-white/10 pt-1.5">
+          <span className="font-semibold text-amber-200">{tc.target}</span>
+          <span className="text-slate-500">→</span>
+          <span className="w-12 text-right text-amber-300">?</span>
+        </div>
+      </div>
+      <WheelLock
+        length={tc.digits}
+        mod={10}
+        render={(n) => String(n)}
+        check={(vals) => vals.join("") === tc.answer}
+        error={error}
+        onSolve={onSolve}
+        onFail={onFail}
+        clearError={clearError}
+      />
+    </>
+  );
 }
 
 // ── 회전 휠 자물쇠(숫자·문자 공용) ────────────────────────────────

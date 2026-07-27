@@ -15,7 +15,6 @@ import { symbolIcon } from "./symbols";
 import { useGameStore } from "@/store/gameStore";
 import {
   BUILDINGS,
-  CELLS,
   CELL_BLOCK_H,
   DOOR_META,
   FLOOR2_Y,
@@ -32,6 +31,7 @@ import {
   getBuilding,
   type Building,
   type DoorMeta,
+  type Edge,
 } from "./prisonLayout";
 
 const BAR_W = 0.08;
@@ -807,18 +807,26 @@ function DrainPipe({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   );
 }
 
-// ── 감방 벽 낙인(표식 데칼) ───────────────────────────────────────
-// 감방마다 배정된 표식(escapePlan)을 그 방 **문 맞은편 벽**에 크게 찍는다. 방에 들어서면
-// 정면으로 보이고, 복도에서도 창살 너머로 어렴풋이 읽힌다. 자기 표식을 HUD 칩으로만 알던 걸
-// 월드 안에서도 확인하게 해 준다(칩 아이콘 = 같은 표식의 작은 변형).
+// ── 별관 방 벽 낙인(표식 데칼) ─────────────────────────────────────
+// 예전엔 감방(A~D) 문 맞은편 벽에 표식을 상시 노출했으나, 이제 **별관 방 안 퀴즈를 풀면**
+// 그 방 벽에 표식이 나타나게 옮겼다(방식은 동일 — 벽에 크게 데칼로 찍는다).
+// 표식 자체는 escapePlan의 감방 clue(A~D)에서 가져온다 — 이래야 HUD·낙서·탈옥 코드가 쓰는
+// 4개 표식·값과 완전히 일관된다(별관 방을 감방 4개에 1:1로 대응시킨다).
 //   ⚠️ 노출되는 건 **표식뿐**이다. 코드 자릿수(position)와 수(value)는 여전히 낙서 3곳과
 //      본인 HUD에만 있으므로, 남의 낙인을 봐도 그 사람 몫의 숫자는 계산할 수 없다
 //      — 채팅 공유를 강제하는 구조가 그대로 유지된다.
 const STAMP_PATHS = SYMBOLS.map((s) => symbolIcon(s, true)!);
 const STAMP_PAINT: [number, number, number] = [0xd8, 0xc7, 0xa4]; // 바랜 흰 페인트
 
-function CellStamps() {
+// 별관 방 → (표식을 드러내는 퀴즈 id, 대응 감방 clue, 표식을 찍을 벽). wall은 입구 맞은편 벽이다.
+// 지금은 작업장만 구현. 식당(B)·의무실(C)·세탁실(D) 퀴즈가 추가되면 여기 등록한다.
+const ROOM_STAMPS: { room: string; quiz: string; cell: string; wall: Edge }[] = [
+  { room: "workshop", quiz: "quiz-work", cell: "A", wall: "S" }, // 문=북벽 → 표식은 남벽
+];
+
+function RoomStamps() {
   const roomId = useGameStore((s) => s.roomId);
+  const solved = useInteraction((s) => s.solved);
   const texes = useTexture(STAMP_PATHS);
   const plan = useMemo(() => escapePlan(roomId), [roomId]);
 
@@ -869,26 +877,32 @@ function CellStamps() {
     [painted],
   );
 
-  const SIZE = 2.2;
+  const SIZE = 2.0; // 별관 방 벽은 3m라, 벽 안(0.5~2.5)에 들어오게 크기·높이를 잡는다.
+  const CY = 1.5; // 낙인 중심 높이(벽 중앙)
+  const EPS = WALL_T / 2 + 0.02; // 벽 안쪽 면에서 2cm 띄운다.
   return (
     <group>
-      {CELLS.map((c) => {
-        const clue = plan.clues[c.id];
+      {ROOM_STAMPS.map((cfg) => {
+        if (!solved[cfg.quiz]) return null; // 퀴즈를 풀어야 표식이 나타난다(방 전체 공유 — 서버가 solved 브로드캐스트)
+        const clue = plan.clues[cfg.cell];
         if (!clue) return null;
         const m = mats[SYMBOLS.indexOf(clue.symbol as (typeof SYMBOLS)[number])];
-        if (!m) return null;
-        // 문이 남쪽 벽이면 낙인은 북벽(맞은편), 문이 북쪽이면 남벽. 벽 안쪽 면에서 2cm 띄운다.
-        const doorS = DOOR_META.find((d) => d.id === `cell-${c.id}`)?.edge === "S";
-        const z = doorS
-          ? c.rect.z1 - WALL_T / 2 - 0.02
-          : c.rect.z0 + WALL_T / 2 + 0.02;
+        const b = getBuilding(cfg.room);
+        if (!m || !b) return null;
+        const { x0, z0, x1, z1 } = b.rect;
+        const cx = (x0 + x1) / 2;
+        const cz = (z0 + z1) / 2;
+        // 벽면 안쪽을 향하도록 위치·회전을 정한다(planeGeometry 기본 법선 +z).
+        let pos: [number, number, number];
+        let rotY: number;
+        switch (cfg.wall) {
+          case "N": pos = [cx, CY, z1 - EPS]; rotY = Math.PI; break;
+          case "S": pos = [cx, CY, z0 + EPS]; rotY = 0; break;
+          case "W": pos = [x0 + EPS, CY, cz]; rotY = Math.PI / 2; break;
+          default: pos = [x1 - EPS, CY, cz]; rotY = -Math.PI / 2; break; // "E"
+        }
         return (
-          <mesh
-            key={c.id}
-            position={[c.cx, 2.1, z]}
-            rotation={[0, doorS ? Math.PI : 0, 0]}
-            material={m}
-          >
+          <mesh key={cfg.room} position={pos} rotation={[0, rotY, 0]} material={m}>
             {/* 데칼이라 UV는 0~1 그대로 둔다(월드 스케일 UV 대상이 아니다) */}
             <planeGeometry args={[SIZE, SIZE]} />
           </mesh>
@@ -1153,9 +1167,9 @@ export default function GameMap() {
         <PrisonProps />
       </Suspense>
 
-      {/* 감방 벽 낙인(표식). 자체 Suspense — 낙인 8장 로딩이 맵 전체를 되돌리지 않게 한다. */}
+      {/* 별관 방 벽 낙인(표식) — 방 안 퀴즈를 풀면 나타난다. 자체 Suspense(낙인 로딩이 맵을 안 되돌리게). */}
       <Suspense fallback={null}>
-        <CellStamps />
+        <RoomStamps />
       </Suspense>
 
       {/* 라벨 */}

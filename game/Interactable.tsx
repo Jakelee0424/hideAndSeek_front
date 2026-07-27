@@ -69,8 +69,9 @@ const LOCK_ASSET: Record<string, string> = {
   "lock-C": "lockCellC",
   "lock-D": "lockCellD",
   "lock-laundry": "lockColor",
-  "lock-work": "lockLetter",
   "lock-med": "lockNumber",
+  // 작업장 방 안 비밀번호 퀴즈 — 예전 작업장 문자 자물쇠(lockLetter) 프리팹을 재사용한다.
+  "quiz-work": "lockLetter",
   "gate-lock": "lockGate",
   "escape-pipe": "lockDrain",
 };

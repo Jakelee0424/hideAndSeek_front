@@ -31,13 +31,8 @@ export type NoteKind =
 const NOTE_KIND: Record<string, NoteKind> = {
   "note-laundry1": "notice", // 세탁 안내문
   "note-laundry2": "wet", // 젖은 쪽지
-  "note-work1": "clipboard", // 작업 지시서
-  "note-work2": "plate", // 공구함 각인
   "note-med1": "label", // 약장 라벨
   "note-med2": "chart", // 처방 기록
-  "doc-cafe": "tray", // 배식표 뒷면 낙서
-  "doc-hall": "scratch", // 복도 벽의 긁힌 흔적
-  "doc-yard": "sand", // 담벼락 밑 모래 글씨
   "gate-note1": "stone", // 서쪽 감시탑 각인
   "gate-note2": "stone", // 동쪽 감시탑 각인
 };

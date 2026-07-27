@@ -5,21 +5,18 @@
 // 감방문(cell-X)이 열린다. 어느 방에 어느 게임이 걸리는지는 방 코드로 정해진다
 // (minigameFor 참고) — 같은 방 사람들은 같은 배치를 본다.
 //
-// 지원 방(작업장·의무실·세탁실)은 방 "밖" 복도의 고전 자물쇠(문자·숫자·색 순서)로 연다 —
-// 시나리오 필수 관문이 아닌 보너스 콘텐츠다.
+// 감방을 나오면 별관 방(작업장·식당·의무실·세탁실)으로 간다. 각 방 안 퀴즈를 풀면 그 방
+// 벽에 표식이 드러난다(Map.RoomStamps) — 예전 감방 벽 표식을 방 안 퀴즈 보상으로 옮긴 것.
 //
-// 최종 탈옥문은 코드 입력(dial)이고, 코드·단서는 방 시드로 매판 랜덤 생성된다(escapePlan.ts).
-// 감방마다 지급되는 "표식 + 수"와 해독 조각 문서 3곳(식당·수감동 복도·연병장)을 모아야
-// 풀리는 협동 단계다 — 각자는 자기 자리 숫자만 계산할 수 있어 채팅 공유가 강제된다.
+// 최종 탈출구(배수관)는 "거짓말 탐정" 논리 퍼즐이다(liarPuzzle.ts): 화자들의 진술에서
+// 누가 진실인지 가려 표식 4개를 진짜 자리에 배열한다. 문제·정답은 방 시드로 매판 랜덤.
 //
 // 문 열림은 solved에서 파생한다(openDoorsFromSolved). solvedIds는 서버가 매 tick
 // 브로드캐스트하므로 협동 플레이에서 문이 모두에게 함께 열린다 — 별도 문 동기화 불필요.
 import { create } from "zustand";
-import { useGameStore } from "@/store/gameStore";
-import { docText, escapePlan } from "./escapePlan";
 import { assignMinigames } from "./minigames/registry";
 import type { MinigameDef } from "./minigames/types";
-import { CELLS, cellIdAt } from "./prisonLayout";
+import { cellIdAt } from "./prisonLayout";
 
 /** 색 순서 퍼즐에 쓰는 색 키. */
 export type ColorKey = "red" | "yellow" | "green" | "blue";
@@ -30,6 +27,8 @@ export type Puzzle =
   | { kind: "sequence"; palette: ColorKey[]; answer: ColorKey[] } // 색 버튼을 순서대로
   | { kind: "letters"; answer: string } // A~Z 문자 휠로 단어 맞추기(대문자)
   | { kind: "switches"; answer: boolean[] } // 레버 on(위)/off(아래) 패턴
+  | { kind: "toolcode" } // 도구 이름→숫자 표에서 규칙을 찾아 답을 맞춘다. 표·답은 방 코드로 배정(toolCode.ts)
+  | { kind: "liar" } // 거짓말 탐정 — 표식 4개를 진짜 자리에 배열. 문제·답은 방 코드로 배정(liarPuzzle.ts)
   | { kind: "minigame" }; // 아케이드 한 판. 어느 게임인지는 방 코드로 배정된다
 
 export type InteractableType = "lockbox" | "note";
@@ -54,8 +53,7 @@ export const INTERACT_RANGE = 2.2;
 // 감방 안 쪽지를 전부 없앤 뒤로는 "나가서 뭘 해야 하는지"를 알려줄 곳이 여기뿐이다.
 const CELL_LOCK_HINT =
   "간수가 압수한 게임기를 자물쇠에 박아 놨다. 한 판 이겨야 열린다. " +
-  "문이 열리면 이 방의 표식과 수가 지급된다(화면 왼쪽) — 탈옥문 네 자리 중 네 몫이다. " +
-  "셈법은 감방 밖 낙서 세 곳에 나뉘어 있고, 남의 자리는 남에게 물어야 한다.";
+  "문이 열리면 별관으로 나가라 — 방마다 놓인 퍼즐을 풀어야 그 방의 표식이 드러난다.";
 
 // ── 방별 상호작용 오브젝트 ────────────────────────────────────────
 // 좌표는 prisonLayout BUILDINGS(도면 배치) 기준. 수감동 감방(A~D) 안에는 자물쇠(미니게임) 하나뿐.
@@ -116,17 +114,17 @@ export const INTERACTABLES: Interactable[] = [
     opensDoor: "door-laundry",
   },
 
-  // ── 작업장(자물쇠 밖, 별관 복도 — 문 x14/z14 앞): 문자 "TOOL" ──
-  { id: "note-work1", type: "note", position: [9.5, 0.6, 15.6], label: "작업 지시서", hint: "네 글자 영어 단어를 새겨라." },
-  { id: "note-work2", type: "note", position: [18.5, 0.6, 15.6], label: "공구함 각인", hint: "‘연장’을 뜻하는 영어 (T _ _ L)" },
+  // ── 작업장(문은 상시 개방, 방 "안"에 퀴즈): 도구 이름→숫자 표 ──
+  // 개인 감방 미니게임으로 빠져나온 뒤 별관 방에서 퍼즐을 푼다. 풀면 이 방 벽에 표식이
+  // 나타난다(Map.RoomStamps). opensDoor가 없다 — 문을 여는 게 아니라 표식을 드러내는 관문이다.
+  // 표·답은 방 코드로 매판 랜덤이라 방마다 답이 다르다(toolCode.ts).
   {
-    id: "lock-work",
+    id: "quiz-work",
     type: "lockbox",
-    position: [14, 0.6, 15.6],
-    label: "작업장 문 자물쇠",
-    hint: "네 글자를 맞춰라.",
-    puzzle: { kind: "letters", answer: "TOOL" },
-    opensDoor: "door-work",
+    position: [14, 0.6, 9.5], // 작업장 안쪽(문은 북벽 x14/z14, 콘솔은 방 가운데)
+    label: "작업장 비밀번호",
+    hint: "도구 이름과 숫자 사이엔 규칙이 있다. 규칙을 찾아 물음표의 수를 맞춰라.",
+    puzzle: { kind: "toolcode" },
   },
 
   // ── 의무실(자물쇠 밖, 별관 복도 — 문 x30/z14 앞): 숫자 "451" ──
@@ -142,16 +140,8 @@ export const INTERACTABLES: Interactable[] = [
     opensDoor: "door-med",
   },
 
-  // ── 해독 조각 문서 3곳(식당·수감동 복도·연병장): 탈옥 코드의 셈법을 나눠 갖는다 ────
-  //
-  // 본문은 방 시드로 생성되고 doc-yard는 빈 감방 폴백(압수 기록)까지 실어야 해서,
-  // 여기엔 자리·라벨만 두고 hint는 findInteractable이 읽는 순간 escapePlan에서 채워 넣는다.
-  // ⚠️ 좌표·id는 서버 Interactables.java(봇 POI)와 일치시킬 것.
-  // (한때 고정 코드(1863) 단서를 잠긴 별관 방 안에 두는 안(4e5b12f)도 있었으나, 시드 랜덤
-  //  + 정보 쪼개기 재설계가 그 흐름을 대체한다 — 별관은 보너스 콘텐츠로 남는다.)
-  { id: "doc-cafe", type: "note", position: [14, 0.6, 24], label: "배식표 뒷면 낙서" },
-  { id: "doc-hall", type: "note", position: [-26, 0.6, 15], label: "복도 벽의 긁힌 흔적" },
-  { id: "doc-yard", type: "note", position: [-34, 0.6, -27.5], label: "담벼락 밑 모래 글씨" },
+  // (해독 조각 문서 3곳(doc-cafe/hall/yard)은 없앴다 — 옛 "표식+수 셈법 코드" 시스템의 일부였고,
+  //  표식의 진짜 자리를 그대로 적어 둬 새 배수관 거짓말 탐정 퍼즐의 정답을 통째로 흘렸다.)
 
   // ── 정문(함정): 닫힌 정문의 코드 자물쇠 + 감시탑 힌트 둘 ────────────────────────
   // 가장 눈에 띄는 출구라 다들 여기부터 노린다. 힌트를 모아 코드를 맞춰 정문을 여는 순간,
@@ -173,9 +163,9 @@ export const INTERACTABLES: Interactable[] = [
     type: "lockbox",
     position: [30, 0.6, 29], // 세탁실 뒤 북쪽 2m 순찰로(배수관 앞) — 진짜 최종 탈출구
     label: "배수관 잠금장치",
-    hint: "세탁실 뒤로 이어진 배수관. 네 자리. 각자의 표식과 낙서 세 곳의 셈법을 모아야 한다.",
-    // code는 자릿수 표시용 자리표시자 — 실제 코드는 findInteractable이 방 시드로 채워 넣는다.
-    puzzle: { kind: "dial", code: "0000" },
+    hint: "거짓말 탐정 — 화자들의 말에서 누가 진실인지 가려, 표식 4개를 진짜 자리에 배열하라.",
+    // 문제·정답은 방 시드로 매판 생성된다(liarPuzzle.ts). UI가 방 코드로 직접 만든다.
+    puzzle: { kind: "liar" },
     // 풀면 북벽 배수관 해치(pipe-hatch)가 열린다 — 진짜 탈출 연출.
     // 서버 Room.LOCK_OPENS에도 같은 매핑이 있다(봇이 근접만으로 해치를 열지 못하게 막는 효과도 겸한다).
     // ⚠️ 정문(gate-main)은 더 이상 탈출구가 아니라 함정이다 — 코드가 없고, 통과하면 재수감된다.
@@ -186,36 +176,9 @@ export const INTERACTABLES: Interactable[] = [
 /** 최종 탈출구(배수관) id. 이게 solved면 게임 클리어(진짜 탈출). */
 export const ESCAPE_PIPE_ID = "escape-pipe";
 
-/** 해독 조각 문서 id들(본문이 방 시드로 생성되는 것들). */
-const DOC_IDS = new Set(["doc-cafe", "doc-hall", "doc-yard"]);
-
-/**
- * 지금 "주인 없는" 감방 id들. 게임 시작 시 감방 안에서 목격된 사람(cellOwners)이 없거나,
- * 그 사람이 방을 나가 로스터에서 사라졌으면 빈 방이다 — 그 방의 표식·수는 doc-yard가
- * 압수 기록으로 대신 공개한다(인원이 적어도, 누가 이탈해도 판이 막히지 않게).
- */
-function emptyCells(): string[] {
-  const gs = useGameStore.getState();
-  const present = new Set(gs.playerIds);
-  return CELLS.filter((c) => {
-    const owner = gs.cellOwners[c.id];
-    return !owner || !present.has(owner);
-  }).map((c) => c.id);
-}
-
+/** id로 상호작용 오브젝트를 찾는다. 시드 의존 내용(퍼즐 문제)은 각 UI가 방 코드로 직접 만든다. */
 export function findInteractable(id: string | null): Interactable | undefined {
-  const base = id ? INTERACTABLES.find((it) => it.id === id) : undefined;
-  if (!base) return undefined;
-  // 시드 의존 내용(탈옥 코드·문서 본문)은 읽는 순간 주입한다 — 방 코드는 입장 후 확정되고,
-  // doc-yard의 압수 기록(빈 감방 폴백)은 인원 이탈에 따라 그때그때 달라진다.
-  const seed = useGameStore.getState().roomId;
-  if (base.id === ESCAPE_PIPE_ID) {
-    return { ...base, puzzle: { kind: "dial", code: escapePlan(seed).code } };
-  }
-  if (DOC_IDS.has(base.id)) {
-    return { ...base, hint: docText(escapePlan(seed), base.id, emptyCells()) };
-  }
-  return base;
+  return id ? INTERACTABLES.find((it) => it.id === id) : undefined;
 }
 
 // 문을 여는 자물쇠 목록(모듈 로드 시 1회 계산).
