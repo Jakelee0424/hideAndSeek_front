@@ -97,9 +97,21 @@ export const INTERACTABLES: Interactable[] = [
     opensDoor: "cell-D",
   },
 
-  // ── 세탁실(자물쇠 밖, 별관 복도 — 문 x30/z20 앞): 색 순서 [파랑·노랑·빨강·초록] ──
-  { id: "note-laundry1", type: "note", position: [25.5, 0.6, 18.4], label: "세탁 안내문", hint: "세제통을 그림 순서대로 눌러라." },
-  { id: "note-laundry2", type: "note", position: [34.5, 0.6, 18.4], label: "젖은 쪽지", hint: "하늘 → 태양 → 피 → 잔디" },
+  // ── 별관 문 자물쇠(세탁실·의무실)의 힌트 쪽지 4장 ─────────────────────────────
+  //
+  // 예전엔 쪽지가 전부 별관 복도 두 줄(z 15.6 / 18.4)에, 각자 제 자물쇠 4.5m 안에
+  // 붙어 있었다. 문 앞에 서면 좌우로 다 보여 탐색도 채팅 공유도 일어나지 않았다.
+  // 이제 네 구역(화장실·식당·연병장 동/서)으로 흩어 놓는다 —
+  // 한 자물쇠의 두 장이 맵 반대편이라 혼자 돌아서는 못 모은다.
+  //
+  // 배치 규칙:
+  //   - 잠긴 방(세탁실·의무실·감방) 안에는 두지 않는다. 그 방을 여는 열쇠가 그 방 안에 있으면 잠긴다.
+  //   - 봇이 순회하는 것(서버 Interactables.java POI)은 BotNav 웨이포인트에서 닿는 자리로.
+  //   ⚠️ 좌표는 서버 Interactables.java와 이중 관리 — 한쪽만 고치면 봇이 유령 지점으로 걸어간다.
+  //
+  // 세탁실: 색 순서 [파랑·노랑·빨강·초록]
+  { id: "note-laundry1", type: "note", position: [2, 0.6, 24.5], label: "세탁 안내문", hint: "세제통을 그림 순서대로 눌러라." },
+  { id: "note-laundry2", type: "note", position: [24, 0.6, -10], label: "젖은 쪽지", hint: "하늘 → 태양 → 피 → 잔디" },
   {
     id: "lock-laundry",
     type: "lockbox",
@@ -118,6 +130,7 @@ export const INTERACTABLES: Interactable[] = [
   // 개인 감방 미니게임으로 빠져나온 뒤 별관 방에서 퍼즐을 푼다. 풀면 이 방 벽에 표식이
   // 나타난다(Map.RoomStamps). opensDoor가 없다 — 문을 여는 게 아니라 표식을 드러내는 관문이다.
   // 표·답은 방 코드로 매판 랜덤이라 방마다 답이 다르다(toolCode.ts).
+  // (작업장 쪽지 note-work1·2는 문 자물쇠와 함께 없어졌다 — 답이 방 안 표에 있다.)
   {
     id: "quiz-work",
     type: "lockbox",
@@ -127,9 +140,9 @@ export const INTERACTABLES: Interactable[] = [
     puzzle: { kind: "toolcode" },
   },
 
-  // ── 의무실(자물쇠 밖, 별관 복도 — 문 x30/z14 앞): 숫자 "451" ──
-  { id: "note-med1", type: "note", position: [25.5, 0.6, 15.6], label: "약장 라벨", hint: "약장 번호 앞 두 자리 = 45" },
-  { id: "note-med2", type: "note", position: [34.5, 0.6, 15.6], label: "처방 기록", hint: "마지막 자리 = 1" },
+  // 의무실: 숫자 "451"
+  { id: "note-med1", type: "note", position: [10.5, 0.6, 22], label: "약장 라벨", hint: "약장 번호 앞 두 자리 = 45" },
+  { id: "note-med2", type: "note", position: [-24, 0.6, -18], label: "처방 기록", hint: "마지막 자리 = 1" },
   {
     id: "lock-med",
     type: "lockbox",

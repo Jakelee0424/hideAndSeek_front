@@ -20,8 +20,10 @@ function useObj(url: string): THREE.Group {
 // 재질명 키워드 → PBR 파라미터. 이름 전수 열거 대신 키워드로 분류(파일마다 재질명이 다양).
 function pbrFor(name: string): { roughness: number; metalness: number; emissive: boolean; glass: boolean } {
   const n = name.toLowerCase();
-  const glass = /glass|iv_bag/.test(n);
-  const emissive = /glow/.test(n);
+  const glass = /glass|iv_bag|window/.test(n);
+  // MTL은 emissive를 싣지 못한다(익스포터가 Kd/Ks/Ns/d만 쓴다) — 이름으로 되살린다.
+  // 실제 재질명 기준: flood_glow·greenGlow·searchlight_glow / console_screen / heat_lamp / ledRed.
+  const emissive = /glow|_screen|lamp|^led/.test(n);
   let roughness = 0.7;
   let metalness = 0.1;
   if (glass) {
@@ -46,7 +48,7 @@ function pbrFor(name: string): { roughness: number; metalness: number; emissive:
   return { roughness, metalness, emissive, glass };
 }
 
-type Src = "kit" | "t1" | "t2" | "t3" | "rooms" | "locks";
+type Src = "kit" | "t1" | "t2" | "t3" | "rooms" | "locks" | "guardObj";
 interface Def {
   key: string;
   src: Src;
@@ -77,7 +79,9 @@ const DEFS: Def[] = [
   { key: "floodTower", src: "t2", prefixes: ["light_tower_", "flood_lamp", "flood_glow"] },
   { key: "guardBooth", src: "t2", prefixes: ["booth_"] },
   // tier3
-  { key: "guard", src: "t3", prefixes: ["guard_"] },
+  // 간수는 전용 파일(prison-guard-robot)로 갈아 끼웠다. 파일 안에 이 인물 하나뿐이라
+  // 접두사 ""로 전부 가져온다. tier3의 guard_* 메시는 이제 안 쓴다(파일에는 남아 있다).
+  { key: "guard", src: "guardObj", prefixes: [""] },
   { key: "trash", src: "t3", prefixes: ["trash_"] },
   { key: "drum", src: "t3", prefixes: ["drum_"] },
   { key: "pallet", src: "t3", prefixes: ["pallet_"] },
@@ -138,22 +142,41 @@ export function usePrisonAssets(): Record<string, THREE.Group> {
   const t3 = useObj("/models/prison-tier3.obj");
   const rooms = useObj("/models/prison-rooms.obj");
   const locks = useObj("/models/prison-locks.obj");
+  const guardObj = useObj("/models/prison-guard-robot.obj");
 
   return useMemo(() => {
     const cached = prefabCache.get(kit);
     if (cached) return cached;
-    const srcs: Record<Src, THREE.Group> = { kit, t1, t2, t3, rooms, locks };
+    const srcs: Record<Src, THREE.Group> = { kit, t1, t2, t3, rooms, locks, guardObj };
     const cache = new Map<string, THREE.MeshStandardMaterial>();
     const toStd = (src: THREE.Material): THREE.MeshStandardMaterial => {
       const name = src.name || "default";
       const hit = cache.get(name);
       if (hit) return hit;
-      const color = (src as THREE.MeshPhongMaterial).color?.clone() ?? new THREE.Color("#888888");
+      const phong = src as THREE.MeshPhongMaterial;
+      // ⚠️ 색공간 이중 변환 보정 — 안 하면 원본보다 훨씬 어둡고 탁하게 나온다.
+      //    에셋을 만든 익스포터(three-d-stage)는 THREE.Color 내부값을 Kd에 그대로 쓴다. 그 값은
+      //    **선형**이다(실측: steel #aeb6bf → Kd 0.4233 0.4678 0.5210 = 선형값 그대로).
+      //    그런데 MTLLoader는 Kd를 sRGB로 보고 다시 선형으로 변환한다
+      //    (MTLLoader.js `ColorManagement.colorSpaceToWorking(..., SRGBColorSpace)`).
+      //    → steel이 0.4233에서 0.1497로, 64% 어두워진 채 로드된다.
+      //    한 번 더 선형→sRGB를 걸어 그 변환을 정확히 되돌린다.
+      const color =
+        phong.color?.clone().convertLinearToSRGB() ?? new THREE.Color("#888888");
       const p = pbrFor(name);
-      const std = new THREE.MeshStandardMaterial({ color, roughness: p.roughness, metalness: p.metalness });
-      if (p.glass) {
+      const std = new THREE.MeshStandardMaterial({
+        color,
+        roughness: p.roughness,
+        metalness: p.metalness,
+        // 원본 키트는 모든 재질이 flatShading이다(prison-kit.js의 makeKit). 안 켜면 저폴리
+        // 각이 뭉개져 흐물흐물해 보인다 — 원본과 다르게 보이던 또 하나의 원인.
+        flatShading: true,
+      });
+      // MTL의 d(투명도)를 살린다. 새 재질을 만들면서 흘리면 유리·커튼·수액백이 불투명해진다.
+      const opacity = typeof phong.opacity === "number" ? phong.opacity : 1;
+      if (p.glass || opacity < 1) {
         std.transparent = true;
-        std.opacity = 0.5;
+        std.opacity = p.glass ? Math.min(opacity, 0.5) : opacity;
       }
       if (p.emissive) {
         std.emissive = color.clone();
@@ -188,7 +211,7 @@ export function usePrisonAssets(): Record<string, THREE.Group> {
     }
     prefabCache.set(kit, out);
     return out;
-  }, [kit, t1, t2, t3, rooms, locks]);
+  }, [kit, t1, t2, t3, rooms, locks, guardObj]);
 }
 
 /** 프리팹 하나를 복제해 배치. 지오메트리·재질 공유(정적 소품). */

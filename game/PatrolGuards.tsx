@@ -14,6 +14,8 @@ import { AssetProp, usePrisonAssets } from "./prisonAssets";
 
 // 부채꼴은 바닥에 살짝 띄워 깐다(바닥면과 z-fighting 방지).
 const CONE_Y = 0.06;
+/** 간수 모델 자연 높이 2.06m → 플레이어 눈높이(2.4m)에 맞추는 배율. */
+const GUARD_SCALE = 1.15;
 
 /**
  * 시야 부채꼴. 서버가 실어 준 range/fovDeg로 만든다 — 상수를 여기 베껴 두면
@@ -63,7 +65,8 @@ function Guard({ index }: { index: number }) {
 
   return (
     <group ref={group}>
-      <AssetProp template={assets.guard} position={[0, 0, 0]} />
+      {/* 간수 모델은 자연 높이 2.06m — 플레이어(2.4m)와 눈높이를 맞춘다 */}
+      <AssetProp template={assets.guard} position={[0, 0, 0]} scale={GUARD_SCALE} />
       <ViewCone range={view.range} fovDeg={view.fovDeg} />
       {/* 발밑 표시등 — 어두운 복도에서 간수 위치를 놓치지 않게 */}
       <pointLight position={[0, 2.2, 0]} color="#ffb347" intensity={6} distance={7} />
