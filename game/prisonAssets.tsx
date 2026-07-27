@@ -17,12 +17,54 @@ function useObj(url: string): THREE.Group {
   });
 }
 
-// 재질명 키워드 → PBR 파라미터. 이름 전수 열거 대신 키워드로 분류(파일마다 재질명이 다양).
+/**
+ * 원본 에셋(prison-kit.js makeKit)의 공용 팔레트 값.
+ *
+ * MTL은 metalness·emissive를 싣지 못한다 — 익스포터(three-d-stage)가 Kd/Ks/Ns/d만 쓴다.
+ * 대신 **재질 이름은 그대로 남으므로** 이름으로 원본 값을 되찾는다. 이름으로 "추측"하던 걸
+ * 원본 표로 바꾼 것이다(추측값은 실제로 어긋났다 — gold는 m 0.3인데 0.8을, wood는 0인데 0을
+ * 주면서 roughness는 0.7 대신 0.85를 줬다).
+ *
+ * roughness는 여기 없다 — MTL의 Ns에 원본이 그대로 들어 있다(Ns = (1-roughness)*200,
+ * 실측: steel r0.45 → Ns 110 / gold r0.5 → Ns 100). toStd가 역산한다.
+ */
+const KIT_MAT: Record<
+  string,
+  { metalness: number; emissive?: string; emissiveIntensity?: number }
+> = {
+  gold: { metalness: 0.3 },
+  steel: { metalness: 0.4 },
+  steelD: { metalness: 0.4 },
+  black: { metalness: 0.3 },
+  white: { metalness: 0.15 },
+  concrete: { metalness: 0 },
+  concreteD: { metalness: 0 },
+  wood: { metalness: 0 },
+  woodD: { metalness: 0 },
+  orange: { metalness: 0.1 },
+  red: { metalness: 0.1 },
+  redGlow: { metalness: 0, emissive: "#ff2a2a", emissiveIntensity: 0.7 },
+  green: { metalness: 0.1 },
+  greenGlow: { metalness: 0, emissive: "#39d05f", emissiveIntensity: 0.8 },
+  glass: { metalness: 0.25 },
+  darkGlass: { metalness: 0.4 },
+  cyan: { metalness: 0, emissive: "#22b6da", emissiveIntensity: 0.9 },
+  yellow: { metalness: 0.1 },
+  blue: { metalness: 0 },
+  rubber: { metalness: 0.1 },
+};
+
+/** 익스포터가 이름 충돌을 피하려 붙인 꼬리(`uniform_1`, `flood_glow_0`)를 떼고 원본 이름을 얻는다. */
+function baseName(name: string): string {
+  return name.replace(/_\d+$/, "");
+}
+
+// 팔레트에 없는 파일별 커스텀 재질용 폴백. 키워드로 대략 분류한다.
 function pbrFor(name: string): { roughness: number; metalness: number; emissive: boolean; glass: boolean } {
   const n = name.toLowerCase();
   const glass = /glass|iv_bag|window/.test(n);
-  // MTL은 emissive를 싣지 못한다(익스포터가 Kd/Ks/Ns/d만 쓴다) — 이름으로 되살린다.
-  // 실제 재질명 기준: flood_glow·greenGlow·searchlight_glow / console_screen / heat_lamp / ledRed.
+  // MTL은 emissive를 싣지 못한다 — 이름으로 되살린다.
+  // 파일별 재질 기준: flood_glow·searchlight_glow·eye_glow / console_screen / heat_lamp / ledRed.
   const emissive = /glow|_screen|lamp|^led/.test(n);
   let roughness = 0.7;
   let metalness = 0.1;
@@ -164,10 +206,15 @@ export function usePrisonAssets(): Record<string, THREE.Group> {
       const color =
         phong.color?.clone().convertLinearToSRGB() ?? new THREE.Color("#888888");
       const p = pbrFor(name);
+      const kit = KIT_MAT[baseName(name)];
+      // roughness는 MTL Ns에 원본이 그대로 있다(Ns = (1-roughness)*200). 이름으로 추측하지 말 것.
+      const ns = (phong as { shininess?: number }).shininess;
+      const roughness =
+        typeof ns === "number" ? THREE.MathUtils.clamp(1 - ns / 200, 0, 1) : p.roughness;
       const std = new THREE.MeshStandardMaterial({
         color,
-        roughness: p.roughness,
-        metalness: p.metalness,
+        roughness,
+        metalness: kit ? kit.metalness : p.metalness,
         // 원본 키트는 모든 재질이 flatShading이다(prison-kit.js의 makeKit). 안 켜면 저폴리
         // 각이 뭉개져 흐물흐물해 보인다 — 원본과 다르게 보이던 또 하나의 원인.
         flatShading: true,
@@ -178,7 +225,11 @@ export function usePrisonAssets(): Record<string, THREE.Group> {
         std.transparent = true;
         std.opacity = p.glass ? Math.min(opacity, 0.5) : opacity;
       }
-      if (p.emissive) {
+      // 발광: 팔레트에 원본 색·세기가 있으면 그대로, 없으면 이름 판정으로 본색을 얹는다.
+      if (kit?.emissive) {
+        std.emissive = new THREE.Color(kit.emissive);
+        std.emissiveIntensity = kit.emissiveIntensity ?? 0.8;
+      } else if (p.emissive) {
         std.emissive = color.clone();
         std.emissiveIntensity = 0.9;
       }
