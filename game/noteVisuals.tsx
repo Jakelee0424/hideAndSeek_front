@@ -25,7 +25,8 @@ export type NoteKind =
   | "tray" // 뒷면에 낙서된 배식판
   | "scratch" // 긁힌 자국이 남은 벽 조각
   | "sand" // 바닥 모래에 그은 글씨
-  | "stone"; // 감시탑 돌기둥의 각인
+  | "stone" // 감시탑 돌기둥의 각인
+  | "poster"; // 벽에 세로로 붙인 게시물(배식 순서표·식단표)
 
 // id → 비주얼 종류. 매핑 없으면 기본 안내문.
 const NOTE_KIND: Record<string, NoteKind> = {
@@ -33,6 +34,9 @@ const NOTE_KIND: Record<string, NoteKind> = {
   "note-laundry2": "wet", // 젖은 쪽지
   "note-med1": "label", // 약장 라벨
   "note-med2": "chart", // 처방 기록
+  "note-cafe-order": "poster", // 배식 순서표(벽에 세로로)
+  "note-cafe-menu": "poster", // 오늘의 식단표(벽에 세로로)
+  "note-cafe-tray": "tray", // 배식대 위 식판(금속 식판 비주얼)
   "gate-note1": "stone", // 서쪽 감시탑 각인
   "gate-note2": "stone", // 동쪽 감시탑 각인
 };
@@ -310,6 +314,30 @@ function Stone({ emissive, glow }: VisualProps): JSX.Element {
   );
 }
 
+// 벽에 세로로 붙인 게시물: 벽면과 나란한 세운 종이 + 위쪽 압정 두 개.
+// (interactables position 기준 그룹 원점이 벽 앞이라, 여기선 세로 판만 세운다 — 눕히지 않는다.)
+function Poster({ emissive, glow }: VisualProps): JSX.Element {
+  return (
+    <group>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.6, 0.84, 0.03]} />
+        <meshStandardMaterial
+          {...readMat("#efe7d3", emissive, glow)}
+          metalness={0.05}
+          roughness={0.85}
+        />
+      </mesh>
+      {/* 위쪽 압정 두 개 */}
+      {[-0.2, 0.2].map((x) => (
+        <mesh key={x} position={[x, 0.36, 0.02]}>
+          <sphereGeometry args={[0.035, 12, 12]} />
+          <meshStandardMaterial color="#dc2626" metalness={0.3} roughness={0.4} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 const BUILDERS: Record<string, (p: VisualProps) => JSX.Element> = {
   notice: Notice,
   clipboard: Clipboard,
@@ -321,6 +349,7 @@ const BUILDERS: Record<string, (p: VisualProps) => JSX.Element> = {
   scratch: Scratch,
   sand: Sand,
   stone: Stone,
+  poster: Poster,
 };
 
 /** id에 맞는 힌트 물체 비주얼. 발광(emissive/glow)은 어둠 속 유도용으로 이어받는다. */

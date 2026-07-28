@@ -149,7 +149,8 @@ export const BUILDINGS: Building[] = [
 
   // ── 별관(북동): 식당(개방) · 세탁실 · 작업장 · 의무실. 문은 모두 가운데 복도로 ──
   // 바닥에 방마다 다른 색을 깔아 구분한다(식당=따뜻한 갈색, 세탁실=파랑, 작업장=황토, 의무실=청록).
-  { id: "cafeteria", kind: "room", label: "식당", rect: { x0: 6, z0: 20, x1: 22, z1: 28 }, color: "#4a4033", openings: [{ edge: "S", at: 14, width: 4 }] },
+  // 식당 문은 진짜 식당 문(감옥 창살 아님, Map.CafeteriaDoor). 요일 코드(lock-cafe)를 풀어야 들어간다.
+  { id: "cafeteria", kind: "room", label: "식당", rect: { x0: 6, z0: 20, x1: 22, z1: 28 }, color: "#4a4033", openings: [{ edge: "S", at: 14, width: 4, door: "door-cafe" }] },
   { id: "laundry", kind: "room", label: "세탁실", rect: { x0: 22, z0: 20, x1: 38, z1: 28 }, color: "#33455c", openings: [{ edge: "S", at: 30, width: DOOR_W, door: "door-laundry" }, { edge: "W", at: 24, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
   // 작업장 문은 상시 개방(door 없음) — 방 안 퀴즈(quiz-work)를 풀어 표식을 드러내는 구조로 바뀌었다.
   { id: "workshop", kind: "room", label: "작업장", rect: { x0: 6, z0: 6, x1: 22, z1: 14 }, color: "#4b452a", openings: [{ edge: "N", at: 14, width: DOOR_W }] },
@@ -393,10 +394,10 @@ export const OBSTACLES: ObstacleBox[] = [
   // 화장실: 변기·칸막이 열(북벽) + 세면대(서벽)
   OB(0, 26.8, 4.3, 0.55),
   OB(-5.4, 22.5, 0.35, 1.5),
-  // 식당: 식탁+벤치 2조 + 배식대(북벽)
-  OB(10, 23.5, 1.6, 1.15),
-  OB(18, 23.5, 1.6, 1.15),
-  OB(14, 27.2, 5, 0.5),
+  // 식당: 좌측 냉장고 + 긴 배식대(북벽) + 식탁 6개(2열×3행, 뚫고 못 지나가게 충돌).
+  OB(7.2, 27.3, 0.6, 0.45),
+  OB(14.95, 27.3, 6.25, 0.45),
+  ...[21.4, 23.4, 25.4].flatMap((tz) => [9.5, 18.5].map((tx) => OB(tx, tz, 1.0, 0.45))),
   // 세탁실: 세탁기 4대(북벽) + 카트(동남쪽 구석 — 문(x30) 정면 동선을 비운다)
   OB(25, 26.8, 0.8, 0.9),
   OB(28.2, 26.8, 0.8, 0.9),

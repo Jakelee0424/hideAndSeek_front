@@ -70,6 +70,9 @@ const LOCK_ASSET: Record<string, string> = {
   "lock-D": "lockCellD",
   "lock-laundry": "lockColor",
   "lock-med": "lockNumber",
+  // 식당 문 요일 코드 · 냉장고 칼로리 코드 — 숫자 다이얼 자물쇠 프리팹 재사용.
+  "lock-cafe": "lockNumber",
+  "lock-fridge": "lockNumber",
   // 작업장 방 안 비밀번호 퀴즈 — 예전 작업장 문자 자물쇠(lockLetter) 프리팹을 재사용한다.
   "quiz-work": "lockLetter",
   "gate-lock": "lockGate",

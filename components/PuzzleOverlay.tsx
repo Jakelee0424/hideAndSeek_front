@@ -17,6 +17,7 @@ import {
 import { sendDoor, sendSolve } from "@/net/stompClient";
 import { toolCode } from "@/game/toolCode";
 import { liarPuzzle } from "@/game/liarPuzzle";
+import { cafeteriaPlan } from "@/game/cafeteriaPlan";
 import { symbolIcon } from "@/game/symbols";
 import { useGameStore } from "@/store/gameStore";
 
@@ -91,12 +92,16 @@ export default function PuzzleOverlay() {
         )}
 
         {data.type === "note" || !data.puzzle ? (
-          <button
-            onClick={close}
-            className="w-full rounded-lg border border-white/10 py-2.5 text-sm font-medium text-slate-200 hover:bg-white/5"
-          >
-            확인
-          </button>
+          <>
+            {/* 게시물(배식 순서표·식단표)은 방 코드로 만든 표를 띄운다. */}
+            {data.board && <CafeBoard board={data.board} roomId={roomId} />}
+            <button
+              onClick={close}
+              className="w-full rounded-lg border border-white/10 py-2.5 text-sm font-medium text-slate-200 hover:bg-white/5"
+            >
+              확인
+            </button>
+          </>
         ) : (
           <PuzzleInput
             // 퍼즐 종류/대상이 바뀌면 입력 상태를 새로 시작
@@ -213,7 +218,95 @@ function PuzzleInput({
           clearError={clearError}
         />
       );
+    case "daycode": {
+      // 정답 = 오늘 요일의 배식 코드. 오늘 요일은 나레이션이 알려주고, 코드 표는 문 앞 순서표에 있다.
+      const code = cafeteriaPlan(roomId).code;
+      return (
+        <WheelLock
+          length={code.length}
+          mod={10}
+          render={(n) => String(n)}
+          check={(vals) => vals.join("") === code}
+          error={error}
+          onSolve={onSolve}
+          onFail={onFail}
+          clearError={clearError}
+        />
+      );
+    }
+    case "fridgecode": {
+      // 정답 = 반찬 4개 실제 칼로리의 합. 식단표(기준량·칼로리)와 식판(실제량)으로 계산한다.
+      const code = cafeteriaPlan(roomId).fridgeCode;
+      return (
+        <WheelLock
+          length={code.length}
+          mod={10}
+          render={(n) => String(n)}
+          check={(vals) => vals.join("") === code}
+          error={error}
+          onSolve={onSolve}
+          onFail={onFail}
+          clearError={clearError}
+        />
+      );
+    }
   }
+}
+
+// ── 식당 게시물(배식 순서표 / 오늘의 식단표 / 식판) ───────────────
+// 방 코드로 만든 표를 그대로 읽어 준다.
+//   - cafe-order: 요일→배식 코드(입장). 오늘 요일은 강조하지 않는다(나레이션에서 들은 요일을 스스로 찾는다).
+//   - cafe-menu : 오늘 반찬 4개의 기준량·기준칼로리(→ 1g당 칼로리). 간식은 없다.
+//   - cafe-tray : 식판 항목의 실제 담긴 양. 반찬 4 + 간식 1(식단표에 없는 항목이 간식 = 계산 제외).
+function CafeBoard({
+  board,
+  roomId,
+}: {
+  board: "cafe-order" | "cafe-menu" | "cafe-tray";
+  roomId: string;
+}) {
+  const plan = cafeteriaPlan(roomId);
+  const head: string[] =
+    board === "cafe-order"
+      ? ["요일", "배식 코드"]
+      : board === "cafe-menu"
+        ? ["반찬", "기준량", "기준 칼로리"]
+        : ["식판 항목", "담긴 양"];
+  const rows: string[][] =
+    board === "cafe-order"
+      ? plan.order.map((o) => [o.day, o.code])
+      : board === "cafe-menu"
+        ? plan.menu.map((d) => [d.name, `${d.std} g`, `${d.cal} kcal`])
+        : plan.tray.map((t) => [t.name, `${t.amount} g`]);
+  return (
+    <div className="mb-4 overflow-hidden rounded-lg border border-white/10">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-white/5 text-slate-400">
+            {head.map((h, i) => (
+              <th key={i} className="px-3 py-1.5 text-left font-medium">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, ri) => (
+            <tr key={ri} className="border-t border-white/5">
+              {r.map((c, ci) => (
+                <td
+                  key={ci}
+                  className={`px-3 py-1.5 ${ci === 0 ? "text-slate-200" : "font-mono text-sky-300"}`}
+                >
+                  {c}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 // ── 거짓말 탐정(배수관 최종 퍼즐) ─────────────────────────────────

@@ -5,8 +5,7 @@
 import { usePrisonAssets, AssetProp } from "./prisonAssets";
 import { CELLS, DOOR_META, TOWERS, getBuilding } from "./prisonLayout";
 
-// 방 중심(prisonLayout BUILDINGS와 일치)
-const CAFETERIA: [number, number] = [14, 24];
+// 방 중심(prisonLayout BUILDINGS와 일치). 식당은 절차적 배치(Map.CafeteriaDecor)라 OBJ 세트를 안 쓴다.
 const WORKSHOP: [number, number] = [14, 10];
 const LAUNDRY: [number, number] = [30, 24];
 const INFIRMARY: [number, number] = [30, 10];
@@ -15,7 +14,7 @@ const INFIRMARY: [number, number] = [30, 10];
 const CAMERAS: { pos: [number, number, number]; target: [number, number] }[] = [
   { pos: [-36, 0, 15], target: [-22, 17] },
   { pos: [36, 0, 15], target: [22, 17] },
-  { pos: [20.5, 0, 27], target: [14, 24] },
+  // 식당 CCTV는 제거(요청). 아래는 작업장·세탁실·의무실.
   { pos: [7.5, 0, 7], target: [14, 10] },
   { pos: [36.5, 0, 27], target: [30, 24] },
   { pos: [36.5, 0, 7], target: [30, 10] },
@@ -77,9 +76,7 @@ export default function PrisonProps() {
       {/* 의무실(22..38 × 6..14, 문 N) */}
       <AssetProp template={a.ivStand} position={[23.8, 0, 8.4]} />
       <AssetProp template={a.curtainPartition} position={[26.4, 0, 9.6]} />
-      {/* 식당(6..22 × 20..28, 문 S) — 동편이 비어 있어 식탁 둘을 더 놓는다 */}
-      <AssetProp template={a.canteenTableA} position={[19, 0, 22.6]} rotationY={Math.PI / 2} />
-      <AssetProp template={a.canteenTableB} position={[19, 0, 25.4]} rotationY={Math.PI / 2} />
+      {/* 식당은 Map.CafeteriaDecor가 절차적으로 채운다(냉장고·긴 배식대·식탁 6). OBJ 세트·캔틴 식탁은 뺐다. */}
       {/* 연결 복도 남벽(출입구 x=0은 비운다) */}
       <AssetProp template={a.fountain} position={[-4, 0, 14.4]} />
       {/* 연병장: 정문 앞을 좁히는 철망 두 짝 */}
@@ -105,8 +102,7 @@ export default function PrisonProps() {
         <AssetProp key={i} template={a.camera} position={cam.pos} rotationY={faceCenter(cam.pos[0] - cam.target[0], cam.pos[2] - cam.target[1])} />
       ))}
 
-      {/* 방 세트(절차적 데코 대체) */}
-      <AssetProp template={a.cafeteria} position={[CAFETERIA[0], 0, CAFETERIA[1]]} />
+      {/* 방 세트(절차적 데코 대체). 식당은 제외 — Map.CafeteriaDecor가 대신 그린다. */}
       <AssetProp template={a.workshop} position={[WORKSHOP[0], 0, WORKSHOP[1]]} />
       <AssetProp template={a.laundry} position={[LAUNDRY[0], 0, LAUNDRY[1]]} />
       <AssetProp template={a.infirmary} position={[INFIRMARY[0], 0, INFIRMARY[1]]} />
@@ -139,8 +135,7 @@ export default function PrisonProps() {
       <AssetProp template={a.locker} position={[-37, 0, 16]} rotationY={Math.PI / 2} />
       <AssetProp template={a.locker} position={[-37, 0, 18]} rotationY={Math.PI / 2} />
 
-      {/* 잡소품 */}
-      <AssetProp template={a.trash} position={[20.5, 0, 26.5]} />
+      {/* 잡소품 (식당 안 쓰레기통은 뺐다 — 식당은 정리된 배치) */}
       <AssetProp template={a.trash} position={[8, 0, 8]} />
       <AssetProp template={a.drum} position={[-30, 0, -9]} />
       <AssetProp template={a.drum} position={[-27, 0, -9]} />
@@ -148,7 +143,6 @@ export default function PrisonProps() {
       <AssetProp template={a.sack} position={[-24, 0.4, -6]} />
       <AssetProp template={a.bucketMop} position={[2, 0, 22]} />
       <AssetProp template={a.ladder3} position={[36, 0, 16.5]} rotationY={-Math.PI / 2} />
-      <AssetProp template={a.keyDisplay} position={[8, 0, 26]} />
 
       {/* 탈출 관련 소품 */}
       <AssetProp template={a.drain} position={[-18, 0.02, -14]} />
