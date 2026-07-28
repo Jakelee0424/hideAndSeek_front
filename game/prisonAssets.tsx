@@ -8,6 +8,7 @@ import { useLoader } from "@react-three/fiber";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import * as THREE from "three";
+import { assetTexture } from "./assetTextures";
 
 function useObj(url: string): THREE.Group {
   const mtl = useLoader(MTLLoader, url.replace(/\.obj$/, ".mtl"));
@@ -216,12 +217,28 @@ const DEFS: Def[] = [
 
 export type AssetKey = (typeof DEFS)[number]["key"];
 
-// OBJ/MTL은 텍스처를 싣지 않는다(tier1~3도 마찬가지). 원본이 캔버스 텍스처의 **알파**로
-// 모양을 내던 면은 맵이 빠지면 불투명한 판때기로 남아 오히려 흉하다 — 통째로 뺀다.
-//   - chainlink_panel: 철망. 빼도 기둥·레일·철조망 코일이 남아 울타리로 읽힌다
-//     (남기면 연병장에 회색 벽이 하나 선다)
-//   - graffiti_decal / mirror_smudge: 벽 낙서·거울 얼룩. 무늬가 없으면 회색 얼룩일 뿐이다
-const SKIP_UNTEXTURED = /(chainlink_panel|graffiti_decal|mirror_smudge)$/;
+
+// 2026-07-28까지 여기에 SKIP_UNTEXTURED가 있어 chainlink_panel·graffiti_decal·mirror_smudge를
+// **통째로 빼고** 있었다. OBJ/MTL이 텍스처를 못 실어 무늬 없는 판때기로 남느니 없는 게 낫다는
+// 판단이었다. 이제 그 텍스처를 런타임 캔버스로 다시 그리므로(assetTextures.ts) 뺄 이유가
+// 없어져 제외 목록 자체를 지웠다 — 감방 벽 낙서·거울 얼룩·연병장 철망이 원본대로 돌아왔다.
+//   ⚠️ 어떤 면이 다시 백지로 보이면 여기가 아니라 assetTextures의 TEXTURES를 볼 것.
+//      그 표에 없는 map 의존 재질이 새로 들어온 것이다.
+
+/**
+ * 아티팩트 미리보기용 **배경 벽 조각**.
+ *
+ * 원본(prison-rooms.html)은 소품 하나를 허공에 띄워 보여 주는 도구라, 벽에 다는 물건마다
+ * 콘크리트 판을 하나씩 데리고 있다 — `box(1.4, 1.6, 0.1, M.concrete, 'shelf_wall')` 같은 것.
+ * 우리 감옥엔 진짜 벽이 있으므로 이 판은 **뒷벽에 덧댄 콘크리트 패치**가 된다:
+ *   - 맵 벽은 텍스처가 있고 이 판은 민무늬 단색(#c3c8ce)이라 색이 달라 사각 자국으로 보인다
+ *   - 배치 기준이 "뒷벽 안쪽 면"(z±0.28)이라 판이 벽에 반쯤 박힌다 → 겹치는 면에서 z-fighting
+ *   - 두께가 제각각(0.10 / 0.12 / 0.24m)이라 벽면이 울퉁불퉁한 누더기가 된다
+ * 감방 뒷벽에만 이런 판이 넷(선반·거울·창·낙서) 겹쳐 있었다.
+ *
+ * ⚠️ parts_bins의 `bin_back_wall`은 여기 넣지 않는다 — 그건 통 자체의 뒷판이라 물건의 일부다.
+ */
+const BACKDROP_WALL = /__(shelf_wall|mt_wall|window_wall|graffiti_wall)$/;
 
 // 프리팹 분해는 소스 6개(메시 1500+)를 전수 순회하는 무거운 작업이다. useLoader 캐시 덕에
 // 소스 그룹은 앱 전체에 하나뿐이므로, 그걸 키로 한 번만 만들고 컴포넌트끼리 공유한다
@@ -284,6 +301,15 @@ export function usePrisonAssets(): Record<string, THREE.Group> {
         std.emissive = color.clone();
         std.emissiveIntensity = 0.9;
       }
+      // OBJ/MTL이 못 실은 캔버스 텍스처를 다시 붙인다(assetTextures.ts에서 런타임에 그린다).
+      // ⚠️ 이 재질들은 color가 흰색이고 **생김새 전부가 맵에 있다** — 맵이 없으면 백지가 된다.
+      //    transparent도 MTL이 못 싣는 값이라 여기서 함께 되살린다.
+      const restored = assetTexture(baseName(name));
+      if (restored) {
+        std.map = restored.map;
+        if (restored.transparent) std.transparent = true;
+        if (restored.doubleSide) std.side = THREE.DoubleSide;
+      }
       cache.set(name, std);
       return std;
     };
@@ -291,24 +317,29 @@ export function usePrisonAssets(): Record<string, THREE.Group> {
     const out: Record<string, THREE.Group> = {};
     for (const def of DEFS) {
       const g = new THREE.Group();
+      const backdrops: THREE.Object3D[] = [];
       srcs[def.src].traverse((o) => {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
         if (!def.prefixes.some((p) => o.name === p || o.name.startsWith(p))) return;
-        if (SKIP_UNTEXTURED.test(o.name)) return;
         const m = mesh.clone();
         m.material = Array.isArray(mesh.material) ? mesh.material.map(toStd) : toStd(mesh.material);
         m.castShadow = true;
         m.receiveShadow = true;
         g.add(m);
+        if (BACKDROP_WALL.test(o.name)) backdrops.push(m);
       });
       // 바닥 중심을 원점으로.
+      // ⚠️ 배경 벽을 **빼기 전에** 잰다. 빼고 재면 남은 부품의 최저점이 바닥으로 내려앉아
+      //    선반·거울이 벽 높이가 아니라 방바닥에 주저앉는다(선반은 원본에서 1.5m 높이다).
+      //    벽이 있어야 원래 높이를 알 수 있으므로, 재고 → 옮기고 → 그다음에 뺀다.
       g.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(g);
       if (isFinite(box.min.x)) {
         const off = new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2);
         g.children.forEach((c) => c.position.sub(off));
       }
+      for (const b of backdrops) g.remove(b);
       out[def.key] = g;
     }
     prefabCache.set(kit, out);
