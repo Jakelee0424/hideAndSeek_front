@@ -29,6 +29,8 @@ export type Puzzle =
   | { kind: "switches"; answer: boolean[] } // 레버 on(위)/off(아래) 패턴
   | { kind: "toolcode" } // 도구 이름→숫자 표에서 규칙을 찾아 답을 맞춘다. 표·답은 방 코드로 배정(toolCode.ts)
   | { kind: "liar" } // 거짓말 탐정 — 표식 4개를 진짜 자리에 배열. 문제·답은 방 코드로 배정(liarPuzzle.ts)
+  | { kind: "daycode" } // 식당 입장 — 요일별 배식 순서표에서 오늘 요일의 네 자리. 코드는 방 코드로 배정(cafeteriaPlan.ts)
+  | { kind: "fridgecode" } // 식당 냉장고 — 반찬 4개 실제 칼로리 합. 코드는 방 코드로 배정(cafeteriaPlan.ts)
   | { kind: "minigame" }; // 아케이드 한 판. 어느 게임인지는 방 코드로 배정된다
 
 export type InteractableType = "lockbox" | "note";
@@ -44,6 +46,8 @@ export interface Interactable {
   puzzle?: Puzzle;
   /** lockbox 전용: 풀면 열리는 감방문 id(예: "cell-A"). */
   opensDoor?: string;
+  /** note 전용: 표 형태로 읽는 게시물(내용은 방 코드로 생성). 있으면 힌트 대신 표를 띄운다. */
+  board?: "cafe-order" | "cafe-menu" | "cafe-tray";
 }
 
 /** 상호작용 사거리(m, XZ 평면 기준) */
@@ -140,8 +144,40 @@ export const INTERACTABLES: Interactable[] = [
     puzzle: { kind: "toolcode" },
   },
 
-  // 의무실: 숫자 "451"
-  { id: "note-med1", type: "note", position: [10.5, 0.6, 22], label: "약장 라벨", hint: "약장 번호 앞 두 자리 = 45" },
+  // ── 식당 ①입장: 문 좌측 벽 서류 2장 + 문 자물쇠(요일 코드) ──
+  // 나레이션이 오늘 요일을 알려준다. 배식 순서표에서 오늘 요일 줄의 네 자리를 읽어 문을 연다.
+  // 문은 감옥 창살이 아니라 진짜 식당 문(Map.CafeteriaDoor). 문 개구부는 남벽 x14(폭4).
+  // 좌측(서쪽) 벽 x6~12 복도 쪽에 서류를 건다. 표 내용은 cafeteriaPlan.
+  //   - 배식 순서표: ①입장 코드(요일→네 자리)
+  //   - 오늘의 식단표: ②냉장고 계산의 힌트(오늘 반찬 4개의 기준량·기준칼로리 → 1g당 칼로리)
+  { id: "note-cafe-order", type: "note", position: [10.5, 1.5, 19.6], label: "배식 순서표", board: "cafe-order" },
+  { id: "note-cafe-menu", type: "note", position: [7.5, 1.5, 19.6], label: "오늘의 식단표", board: "cafe-menu" },
+  {
+    id: "lock-cafe",
+    type: "lockbox",
+    position: [14, 0.9, 19.3], // 식당 문 앞(복도 쪽)
+    label: "식당 문 잠금장치",
+    hint: "요일별 배식 순서표에서 오늘 요일 줄의 네 자리를 찾아 입력하라.",
+    puzzle: { kind: "daycode" },
+    opensDoor: "door-cafe",
+  },
+
+  // ── 식당 ②냉장고 코드(표식 획득): 배식대 식판 + 냉장고. 입장해야 닿는다. ──
+  // 식판을 열면 반찬 4 + 간식 1의 실제 담긴 양이 나온다. 식단표의 기준량·칼로리로 1g당 칼로리를
+  // 구해 실제량에 곱하면 반찬별 실제 칼로리 — 그 합이 냉장고 코드다. 간식은 식단표에 없어 제외(함정).
+  // 냉장고를 풀면 이 방 벽에 표식이 드러난다(Map.RoomStamps, opensDoor 없음).
+  { id: "note-cafe-tray", type: "note", position: [14, 1.68, 26.9], label: "식판", board: "cafe-tray" }, // 배식대 상판 위(살짝 띄워 겹침 방지)
+  {
+    id: "lock-fridge",
+    type: "lockbox",
+    position: [7.2, 0.9, 26.5], // 좌측 냉장고 앞(Map.CafeteriaDecor 냉장고와 같은 자리)
+    label: "냉장고 잠금장치",
+    hint: "식단표로 반찬 1g당 칼로리를 구해 식판 실제량에 곱하고, 반찬 넷을 더하라. 간식은 뺀다.",
+    puzzle: { kind: "fridgecode" },
+  },
+
+  // 의무실: 숫자 "451" (note-med1은 식당이 잠기면서 화장실 쪽 개방 구역으로 옮겼다 — 잠긴 방 안에 두면 못 읽는다)
+  { id: "note-med1", type: "note", position: [3, 0.6, 22], label: "약장 라벨", hint: "약장 번호 앞 두 자리 = 45" },
   { id: "note-med2", type: "note", position: [-24, 0.6, -18], label: "처방 기록", hint: "마지막 자리 = 1" },
   {
     id: "lock-med",

@@ -8,8 +8,9 @@
 //
 // 엔딩이 "자정의 종"·"정문 너머"·"가면을 쓴 자"라는 말을 쓴다. 그 전제를 여기서 깐다.
 // 시작(phase가 ONBOARDING이 되는 순간)한 뒤에는 단계가 넘어가도 60초 시퀀스를 끝까지 돌린다.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useGameStore } from "@/store/gameStore";
+import { cafeteriaPlan, DAYS } from "@/game/cafeteriaPlan";
 
 // 줄 스펙. boldLen — 줄 앞 몇 글자를 볼드 강조. final — 마지막 한 방(호박색).
 interface Line {
@@ -19,15 +20,19 @@ interface Line {
 }
 
 // ⚠️ 탈출구의 생김새(정문/배수관)는 말하지 않는다 — 맵이 바뀌면 여기부터 어긋난다.
-const LINES: Line[] = [
-  { text: "소등. 복도의 불이 하나씩 꺼진다.", boldLen: 3 },
-  { text: "자정까지 시간이 있다. 감방을 나가, 바깥으로 이어지는 철문을 열어라." },
-  { text: "철문은 네 자리 번호로 잠겨 있다. 네 방의 표식이 네 몫의 숫자를 쥐고 있고, 셈법은 세 곳에 나뉘어 적혀 있다." },
-  { text: "네 몫은 너만 안다. 남의 몫은 물어라 — 혼자서는 문이 열리지 않는다." },
-  { text: "밤사이 간수가 한두 번 복도를 돈다. 순찰이 도는 동안 움직이거나 무언가를 건드리면 들킨다." },
-  { text: "막아 주지 않는다. 멈추는 건 네 몫이고, 들키면 자정이 그만큼 앞당겨진다." },
-  { text: "그리고 — 오늘 밤 이 안에는, 사람이 아닌 것이 하나 섞여 있다.", final: true },
-];
+// day: 오늘 요일(식당 배식 순서표 퍼즐용). 방 시드로 정해져 방마다 다르다.
+function buildLines(day: string): Line[] {
+  return [
+    { text: "소등. 복도의 불이 하나씩 꺼진다.", boldLen: 3 },
+    { text: "자정까지 시간이 있다. 감방을 나가라 — 자물쇠엔 압수된 게임기가 박혀 있다." },
+    { text: `오늘은 ${day}. 식당 배식 순서는 요일마다 다르다 — 문 앞 순서표에서 오늘 줄을 찾아라.` },
+    { text: "별관 방마다 문제가 걸려 있다. 풀면 벽에 표식이 드러난다." },
+    { text: "마지막 문은 거짓말쟁이들의 말로 잠겨 있다. 누가 참인지 가려, 표식을 제 자리에 놓아라." },
+    { text: "밤사이 간수가 한두 번 복도를 돈다. 순찰이 도는 동안 움직이거나 무언가를 건드리면 들킨다." },
+    { text: "막아 주지 않는다. 멈추는 건 네 몫이고, 들키면 자정이 그만큼 앞당겨진다." },
+    { text: "그리고 — 오늘 밤 이 안에는, 사람이 아닌 것이 하나 섞여 있다.", final: true },
+  ];
+}
 
 const LEAD_MS = 1200; // 첫 줄 전 여백(PhaseBanner 전환 토스트가 먼저 지나가게)
 const TYPE_MS = 60; // 글자당 타자 간격
@@ -37,6 +42,9 @@ const TOTAL_MS = 60000; // 전체 고정 진행 시간(60초)
 
 export default function OnboardingOverlay() {
   const phase = useGameStore((s) => s.phase);
+  const roomId = useGameStore((s) => s.roomId);
+  // 오늘 요일은 방 시드로 정해진다 — 나레이션과 식당 순서표(cafeteriaPlan)가 같은 값을 본다.
+  const lines = useMemo(() => buildLines(DAYS[cafeteriaPlan(roomId).today]), [roomId]);
   const startedRef = useRef(false);
   const [started, setStarted] = useState(false);
   const [done, setDone] = useState(false);
@@ -72,9 +80,9 @@ export default function OnboardingOverlay() {
       // 타자 없이 줄을 차례로(한 줄씩) 보여준다.
       const dwell = Math.max(
         1800,
-        Math.floor((TOTAL_MS - LEAD_MS - OUTRO_MS) / LINES.length),
+        Math.floor((TOTAL_MS - LEAD_MS - OUTRO_MS) / lines.length),
       );
-      LINES.forEach((line, i) =>
+      lines.forEach((line, i) =>
         at(LEAD_MS + i * dwell, () =>
           !cancelled && setDisplay({ line, text: line.text, typing: false }),
         ),
@@ -84,13 +92,13 @@ export default function OnboardingOverlay() {
     }
 
     function typeLine(i: number) {
-      if (cancelled || i >= LINES.length) return;
-      const chars = Array.from(LINES[i].text);
+      if (cancelled || i >= lines.length) return;
+      const chars = Array.from(lines[i].text);
       let c = 0;
       const step = () => {
         if (cancelled) return;
         c += 1;
-        setDisplay({ line: LINES[i], text: chars.slice(0, c).join(""), typing: c < chars.length });
+        setDisplay({ line: lines[i], text: chars.slice(0, c).join(""), typing: c < chars.length });
         if (c < chars.length) at(TYPE_MS, step);
         else at(PAUSE_MS, () => typeLine(i + 1));
       };
@@ -101,7 +109,7 @@ export default function OnboardingOverlay() {
       cancelled = true;
       timers.forEach(clearTimeout);
     };
-  }, [active]);
+  }, [active, lines]);
 
   if (!active) return null;
 
