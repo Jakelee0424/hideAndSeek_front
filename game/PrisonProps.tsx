@@ -124,9 +124,13 @@ export default function PrisonProps() {
       <AssetProp template={a.pullup} position={[-8, 0, -22]} />
       <AssetProp template={a.guardBooth} position={[14, 0, -24]} rotationY={Math.PI} />
 
-      {/* 간수 NPC(연병장·복도) */}
-      <AssetProp template={a.guard} position={[-14, 0, -24]} rotationY={Math.PI} />
-      <AssetProp template={a.guard} position={[0, 0, 17]} rotationY={Math.PI / 2} />
+      {/* ⚠️ 장식용 간수 NPC 2명(연병장 [-14,0,-24] · 복도 [0,0,17])을 2026-07-29에 뺐다.
+          순찰 간수(PatrolGuards)와 **같은 모델**이라 화면에서 구분이 안 되는데, 이쪽은
+          안 움직이고 시야 부채꼴도 없고 적발 판정과도 무관했다. 특히 복도 쪽은 순찰
+          경로(중앙 복도 z=17)와 정확히 겹쳐, 플레이어가 "저 간수는 왜 안 움직이지"라고
+          판정을 오해하기 딱 좋았다.
+          이제 **간수가 보이면 곧 순찰 중**이라는 규칙이 화면에서 그대로 읽힌다.
+          (a.guard 프리팹 자체는 PatrolGuards가 계속 쓰므로 DEFS에 그대로 둔다.) */}
 
       {/* 벽 부착물 */}
       <AssetProp template={a.clock} position={[-22, 2.4, 19.7]} rotationY={Math.PI} />
