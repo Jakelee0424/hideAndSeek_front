@@ -213,7 +213,7 @@ export interface InputMessage {
   seq: number;
   move: Vec3; // 정규화된 이동 방향 (y는 미사용)
   rotationY: number;
-  /** 달리기 의도(Shift). 실제 속도 배수는 서버의 game.sprint-multiplier가 정한다. */
+  /** 달리기 의도(R). 실제 속도 배수는 서버의 game.sprint-multiplier가 정한다. */
   sprint: boolean;
   /** 점프 의도(Space). 접지 판정은 서버가 하므로 공중에서 눌러도 무시된다. */
   jump: boolean;
