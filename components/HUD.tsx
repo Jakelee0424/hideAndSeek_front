@@ -13,6 +13,7 @@ import {
 } from "@/game/interactables";
 import PhaseBanner from "./PhaseBanner";
 import Minimap from "./Minimap";
+import SoundToggle from "./SoundToggle";
 
 export default function HUD() {
   const router = useRouter();
@@ -111,12 +112,16 @@ export default function HUD() {
         </div>
       )}
 
-      <button
-        onClick={exit}
-        className="pointer-events-auto absolute right-4 top-4 rounded-lg bg-black/40 px-3 py-2 text-xs font-medium text-slate-200 backdrop-blur transition hover:bg-black/60"
-      >
-        나가기
-      </button>
+      {/* 우상단 조작(미니맵은 바로 아래 top-16에 붙는다) */}
+      <div className="absolute right-4 top-4 flex items-center gap-2">
+        <SoundToggle />
+        <button
+          onClick={exit}
+          className="pointer-events-auto rounded-lg bg-black/40 px-3 py-2 text-xs font-medium text-slate-200 backdrop-blur transition hover:bg-black/60"
+        >
+          나가기
+        </button>
+      </div>
     </div>
   );
 }

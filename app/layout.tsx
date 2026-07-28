@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import BgmHost from "@/components/BgmHost";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,7 +28,11 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/* 배경음. 라우팅으로 화면이 바뀌어도 곡이 끊기지 않게 최상단에 하나만 둔다. */}
+        <BgmHost />
+        {children}
+      </body>
     </html>
   );
 }

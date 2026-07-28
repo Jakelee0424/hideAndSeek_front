@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { joinRoom } from "@/net/session";
+import SoundToggle from "./SoundToggle";
 
 function randomCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -51,7 +52,10 @@ export default function Lobby({
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-[#0b0f17] p-6 text-slate-100">
+    <main className="relative flex min-h-dvh items-center justify-center bg-[#0b0f17] p-6 text-slate-100">
+      {/* 배경음이 처음 흐르는 화면이라, 끄는 자리도 여기서부터 있어야 한다 */}
+      <SoundToggle className="absolute right-4 top-4" />
+
       <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-8 shadow-xl backdrop-blur">
         <h1 className="mb-1 text-2xl font-bold tracking-tight">숨바꼭질</h1>
         <p className="mb-6 text-sm text-slate-400">
