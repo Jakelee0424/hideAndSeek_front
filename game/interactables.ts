@@ -28,6 +28,7 @@ export type Puzzle =
   | { kind: "letters"; answer: string } // A~Z 문자 휠로 단어 맞추기(대문자)
   | { kind: "switches"; answer: boolean[] } // 레버 on(위)/off(아래) 패턴
   | { kind: "toolcode" } // 도구 이름→숫자 표에서 규칙을 찾아 답을 맞춘다. 표·답은 방 코드로 배정(toolCode.ts)
+  | { kind: "hammer" } // 망치질 타이밍 — 게이지 초록 구간에서 Space로 내려친다. 4번 명중하면 자물쇠가 부서진다(반사신경 게임, 방 시드 무관)
   | { kind: "liar" } // 거짓말 탐정 — 표식 4개를 진짜 자리에 배열. 문제·답은 방 코드로 배정(liarPuzzle.ts)
   | { kind: "daycode" } // 식당 입장 — 요일별 배식 순서표에서 오늘 요일의 네 자리. 코드는 방 코드로 배정(cafeteriaPlan.ts)
   | { kind: "fridgecode" } // 식당 냉장고 — 반찬 4개 실제 칼로리 합. 코드는 방 코드로 배정(cafeteriaPlan.ts)
@@ -130,16 +131,31 @@ export const INTERACTABLES: Interactable[] = [
     opensDoor: "door-laundry",
   },
 
-  // ── 작업장(문은 상시 개방, 방 "안"에 퀴즈): 도구 이름→숫자 표 ──
-  // 개인 감방 미니게임으로 빠져나온 뒤 별관 방에서 퍼즐을 푼다. 풀면 이 방 벽에 표식이
-  // 나타난다(Map.RoomStamps). opensDoor가 없다 — 문을 여는 게 아니라 표식을 드러내는 관문이다.
+  // ── 작업장 ①문 잠금(복도 쪽): 망치질로 자물쇠 부수기 ──
+  // 식당과 같은 구조 — 문 잠금(밖)을 부수고 들어간 뒤, 방 안 퀴즈(quiz-work)로 표식을 해금한다.
+  // 오른쪽 세로 게이지의 초록 구간에 화살표가 왔을 때 Space로 내려친다. 4번 명중하면 도어락이
+  // 부서지며 문이 열린다. 반사신경 게임이라 방 시드와 무관하다(각자 제 손으로 부순다).
+  // 서버 Room.LOCK_OPENS에도 매핑(봇·/door가 문만 여는 걸 막는다).
+  {
+    id: "lock-work",
+    type: "lockbox",
+    position: [14, 0.6, 15.6], // 작업장 문 앞(복도 쪽 — 문은 북벽 x14/z14)
+    label: "작업장 문 잠금장치",
+    hint: "게이지의 초록 구간에 화살표가 올 때 Space로 망치질하라. 네 번 명중하면 자물쇠가 부서진다.",
+    puzzle: { kind: "hammer" },
+    opensDoor: "door-work",
+  },
+
+  // ── 작업장 ②표식 해금(방 안): 도구 이름→숫자 표 ──
+  // 문(lock-work)을 풀고 들어와야 닿는다. 풀면 이 방 벽에 표식이 나타난다(Map.RoomStamps).
+  // opensDoor가 없다 — 문을 여는 게 아니라 표식을 드러내는 관문이다.
   // 표·답은 방 코드로 매판 랜덤이라 방마다 답이 다르다(toolCode.ts).
   // (작업장 쪽지 note-work1·2는 문 자물쇠와 함께 없어졌다 — 답이 방 안 표에 있다.)
   {
     id: "quiz-work",
     type: "lockbox",
-    position: [14, 0.6, 9.5], // 작업장 안쪽(문은 북벽 x14/z14, 콘솔은 방 가운데)
-    label: "작업장 비밀번호",
+    position: [18.5, 0.9, 11.5], // 3번 작업대 위(PrisonProps.WORKBENCHES 인덱스2 = [18.5,11.5], 상판 높이 0.9)
+    label: "작업도구함",
     hint: "도구 이름과 숫자 사이엔 규칙이 있다. 규칙을 찾아 물음표의 수를 맞춰라.",
     puzzle: { kind: "toolcode" },
   },
@@ -162,15 +178,16 @@ export const INTERACTABLES: Interactable[] = [
     opensDoor: "door-cafe",
   },
 
-  // ── 식당 ②냉장고 코드(표식 획득): 배식대 식판 + 냉장고. 입장해야 닿는다. ──
+  // ── 식당 ②냉장고 코드(표식 획득): 배식대 식판(분리벽) + 조리실 안 냉장고. ──
+  // 식당에 입장(daycode) → 배식대 위 식판을 읽고 → 조리실(동쪽 1/4, 북끝 출입구)로 들어가 냉장고를 푼다.
   // 식판을 열면 반찬 4 + 간식 1의 실제 담긴 양이 나온다. 식단표의 기준량·칼로리로 1g당 칼로리를
   // 구해 실제량에 곱하면 반찬별 실제 칼로리 — 그 합이 냉장고 코드다. 간식은 식단표에 없어 제외(함정).
   // 냉장고를 풀면 이 방 벽에 표식이 드러난다(Map.RoomStamps, opensDoor 없음).
-  { id: "note-cafe-tray", type: "note", position: [14, 1.68, 26.9], label: "식판", board: "cafe-tray" }, // 배식대 상판 위(살짝 띄워 겹침 방지)
+  { id: "note-cafe-tray", type: "note", position: [17.8, 1.06, 23], label: "식판", board: "cafe-tray" }, // 배식대 상판 위, 식당 쪽 앞줄(y=상판 높이 1.05)
   {
     id: "lock-fridge",
     type: "lockbox",
-    position: [7.2, 0.9, 26.5], // 좌측 냉장고 앞(Map.CafeteriaDecor 냉장고와 같은 자리)
+    position: [20.5, 0.9, 25.9], // 조리실 안 냉장고 앞(북끝 출입구로 들어가 닿는다. Map.CafeteriaDecor 냉장고와 같은 자리)
     label: "냉장고 잠금장치",
     hint: "식단표로 반찬 1g당 칼로리를 구해 식판 실제량에 곱하고, 반찬 넷을 더하라. 간식은 뺀다.",
     puzzle: { kind: "fridgecode" },
@@ -284,13 +301,26 @@ export function minigameFor(objectId: string, seed: string): MinigameDef | undef
   return assignMinigames(seed || "solo", MINIGAME_LOCK_IDS)[objectId];
 }
 
+// ── 배수관 샛길 철창(표식 게이트) ────────────────────────────────
+// 배수관(최종 탈출구)으로 통하는 동쪽 샛길(건물 x38 ~ 외벽 x42)을 막는 철창. 별관 4방의 표식
+// 퀴즈를 모두 풀면(=표식 4개 획득) 자동으로 열린다. 지금은 작업장(A)·식당(B)만 구현돼 있어
+// 열리지 않는다 — 의무실(C)·세탁실(D) 표식 퍼즐이 추가되면 그때 4개가 채워져 열린다.
+// ⚠️ 게이트 박스 좌표는 prisonLayout.DRAIN_GATE / 서버 Collision·Room과 맞춘다.
+export const DRAIN_GATE_ID = "gate-drain";
+export const STAMP_QUIZ_IDS = ["quiz-work", "lock-fridge", "quiz-med", "quiz-laundry"];
+/** 표식 4개를 다 얻었는가(= 별관 4방 표식 퀴즈가 모두 solved). 그러면 배수관 샛길 철창이 열린다. */
+export function isDrainGateOpen(solved: Record<string, boolean>): boolean {
+  return STAMP_QUIZ_IDS.every((id) => !!solved[id]);
+}
+
 // 매 프레임 충돌 계산에서 쓰므로 객체를 재사용한다(프레임마다 new 방지).
 const _openDoors: Record<string, boolean> = {};
-/** solved 상태로부터 열린 감방문 맵을 만든다. 자물쇠가 풀린 방의 문이 열린다. */
+/** solved 상태로부터 열린 문 맵을 만든다. 자물쇠가 풀린 방의 문 + 표식 4개면 배수관 철창이 열린다. */
 export function openDoorsFromSolved(
   solved: Record<string, boolean>,
 ): Record<string, boolean> {
   for (const l of LOCKS) _openDoors[l.opensDoor] = !!solved[l.id];
+  _openDoors[DRAIN_GATE_ID] = isDrainGateOpen(solved); // 표식 게이트(단일 자물쇠가 아니라 4개 합)
   return _openDoors;
 }
 

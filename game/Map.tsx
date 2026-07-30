@@ -9,7 +9,7 @@ import * as THREE from "three";
 import Basketball from "./Basketball";
 import PrisonProps from "./PrisonProps";
 import Interactable from "./Interactable";
-import { INTERACTABLES, isCellDoorOpen, useInteraction } from "./interactables";
+import { INTERACTABLES, isCellDoorOpen, isDrainGateOpen, useInteraction } from "./interactables";
 import { SYMBOLS, escapePlan } from "./escapePlan";
 import { symbolIcon } from "./symbols";
 import { useGameStore } from "@/store/gameStore";
@@ -17,6 +17,7 @@ import {
   BUILDINGS,
   CELL_BLOCK_H,
   DOOR_META,
+  DRAIN_GATE,
   FLOOR2_Y,
   FLOORS,
   GATE,
@@ -254,6 +255,46 @@ function BarDoor({ meta, mat }: { meta: DoorMeta; mat: THREE.Material }) {
   );
 }
 
+// ── 배수관 샛길 철창(표식 게이트): 동쪽 샛길(x38~42)을 가로막는 녹슨 창살 문. ──
+// 표식 4개를 다 얻으면(isDrainGateOpen) 경첩 회전으로 열린다. 좌표는 prisonLayout.DRAIN_GATE와 같다.
+function DrainGate({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  const open = useInteraction((s) => isDrainGateOpen(s.solved));
+  const panel = useRef<THREE.Group>(null);
+  const w = DRAIN_GATE.hx * 2; // 개구부 폭(4m)
+  const x0 = DRAIN_GATE.cx - DRAIN_GATE.hx; // 경첩(서쪽 끝, 건물 벽 쪽)
+  const nBars = Math.max(3, Math.round(w / 0.55));
+  useFrame((_, dt) => {
+    if (!panel.current) return;
+    const target = open ? -1.7 : 0; // 닫힘 ↔ 열림(남쪽 안으로 스윙)
+    panel.current.rotation.y = THREE.MathUtils.damp(panel.current.rotation.y, target, 5, dt);
+  });
+  return (
+    <group position={[x0, 0, DRAIN_GATE.cz]}>
+      {/* 문틀 기둥 2 */}
+      <mesh position={[0, WALL_H / 2, 0]} material={mat.rust}>
+        <boxGeometry args={[0.18, WALL_H, 0.24]} />
+      </mesh>
+      <mesh position={[w, WALL_H / 2, 0]} material={mat.rust}>
+        <boxGeometry args={[0.18, WALL_H, 0.24]} />
+      </mesh>
+      {/* 창살 문짝(경첩=원점 기준 회전) */}
+      <group ref={panel}>
+        <mesh position={[w / 2, WALL_H - 0.3, 0]} material={mat.rust}>
+          <boxGeometry args={[w, 0.1, 0.1]} />
+        </mesh>
+        <mesh position={[w / 2, 0.25, 0]} material={mat.rust}>
+          <boxGeometry args={[w, 0.1, 0.1]} />
+        </mesh>
+        {Array.from({ length: nBars }, (_, i) => (
+          <mesh key={i} position={[((i + 0.5) / nBars) * w, (WALL_H - 0.3) / 2, 0]} material={mat.rust}>
+            <boxGeometry args={[BAR_W, WALL_H - 0.5, BAR_W]} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
 // 문 id → 창살 색(감방·별관 방마다 다른 색으로 한눈에 구분). 나머지는 무채색 철재.
 function barMatFor(mat: ReturnType<typeof useMaterials>, id: string): THREE.Material {
   switch (id) {
@@ -309,6 +350,7 @@ function CafeteriaDoor({ meta, mat }: { meta: DoorMeta; mat: ReturnType<typeof u
 }
 
 // 식당 문짝 한 짝: 경첩(로컬 원점)에서 dir(±) 방향으로 뻗는 솔리드 패널 + 둥근 유리창 + 손잡이.
+// 유리창·손잡이는 안팎(±z) 양면에 똑같이 둔다 — 복도에서 보는 바깥면도 식당 안쪽면과 같게 통일.
 function CafeLeaf({ dir, mat }: { dir: number; mat: ReturnType<typeof useMaterials> }) {
   const w = Math.abs(dir) - 0.06; // 두 짝 사이 틈
   const cxp = dir / 2;
@@ -317,14 +359,18 @@ function CafeLeaf({ dir, mat }: { dir: number; mat: ReturnType<typeof useMateria
       <mesh position={[cxp, WALL_H / 2 - 0.05, 0]} material={mat.porcelain} castShadow receiveShadow>
         <boxGeometry args={[w, WALL_H - 0.3, 0.1]} />
       </mesh>
-      {/* 둥근 유리창(어두운 인셋) */}
-      <mesh position={[cxp, WALL_H - 0.85, 0.06]} rotation={[Math.PI / 2, 0, 0]} material={mat.steel}>
-        <cylinderGeometry args={[0.26, 0.26, 0.04, 20]} />
-      </mesh>
-      {/* 손잡이(맞닿는 안쪽 끝) */}
-      <mesh position={[dir - Math.sign(dir) * 0.15, 1.05, 0.09]} material={mat.steel}>
-        <boxGeometry args={[0.05, 0.5, 0.05]} />
-      </mesh>
+      {/* 둥근 유리창(어두운 인셋) — 안팎 양면 */}
+      {[0.06, -0.06].map((zz, i) => (
+        <mesh key={i} position={[cxp, WALL_H - 0.85, zz]} rotation={[Math.PI / 2, 0, 0]} material={mat.steel}>
+          <cylinderGeometry args={[0.26, 0.26, 0.04, 20]} />
+        </mesh>
+      ))}
+      {/* 손잡이(맞닿는 안쪽 끝) — 안팎 양면 */}
+      {[0.09, -0.09].map((zz, i) => (
+        <mesh key={i} position={[dir - Math.sign(dir) * 0.15, 1.05, zz]} material={mat.steel}>
+          <boxGeometry args={[0.05, 0.5, 0.05]} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -613,24 +659,83 @@ function LinkGate({ mat }: { mat: THREE.Material }) {
 // 전부 절차적으로 그린다(OBJ 식당 세트·캔틴 식탁·잡소품은 PrisonProps에서 뺐다 — 이 배치가 대체).
 // 냉장고·배식대는 충돌이 있고(prisonLayout/Collision OBSTACLES와 같은 자리), 식탁은 시각 전용이다.
 function CafeteriaDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMaterials> }) {
-  const { x0, x1, z1 } = b.rect;
-  const lineZ = z1 - 0.7; // 냉장고·배식대 라인(북벽 앞), 남향
-  const fridgeX = x0 + 1.2; // 좌측(서쪽) 끝 냉장고
-  const counterX0 = fridgeX + 1.5;
-  const counterX1 = x1 - 0.8;
-  const counterCx = (counterX0 + counterX1) / 2;
-  const counterLen = counterX1 - counterX0;
-  // 식탁: 2열(좌·우) × 3행. 가운데(문 앞) 통로를 비운다. prisonLayout/Collision OBSTACLES와 같은 자리.
-  const cols = [x0 + 3.5, x0 + 12.5]; // 9.5 · 18.5
-  const rows = [21.4, 23.4, 25.4];
-  // 배식대 위 조리실 유리창
-  const winW = counterLen * 0.9;
-  const winH = 1.3;
-  const winCy = 1.95;
+  const { z0, z1 } = b.rect; // z0=20, z1=28
+  const partX = 18; // 조리실 분리벽 x(식당 동쪽 1/4을 조리실로 가른다)
+  const doorZ0 = 26.4; // 조리실 출입구(북쪽 끝) 시작 z — 여기부터 z1까지가 문
+  const cZ0 = z0 + 0.2; // 배식대/유리창 z 구간(20.2 ~ 문 앞)
+  const cZ1 = doorZ0 - 0.1;
+  const cCz = (cZ0 + cZ1) / 2;
+  const cLen = cZ1 - cZ0;
+  const cTop = 1.05; // 배식대 상판 높이
+  const gY0 = 1.35; // 유리창 아래
+  const gY1 = 2.6; // 유리창 위
+  const gCy = (gY0 + gY1) / 2;
+  const gH = gY1 - gY0;
+  // 식탁: 서편 2열 × 3행(동편은 배식 줄·조리실). prisonLayout/Collision OBSTACLES와 같은 자리.
+  const cols = [8.5, 11.5];
+  const rows = [22, 24, 26];
+  // 식판(배식) 통 3칸 색
+  const foodCol = ["#c7772e", "#6f8f3a", "#b8442e"];
   return (
     <group>
-      {/* 냉장고(2도어, 남향) */}
-      <group position={[fridgeX, 0, lineZ]}>
+      {/* ── 조리실 분리벽(x=18): 하부 배식대(솔리드) + 상부 유리창 + 북끝 출입구 ── */}
+      {/* 배식대(스테인리스) — 유리창 아래로 음식을 내주는 카운터 */}
+      <group position={[partX, 0, cCz]}>
+        <mesh position={[0, cTop / 2, 0]} material={mat.steel} castShadow receiveShadow>
+          <boxGeometry args={[0.7, cTop, cLen]} />
+        </mesh>
+        {/* 상판 앞(식당 쪽) 트레이 레일 */}
+        <mesh position={[-0.34, cTop + 0.02, 0]} material={mat.steel}>
+          <boxGeometry args={[0.06, 0.06, cLen]} />
+        </mesh>
+        {/* 배식 음식통 3칸(따뜻한 색) — 조리실 쪽(뒤, +x)으로 물려 식판 놓을 앞자리를 비운다 */}
+        {[-cLen / 3.5, 0, cLen / 3.5].map((dz, i) => (
+          <group key={i} position={[0.15, cTop + 0.04, dz]}>
+            <mesh material={mat.steel}>
+              <boxGeometry args={[0.4, 0.08, 0.9]} />
+            </mesh>
+            <mesh position={[0, 0.06, 0]}>
+              <boxGeometry args={[0.32, 0.06, 0.82]} />
+              <meshStandardMaterial color={foodCol[i]} roughness={0.85} />
+            </mesh>
+          </group>
+        ))}
+      </group>
+
+      {/* 상부 유리창(반투명 — 뒤 조리실이 비친다) + 스테인리스 프레임 */}
+      <group position={[partX, gCy, cCz]}>
+        <mesh>
+          <boxGeometry args={[0.05, gH, cLen]} />
+          <meshStandardMaterial color="#bcd6e8" transparent opacity={0.16} roughness={0.08} metalness={0.2} />
+        </mesh>
+        {[gH / 2 + 0.05, -gH / 2 - 0.05].map((dy, i) => (
+          <mesh key={i} position={[0, dy, 0]} material={mat.steel}>
+            <boxGeometry args={[0.16, 0.1, cLen + 0.2]} />
+          </mesh>
+        ))}
+        {[-cLen / 6, cLen / 6].map((dz, i) => (
+          <mesh key={i} position={[0, 0, dz]} material={mat.steel}>
+            <boxGeometry args={[0.12, gH, 0.06]} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* 유리창 위 헤더(천장까지 콘크리트) */}
+      <mesh position={[partX, (gY1 + WALL_H) / 2 + 0.05, cCz]} material={mat.concrete}>
+        <boxGeometry args={[0.4, WALL_H - gY1 - 0.1, cLen + 0.2]} />
+      </mesh>
+
+      {/* 조리실 출입구(북끝) 문틀: 남쪽 기둥 + 상인방 */}
+      <mesh position={[partX, WALL_H / 2, doorZ0]} material={mat.steel}>
+        <boxGeometry args={[0.34, WALL_H, 0.16]} />
+      </mesh>
+      <mesh position={[partX, WALL_H - 0.15, (doorZ0 + z1) / 2]} material={mat.steel}>
+        <boxGeometry args={[0.34, 0.3, z1 - doorZ0]} />
+      </mesh>
+
+      {/* ── 조리실 내부(x 18~22) ── */}
+      {/* 냉장고(2도어, 북벽 앞, 남향) — 냉장고 게임(lock-fridge)이 이 앞에 선다 */}
+      <group position={[20.6, 0, z1 - 0.6]}>
         <mesh position={[0, 1.05, 0]} material={mat.porcelain} castShadow receiveShadow>
           <boxGeometry args={[1.1, 2.1, 0.8]} />
         </mesh>
@@ -643,59 +748,21 @@ function CafeteriaDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMat
           </mesh>
         ))}
       </group>
-      {/* 긴 배식대(스테인리스) */}
-      <group position={[counterCx, 0, lineZ]}>
+      {/* 조리대(동벽 x22 앞) + 레인지 후드 */}
+      <group position={[21.3, 0, 23]}>
         <mesh position={[0, 0.5, 0]} material={mat.steel} castShadow receiveShadow>
-          <boxGeometry args={[counterLen, 1.0, 0.8]} />
+          <boxGeometry args={[0.7, 1.0, 3.2]} />
         </mesh>
-        {/* 상판 앞 트레이 레일 */}
-        <mesh position={[0, 1.02, -0.36]} material={mat.steel}>
-          <boxGeometry args={[counterLen, 0.06, 0.06]} />
-        </mesh>
-      </group>
-      {/* 배식대 위 조리실 유리창(서빙 해치): 유리 뒤로 어두운 조리실 + 후드·냄비·조리대 실루엣 + 따뜻한 조명 */}
-      <group position={[counterCx, winCy, 27.5]}>
-        {/* 조리실 안쪽 배경(콘크리트 벽을 가리는 어두운 판) */}
-        <mesh position={[0, 0, 0.2]}>
-          <boxGeometry args={[winW, winH, 0.04]} />
-          <meshStandardMaterial color="#10151d" roughness={1} metalness={0} />
-        </mesh>
-        {/* 레인지 후드(위) */}
-        <mesh position={[0, winH / 2 - 0.2, 0.13]} material={mat.steel}>
-          <boxGeometry args={[winW * 0.55, 0.3, 0.04]} />
-        </mesh>
-        {/* 냄비 선반(좌) */}
-        <mesh position={[-winW * 0.25, -0.05, 0.11]} material={mat.steel}>
-          <boxGeometry args={[0.9, 0.5, 0.04]} />
-        </mesh>
-        {/* 안쪽 조리대(우) */}
-        <mesh position={[winW * 0.28, -winH / 2 + 0.22, 0.11]} material={mat.steel}>
-          <boxGeometry args={[winW * 0.35, 0.42, 0.04]} />
-        </mesh>
-        {/* 따뜻한 조리실 조명 */}
-        <mesh position={[0, winH / 2 - 0.06, 0.15]} material={mat.lamp}>
-          <boxGeometry args={[winW * 0.75, 0.06, 0.02]} />
-        </mesh>
-        {/* 유리(반투명) */}
-        <mesh position={[0, 0, -0.04]}>
-          <boxGeometry args={[winW, winH, 0.03]} />
-          <meshStandardMaterial color="#bcd6e8" transparent opacity={0.22} roughness={0.08} metalness={0.2} />
-        </mesh>
-        {/* 스테인리스 프레임 */}
-        <mesh position={[0, winH / 2 + 0.06, 0]} material={mat.steel}>
-          <boxGeometry args={[winW + 0.24, 0.12, 0.16]} />
-        </mesh>
-        <mesh position={[0, -winH / 2 - 0.06, 0]} material={mat.steel}>
-          <boxGeometry args={[winW + 0.24, 0.12, 0.16]} />
-        </mesh>
-        <mesh position={[-winW / 2 - 0.06, 0, 0]} material={mat.steel}>
-          <boxGeometry args={[0.12, winH + 0.24, 0.16]} />
-        </mesh>
-        <mesh position={[winW / 2 + 0.06, 0, 0]} material={mat.steel}>
-          <boxGeometry args={[0.12, winH + 0.24, 0.16]} />
+        <mesh position={[0, 2.3, 0]} material={mat.steel}>
+          <boxGeometry args={[0.7, 0.4, 1.6]} />
         </mesh>
       </group>
-      {/* 식탁 6개(2열 × 3행) + 벤치 2. 충돌은 OBSTACLES가 담당(뚫고 못 지나간다). */}
+      {/* 조리실 따뜻한 조명 */}
+      <mesh position={[20, 2.85, 24]} material={mat.lamp}>
+        <boxGeometry args={[2.6, 0.08, 0.5]} />
+      </mesh>
+
+      {/* ── 식탁 6개(서편 2열 × 3행) + 벤치 2. 충돌은 OBSTACLES가 담당. ── */}
       {rows.map((tz) =>
         cols.map((tx) => (
           <group key={`${tx}-${tz}`} position={[tx, 0, tz]}>
@@ -821,13 +888,16 @@ function MainGate({ mat }: { mat: ReturnType<typeof useMaterials> }) {
     if (right.current) right.current.rotation.y = THREE.MathUtils.damp(right.current.rotation.y, open ? 1.9 : 0, 3, dt);
   });
 
-  const panel = (
+  // 문짝 한 짝: 경첩(로컬 원점)에서 dir(+1=왼짝 +x쪽 / -1=오른짝 -x쪽)으로 중앙까지 뻗는다.
+  // ⚠️ 미러링을 group 회전(Math.PI)으로 하면 useFrame이 rotation.y를 덮어써(닫힘=0) 그 회전이
+  //    사라진다 → 오른짝이 벽 쪽으로 밀려 사라졌었다. 그래서 좌우를 지오메트리(dir)로 미러링한다.
+  const leaf = (dir: number) => (
     <>
-      <mesh position={[half / 2, 2.3, 0]} material={mat.gateBlue} castShadow>
+      <mesh position={[(dir * half) / 2, 2.3, 0]} material={mat.gateBlue} castShadow>
         <boxGeometry args={[half - 0.15, 4.4, 0.18]} />
       </mesh>
       {[0.8, 3.8].map((y, i) => (
-        <mesh key={i} position={[half / 2, y, 0.12]} material={mat.steel}>
+        <mesh key={i} position={[(dir * half) / 2, y, 0.12]} material={mat.steel}>
           <boxGeometry args={[half - 0.3, 0.14, 0.06]} />
         </mesh>
       ))}
@@ -852,9 +922,9 @@ function MainGate({ mat }: { mat: ReturnType<typeof useMaterials> }) {
         material={mat.concrete}
         castShadow
       />
-      {/* 문짝(경첩 = 기둥 안쪽). 왼짝은 +x로, 오른짝은 -x로 뻗는다 */}
-      <group ref={left} position={[-half, 0, GATE.z]}>{panel}</group>
-      <group ref={right} position={[half, 0, GATE.z]} rotation={[0, Math.PI, 0]}>{panel}</group>
+      {/* 문짝(경첩 = 기둥 안쪽). 왼짝은 -half에서 +x로, 오른짝은 +half에서 -x로 중앙까지 뻗는다. */}
+      <group ref={left} position={[-half, 0, GATE.z]}>{leaf(1)}</group>
+      <group ref={right} position={[half, 0, GATE.z]}>{leaf(-1)}</group>
       <Label pos={[GATE.x, 5.2, GATE.z + 1]} text="정문" />
     </group>
   );
@@ -1308,6 +1378,9 @@ export default function GameMap() {
           <BarDoor key={d.id} meta={d} mat={barMatFor(mat, d.id)} />
         ),
       )}
+
+      {/* 배수관 샛길 철창(표식 4개면 열림) */}
+      <DrainGate mat={mat} />
 
       {/* 건물 소품 */}
       <BuildingDecor mat={mat} />

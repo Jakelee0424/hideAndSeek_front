@@ -6,16 +6,32 @@ import { usePrisonAssets, AssetProp } from "./prisonAssets";
 import { CELLS, DOOR_META, TOWERS, getBuilding } from "./prisonLayout";
 
 // 방 중심(prisonLayout BUILDINGS와 일치). 식당은 절차적 배치(Map.CafeteriaDecor)라 OBJ 세트를 안 쓴다.
-const WORKSHOP: [number, number] = [14, 10];
+// (작업장은 통짜 세트를 빼고 개별 소품으로 배치해 방 중심 상수를 안 쓴다.)
 const LAUNDRY: [number, number] = [30, 24];
 const INFIRMARY: [number, number] = [30, 10];
+
+// 작업장 작업대 6개: 3열 × 2행(윗줄 1·2·3 / 아랫줄 4·5·6).
+const WORKBENCHES: [number, number][] = [
+  [9.5, 11.5], [14, 11.5], [18.5, 11.5],
+  [9.5, 7.5], [14, 7.5], [18.5, 7.5],
+];
+// 작업대 위 자잘한 공구 — 벤치마다 개수를 다르게 둔다(2·0·1·1·2·0: 어떤 건 둘, 어떤 건 하나, 어떤 건 없음).
+// bench=작업대 인덱스, dx/dz=상판 위 오프셋(겹침 방지), ry=바닥 회전. 바이스는 세우고 망치는 눕힌다.
+const WORKBENCH_TOOLS: { bench: number; tool: "vise" | "hammer"; dx: number; dz: number; ry: number }[] = [
+  { bench: 0, tool: "vise", dx: -0.4, dz: 0.15, ry: 0.4 },
+  { bench: 0, tool: "hammer", dx: 0.35, dz: -0.2, ry: 1.2 },
+  { bench: 3, tool: "vise", dx: 0.05, dz: -0.05, ry: 0.9 },
+  { bench: 4, tool: "hammer", dx: -0.3, dz: 0.15, ry: 0.2 },
+  { bench: 4, tool: "vise", dx: 0.4, dz: -0.2, ry: 1.7 },
+  // 벤치 1·5는 비워 두고, 벤치 2("3번")엔 작업도구함 퍼즐(quiz-work, interactables.ts)이 올라간다.
+];
+const WB_TOP = 0.9; // 작업대 상판 높이(추정 — 화면 보고 조정)
 
 // CCTV: (위치, 목표)
 const CAMERAS: { pos: [number, number, number]; target: [number, number] }[] = [
   { pos: [-36, 0, 15], target: [-22, 17] },
   { pos: [36, 0, 15], target: [22, 17] },
-  // 식당 CCTV는 제거(요청). 아래는 작업장·세탁실·의무실.
-  { pos: [7.5, 0, 7], target: [14, 10] },
+  // 식당·작업장 CCTV는 제거(요청). 아래는 세탁실·의무실.
   { pos: [36.5, 0, 27], target: [30, 24] },
   { pos: [36.5, 0, 7], target: [30, 10] },
   { pos: [-38, 0, -27], target: [0, -12] },
@@ -67,9 +83,48 @@ export default function PrisonProps() {
 
       {/* 방별 채우기(작업장·세탁실·의무실·식당). 전부 시각 전용이라 서버 충돌과 무관 —
           걸어서 통과되므로 되도록 벽에 붙이고 동선 한가운데는 비운다. */}
-      {/* 작업장(6..22 × 6..14, 문 N) */}
-      <AssetProp template={a.toolRack} position={[10, 0, 6.4]} />
-      <AssetProp template={a.partsBins} position={[21.4, 0, 8.5]} rotationY={-Math.PI / 2} />
+      {/* 작업장(6..22 × 6..14, 문 N=door-work): 공구 보관판 2(서벽) · 작업대 6(일정 간격) ·
+          사다리(동벽 기대기) · 쓰레기통 2(작업대 사이). 나머지 구조물은 뺐다.
+          전부 시각 전용(걸어서 통과) — prisonLayout/Collision의 작업장 충돌 박스도 함께 비웠다. */}
+      {/* 공구 부착 보관판 2개: 서쪽 벽(x=6)에 나란히, 방 안(+x)을 향해. 벽 높이(y≈1.2)로 띄운다. */}
+      <AssetProp template={a.wsPegboard} position={[6.4, 1.2, 8.5]} rotationY={Math.PI / 2} />
+      <AssetProp template={a.wsPegboard} position={[6.4, 1.2, 11.5]} rotationY={Math.PI / 2} />
+      {/* 작업대 6개: 3열 × 2행. 윗줄(북,z11.5)=1·2·3, 아랫줄(남,z7.5)=4·5·6.
+          가운데 x14 열은 두 줄을 벌려 그 사이로 문(z14)→퀴즈(quiz-work z9.5) 동선을 남긴다. */}
+      {WORKBENCHES.map(([x, z], i) => (
+        <AssetProp key={`workbench-${i}`} template={a.workbench} position={[x, 0, z]} />
+      ))}
+      {/* 작업대 위 자잘한 공구(벤치별 개수 제각각). 바이스는 세우고, 망치는 상판에 눕힌다. */}
+      {WORKBENCH_TOOLS.map((t, i) => {
+        const [bx, bz] = WORKBENCHES[t.bench];
+        if (t.tool === "hammer") {
+          // 망치 눕히기: 바깥 group=상판 위 방향(ry), 안쪽 group=옆으로 90° 눕힘.
+          return (
+            <group key={`wbtool-${i}`} position={[bx + t.dx, WB_TOP + 0.05, bz + t.dz]} rotation={[0, t.ry, 0]}>
+              <group rotation={[Math.PI / 2, 0, 0]}>
+                <AssetProp template={a.wsHammer} position={[0, 0, 0]} />
+              </group>
+            </group>
+          );
+        }
+        return (
+          <AssetProp
+            key={`wbtool-${i}`}
+            template={a.wsVise}
+            position={[bx + t.dx, WB_TOP, bz + t.dz]}
+            rotationY={t.ry}
+          />
+        );
+      })}
+      {/* 사다리: 동쪽 벽(x≈21.4)에 기울여 기대기. 바깥 group=벽 쪽(+x)으로 기울임, 안쪽 group=벽 향해 회전. */}
+      <group position={[21.4, 0, 10]} rotation={[0, 0, -0.18]}>
+        <group rotation={[0, -Math.PI / 2, 0]}>
+          <AssetProp template={a.ladder3} position={[0, 0, 0]} />
+        </group>
+      </group>
+      {/* 쓰레기통 2개: 1·2 사이(윗줄) / 5·6 사이(아랫줄) */}
+      <AssetProp template={a.trash} position={[11.75, 0, 11.5]} />
+      <AssetProp template={a.trash} position={[16.25, 0, 7.5]} />
       {/* 세탁실(22..38 × 20..28, 문 S) */}
       <AssetProp template={a.jumpsuitCabinet} position={[25, 0, 27.5]} rotationY={Math.PI} />
       <AssetProp template={a.laundryBasket} position={[35.8, 0, 21.4]} />
@@ -102,8 +157,8 @@ export default function PrisonProps() {
         <AssetProp key={i} template={a.camera} position={cam.pos} rotationY={faceCenter(cam.pos[0] - cam.target[0], cam.pos[2] - cam.target[1])} />
       ))}
 
-      {/* 방 세트(절차적 데코 대체). 식당은 제외 — Map.CafeteriaDecor가 대신 그린다. */}
-      <AssetProp template={a.workshop} position={[WORKSHOP[0], 0, WORKSHOP[1]]} />
+      {/* 방 세트(절차적 데코 대체). 식당은 제외 — Map.CafeteriaDecor가 대신 그린다.
+          작업장은 통짜 세트(a.workshop)를 뺐다 — 중앙에 뭉쳐 떠 보였다. 위에서 개별 소품으로 재배치. */}
       <AssetProp template={a.laundry} position={[LAUNDRY[0], 0, LAUNDRY[1]]} />
       <AssetProp template={a.infirmary} position={[INFIRMARY[0], 0, INFIRMARY[1]]} />
 
@@ -139,8 +194,7 @@ export default function PrisonProps() {
       <AssetProp template={a.locker} position={[-37, 0, 16]} rotationY={Math.PI / 2} />
       <AssetProp template={a.locker} position={[-37, 0, 18]} rotationY={Math.PI / 2} />
 
-      {/* 잡소품 (식당 안 쓰레기통은 뺐다 — 식당은 정리된 배치) */}
-      <AssetProp template={a.trash} position={[8, 0, 8]} />
+      {/* 잡소품 (식당 안 쓰레기통은 뺐다 — 식당은 정리된 배치. 작업장 쓰레기통은 위 작업장 블록으로 옮겼다.) */}
       <AssetProp template={a.drum} position={[-30, 0, -9]} />
       <AssetProp template={a.drum} position={[-27, 0, -9]} />
       <AssetProp template={a.pallet} position={[-24, 0, -6]} />

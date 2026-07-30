@@ -5,7 +5,7 @@
 //                 감방 자물쇠(minigame) → 아케이드 한 판(ArcadeHost)
 //                 탈옥문(dial)          → 네 자리 코드 입력
 // 풀면 sendSolve(협동 동기화) + markSolved(로컬 즉시 반영) → 감방문이 열린다.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ArcadeHost from "./ArcadeHost";
 import {
   findInteractable,
@@ -207,6 +207,9 @@ function PuzzleInput({
           clearError={clearError}
         />
       );
+    case "hammer":
+      // 반사신경 게임 — 방 시드·정답이 없다(각자 제 손으로 자물쇠를 부순다). 성공하면 문이 열린다.
+      return <HammerLock onSolve={onSolve} />;
     case "liar":
       return (
         <LiarLock
@@ -451,6 +454,275 @@ function ToolCodeLock({
         onFail={onFail}
         clearError={clearError}
       />
+    </>
+  );
+}
+
+// ── 망치질로 자물쇠 부수기(작업장 문 잠금장치) ─────────────────────
+// 오른쪽 세로 게이지에서 화살표가 위아래로 왕복한다. 가운데 초록 구간에 화살표가 왔을 때
+// Space(또는 버튼)로 내려치면 명중. 네 번 명중하면 왼쪽 도어락이 부서지며 문이 열린다(onSolve).
+// 빗나가면 진행이 없다(감점 없음). 반사신경 게임이라 방 시드·정답과 무관하다.
+// 화살표는 명중할수록 곱셈으로 빨라진다(갈수록 더 빠르게).
+const HAMMER_NEED = 4;
+const GREEN_LO = 0.38; // 초록 구간(게이지 0=아래 ~ 1=위 기준)
+const GREEN_HI = 0.62;
+const HAMMER_SPEED0 = 0.9; // 시작 속도(초당 이동량)
+const HAMMER_SPEEDUP = 1.32; // 명중마다 속도 배율
+
+// 자물쇠 그래픽(SVG) — hits(균열 진행)·broken(부서짐)에 따라 그려진다.
+// 걸쇠는 부서질 때 튕겨 열리고, 몸통은 두 조각으로 쪼개지며 파편이 튄다.
+function LockGraphic({ hits, broken }: { hits: number; broken: boolean }) {
+  const tr = "transition-transform duration-300 ease-out";
+  return (
+    <svg viewBox="0 0 140 155" className="h-40 w-40">
+      <defs>
+        <linearGradient id="lkBrass" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#f7dc94" />
+          <stop offset="0.5" stopColor="#d8a63e" />
+          <stop offset="1" stopColor="#98701d" />
+        </linearGradient>
+        <linearGradient id="lkSteel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#eef2f7" />
+          <stop offset="1" stopColor="#96a2af" />
+        </linearGradient>
+      </defs>
+
+      {/* 걸쇠(shackle) — 부서지면 왼쪽 다리가 끊겨 오른쪽 다리 기준으로 튕겨 열린다. */}
+      <g
+        className={tr}
+        style={{
+          transformBox: "fill-box",
+          transformOrigin: "100% 100%",
+          transform: broken ? "rotate(-42deg) translateY(-4px)" : "none",
+        }}
+      >
+        <path
+          d="M46 76 V52 a24 24 0 0 1 48 0 V76"
+          fill="none"
+          stroke="url(#lkSteel)"
+          strokeWidth="12"
+          strokeLinecap="round"
+        />
+      </g>
+
+      {/* 몸통 = 두 조각(항상 렌더). 붙어 있을 땐 가운데가 겹쳐 한 덩어리, 부서지면 좌우로 갈라진다. */}
+      <g
+        className={tr}
+        style={{
+          transformBox: "fill-box",
+          transformOrigin: "center",
+          transform: broken ? "translate(-11px, 5px) rotate(-9deg)" : "none",
+        }}
+      >
+        <path
+          d="M46 72 L72 72 L63 92 L73 106 L61 124 L70 146 L46 146 Q34 146 34 132 L34 86 Q34 72 46 72 Z"
+          fill="url(#lkBrass)"
+          stroke="#7a5a18"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+      </g>
+      <g
+        className={tr}
+        style={{
+          transformBox: "fill-box",
+          transformOrigin: "center",
+          transform: broken ? "translate(11px, 7px) rotate(11deg)" : "none",
+        }}
+      >
+        <path
+          d="M68 72 L94 72 Q106 72 106 86 L106 132 Q106 146 94 146 L70 146 L61 124 L73 106 L63 92 L68 72 Z"
+          fill="url(#lkBrass)"
+          stroke="#7a5a18"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+      </g>
+
+      {/* 열쇠구멍 — 부서지면 사라진다(조각으로 흩어지므로). */}
+      <g className="transition-opacity duration-200" style={{ opacity: broken ? 0 : 1 }}>
+        <circle cx="70" cy="102" r="8" fill="#2a2012" />
+        <path d="M70 102 L63 128 H77 Z" fill="#2a2012" />
+      </g>
+
+      {/* 균열(명중 1~3회 누적). 부서지기 전까지 점점 늘어난다. */}
+      {!broken && (
+        <g stroke="#3a2b0f" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          {hits >= 1 && <path d="M70 73 L61 90 L72 103" />}
+          {hits >= 2 && <path d="M72 103 L59 118 L69 138" />}
+          {hits >= 3 && <path d="M52 96 L41 108 M88 92 L100 104" />}
+        </g>
+      )}
+
+      {/* 부서질 때 튀는 파편 */}
+      {broken && (
+        <g fill="url(#lkBrass)" stroke="#7a5a18" strokeWidth="1">
+          <path d="M70 104 l10 -6 l-1 11 Z" />
+          <path d="M66 118 l-11 3 l6 7 Z" />
+          <path d="M80 120 l9 6 l-8 4 Z" />
+        </g>
+      )}
+    </svg>
+  );
+}
+
+// 망치 그래픽(SVG) — 명중 시 부모가 회전시켜 내려치는 모션을 준다.
+function HammerGraphic() {
+  return (
+    <svg viewBox="0 0 64 64" className="h-16 w-16">
+      <defs>
+        <linearGradient id="hgSteel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#dfe5ec" />
+          <stop offset="1" stopColor="#8b97a4" />
+        </linearGradient>
+      </defs>
+      {/* 손잡이(나무) */}
+      <rect x="29" y="22" width="6" height="38" rx="3" fill="#8a5a2b" />
+      <rect x="29" y="22" width="2.5" height="38" rx="1.2" fill="#a9743c" />
+      {/* 머리(강철) */}
+      <rect x="14" y="10" width="34" height="15" rx="3" fill="url(#hgSteel)" stroke="#6b7480" strokeWidth="1" />
+      <rect x="44" y="7" width="9" height="21" rx="2.5" fill="#7f8a97" />
+    </svg>
+  );
+}
+
+function HammerLock({ onSolve }: { onSolve: () => void }) {
+  const [hits, setHits] = useState(0);
+  const [flash, setFlash] = useState<"hit" | "miss" | null>(null);
+  const [broken, setBroken] = useState(false);
+
+  const posRef = useRef(0.5); // 화살표 위치(0~1)
+  const dirRef = useRef(1);
+  const speedRef = useRef(HAMMER_SPEED0); // 초당 이동량(칠수록 빨라진다)
+  const hitsRef = useRef(0);
+  const doneRef = useRef(false);
+  const arrowRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef(0);
+  const lastRef = useRef(0);
+
+  // 화살표 상하 왕복 — ref로 DOM top을 직접 갱신한다(매 프레임 setState 금지).
+  useEffect(() => {
+    function frame(t: number) {
+      if (!lastRef.current) lastRef.current = t;
+      const dt = Math.min(0.05, (t - lastRef.current) / 1000);
+      lastRef.current = t;
+      let p = posRef.current + dirRef.current * speedRef.current * dt;
+      if (p >= 1) {
+        p = 1;
+        dirRef.current = -1;
+      } else if (p <= 0) {
+        p = 0;
+        dirRef.current = 1;
+      }
+      posRef.current = p;
+      if (arrowRef.current) arrowRef.current.style.top = `${(1 - p) * 100}%`;
+      rafRef.current = requestAnimationFrame(frame);
+    }
+    rafRef.current = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  // 최신 strike를 ref로 들고 있는다 — keydown 리스너는 []로 한 번만 등록하기 때문.
+  const strikeRef = useRef<() => void>(() => {});
+  strikeRef.current = () => {
+    if (doneRef.current) return;
+    const p = posRef.current;
+    if (p >= GREEN_LO && p <= GREEN_HI) {
+      const n = hitsRef.current + 1;
+      hitsRef.current = n;
+      setHits(n);
+      setFlash("hit");
+      speedRef.current *= HAMMER_SPEEDUP; // 명중할수록 곱으로 빨라진다(갈수록 더 빠르게)
+      if (n >= HAMMER_NEED) {
+        doneRef.current = true;
+        cancelAnimationFrame(rafRef.current);
+        setBroken(true);
+        window.setTimeout(() => onSolve(), 650); // 부서지는 연출을 잠깐 보여준 뒤 문 열기
+      }
+    } else {
+      setFlash("miss");
+    }
+    window.setTimeout(() => setFlash(null), 180);
+  };
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.code === "Space") {
+        e.preventDefault();
+        strikeRef.current();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  return (
+    <>
+      <div className="mb-3 flex items-stretch justify-center gap-6">
+        {/* 왼쪽: 내려치는 망치 + 부서지는 도어락 */}
+        <div className="relative flex w-40 flex-col items-center justify-center">
+          <div
+            className={`z-10 origin-bottom-left transition-transform duration-100 ${
+              flash === "hit" ? "translate-x-1 translate-y-3 rotate-[30deg]" : "rotate-0"
+            }`}
+          >
+            <HammerGraphic />
+          </div>
+          <div className="relative -mt-3">
+            <LockGraphic hits={hits} broken={broken} />
+            {/* 타격 순간 섬광(명중마다 재생) */}
+            {flash === "hit" && (
+              <span
+                key={hits}
+                className="pointer-events-none absolute left-1/2 top-[38%] h-12 w-12 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-amber-200/70"
+              />
+            )}
+          </div>
+          <div className="mt-1 font-mono text-sm text-slate-300">
+            {hits} / {HAMMER_NEED}
+          </div>
+        </div>
+
+        {/* 오른쪽: 세로 게이지 + 위아래로 움직이는 화살표 */}
+        <div className="relative h-48 w-14 self-center">
+          <div className="absolute left-1/2 top-0 h-full w-8 -translate-x-1/2 overflow-hidden rounded-full border border-white/20 bg-rose-600/70">
+            {/* 가운데 초록 구간 */}
+            <div
+              className="absolute inset-x-0 bg-emerald-500"
+              style={{ top: `${(1 - GREEN_HI) * 100}%`, height: `${(GREEN_HI - GREEN_LO) * 100}%` }}
+            />
+          </div>
+          {/* 화살표(게이지 옆에서 왼쪽을 가리킨다). top은 rAF가 갱신. */}
+          <div
+            ref={arrowRef}
+            className="absolute right-0 -translate-y-1/2 text-xl leading-none text-white drop-shadow"
+            style={{ top: "50%" }}
+          >
+            ◀
+          </div>
+        </div>
+      </div>
+
+      {/* 피드백 */}
+      <p className="mb-3 flex h-5 items-center justify-center text-sm font-semibold">
+        {broken ? (
+          <span className="text-emerald-400">자물쇠가 부서졌다!</span>
+        ) : flash === "hit" ? (
+          <span className="text-emerald-400">명중! 쾅!</span>
+        ) : flash === "miss" ? (
+          <span className="text-rose-400">빗나감…</span>
+        ) : (
+          <span className="text-slate-500">화살표가 초록에 올 때 내려쳐라</span>
+        )}
+      </p>
+
+      <button
+        onClick={() => strikeRef.current()}
+        disabled={broken}
+        className="w-full rounded-lg bg-amber-500 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-400 disabled:opacity-50"
+      >
+        🔨 망치질 (Space)
+      </button>
     </>
   );
 }

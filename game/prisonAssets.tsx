@@ -159,7 +159,13 @@ const DEFS: Def[] = [
   // tier1
   { key: "watchtower", src: "t1", prefixes: ["tower_", "cabin_", "searchlight", "guard_post"] },
   { key: "cafeteria", src: "t1", prefixes: ["table_", "bench_", "counter_", "sneeze_guard", "food_tray", "food_well", "tray_stack", "cup"] },
-  { key: "workshop", src: "t1", prefixes: ["workbench_", "pegboard", "vise_", "wrench", "hammer_", "tool_handle", "saw_", "screwdriver", "crate", "ladder_"] },
+  // 예전 workshop 통짜 세트(중앙에 뭉쳐 떠 보였다)를 부품별로 뗀다 — 개별 배치한다.
+  //   workbench = 작업대(6개) / wsPegboard = 공구 부착 보관판(공구 달린 벽판, 서벽 2개)
+  //   wsVise·wsHammer = 작업대 위에 올릴 자잘한 공구. (crate·ladder_는 안 쓴다 — 사다리는 t3.ladder3.)
+  { key: "workbench", src: "t1", prefixes: ["workbench_"] },
+  { key: "wsPegboard", src: "t1", prefixes: ["pegboard", "wrench", "saw_", "screwdriver"] },
+  { key: "wsVise", src: "t1", prefixes: ["vise_"] },
+  { key: "wsHammer", src: "t1", prefixes: ["hammer_", "tool_handle"] },
   { key: "clock", src: "t1", prefixes: ["clock_"] },
   { key: "exitSign", src: "t1", prefixes: ["exit_"] },
   { key: "extinguisher", src: "t1", prefixes: ["extinguisher_"] },

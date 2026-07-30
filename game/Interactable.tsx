@@ -57,6 +57,45 @@ function Padlock({ color, emissive, glow }: { color: string; emissive: string; g
   );
 }
 
+// ── 작업도구함(quiz-work 전용): 빨간 금속 공구함(몸통+뚜껑+손잡이+걸쇠) ──
+// 자물쇠 대신 도구함 모양. 풀리면(solved) 다른 잠금처럼 초록 발광으로 알린다(발광만 갈아 끼운다).
+function Toolbox({ emissive, glow }: { emissive: string; glow: number }) {
+  const em = { emissive, emissiveIntensity: glow };
+  const steel = { color: "#c7ccd4", metalness: 0.9, roughness: 0.3, ...em };
+  return (
+    <group>
+      {/* 몸통 */}
+      <mesh position={[0, 0.18, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.7, 0.32, 0.4]} />
+        <meshStandardMaterial color="#b23b2e" metalness={0.4} roughness={0.5} {...em} />
+      </mesh>
+      {/* 뚜껑(몸통보다 살짝 큰 상판) */}
+      <mesh position={[0, 0.37, 0]} castShadow>
+        <boxGeometry args={[0.74, 0.12, 0.44]} />
+        <meshStandardMaterial color="#8e2f24" metalness={0.4} roughness={0.5} {...em} />
+      </mesh>
+      {/* 손잡이(가로 바 + 기둥 2) */}
+      <mesh position={[0, 0.54, 0]}>
+        <boxGeometry args={[0.34, 0.035, 0.05]} />
+        <meshStandardMaterial {...steel} />
+      </mesh>
+      {[-0.15, 0.15].map((x) => (
+        <mesh key={x} position={[x, 0.48, 0]}>
+          <boxGeometry args={[0.035, 0.12, 0.035]} />
+          <meshStandardMaterial {...steel} />
+        </mesh>
+      ))}
+      {/* 앞면 걸쇠 2개(놋쇠) */}
+      {[-0.22, 0.22].map((x) => (
+        <mesh key={x} position={[x, 0.26, 0.21]}>
+          <boxGeometry args={[0.08, 0.1, 0.03]} />
+          <meshStandardMaterial color="#e0c341" metalness={0.7} roughness={0.4} {...em} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 // ── 자물쇠 변형(OBJ 프리팹) ──────────────────────────────────────
 // 예전엔 아홉 개 잠금이 전부 같은 황동 자물쇠였다. 이제 잠금마다 생김새가 다르다.
 //   - 감방 4개: 철창 색과 짝이 맞는 네 가지(어느 방 자물쇠인지 눈으로 구분된다)
@@ -73,8 +112,9 @@ const LOCK_ASSET: Record<string, string> = {
   // 식당 문 요일 코드 · 냉장고 칼로리 코드 — 숫자 다이얼 자물쇠 프리팹 재사용.
   "lock-cafe": "lockNumber",
   "lock-fridge": "lockNumber",
-  // 작업장 방 안 비밀번호 퀴즈 — 예전 작업장 문자 자물쇠(lockLetter) 프리팹을 재사용한다.
-  "quiz-work": "lockLetter",
+  // 작업장 문 볼트-너트 잠금 — 답이 숫자(너트 번호)라 숫자 다이얼 프리팹을 재사용한다.
+  "lock-work": "lockNumber",
+  // (quiz-work는 자물쇠가 아니라 작업도구함 모양 — 아래 Interactable에서 Toolbox로 직접 그린다.)
   "gate-lock": "lockGate",
   "escape-pipe": "lockDrain",
 };
@@ -134,15 +174,23 @@ export default function Interactable({ data }: { data: InteractableData }) {
   return (
     <group position={data.position}>
       {isLock ? (
-        // 프리팹이 로드될 때까지는 절차적 자물쇠로 버틴다(맵 전체를 되돌리지 않게 자체 Suspense).
-        // 해결되면 초록으로 은은히 빛난다 — 프리팹은 몸통 색을 못 바꾸니 발광으로 알린다.
-        <Suspense fallback={<Padlock color={color} emissive={emissive} glow={glow} />}>
-          <LockProp
-            id={data.id}
+        data.id === "quiz-work" ? (
+          // 작업도구함(자물쇠 대신 도구함 모양). 해결되면 초록 발광.
+          <Toolbox
             emissive={solved ? "#22c55e" : emissive}
             glow={solved ? 0.4 : Math.max(glow, 0.22)}
           />
-        </Suspense>
+        ) : (
+          // 프리팹이 로드될 때까지는 절차적 자물쇠로 버틴다(맵 전체를 되돌리지 않게 자체 Suspense).
+          // 해결되면 초록으로 은은히 빛난다 — 프리팹은 몸통 색을 못 바꾸니 발광으로 알린다.
+          <Suspense fallback={<Padlock color={color} emissive={emissive} glow={glow} />}>
+            <LockProp
+              id={data.id}
+              emissive={solved ? "#22c55e" : emissive}
+              glow={solved ? 0.4 : Math.max(glow, 0.22)}
+            />
+          </Suspense>
+        )
       ) : (
         // 힌트 물체 — id별로 성격에 맞는 비주얼(안내문·각인·모래 글씨·배식판 등)
         <NoteVisual id={data.id} emissive={emissive} glow={glow} />

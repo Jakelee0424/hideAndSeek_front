@@ -152,8 +152,9 @@ export const BUILDINGS: Building[] = [
   // 식당 문은 진짜 식당 문(감옥 창살 아님, Map.CafeteriaDoor). 요일 코드(lock-cafe)를 풀어야 들어간다.
   { id: "cafeteria", kind: "room", label: "식당", rect: { x0: 6, z0: 20, x1: 22, z1: 28 }, color: "#4a4033", openings: [{ edge: "S", at: 14, width: 4, door: "door-cafe" }] },
   { id: "laundry", kind: "room", label: "세탁실", rect: { x0: 22, z0: 20, x1: 38, z1: 28 }, color: "#33455c", openings: [{ edge: "S", at: 30, width: DOOR_W, door: "door-laundry" }, { edge: "W", at: 24, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
-  // 작업장 문은 상시 개방(door 없음) — 방 안 퀴즈(quiz-work)를 풀어 표식을 드러내는 구조로 바뀌었다.
-  { id: "workshop", kind: "room", label: "작업장", rect: { x0: 6, z0: 6, x1: 22, z1: 14 }, color: "#4b452a", openings: [{ edge: "N", at: 14, width: DOOR_W }] },
+  // 작업장 문은 볼트-너트 잠금장치(lock-work)로 연다 — 식당처럼 문 밖 자물쇠를 풀고 들어가,
+  // 방 안 퀴즈(quiz-work)로 표식을 드러낸다. 서버 Room.LOCK_OPENS의 door-work와 짝을 맞춘다.
+  { id: "workshop", kind: "room", label: "작업장", rect: { x0: 6, z0: 6, x1: 22, z1: 14 }, color: "#4b452a", openings: [{ edge: "N", at: 14, width: DOOR_W, door: "door-work" }] },
   { id: "infirmary", kind: "room", label: "의무실", rect: { x0: 22, z0: 6, x1: 38, z1: 14 }, color: "#2f4a44", openings: [{ edge: "N", at: 30, width: DOOR_W, door: "door-med" }, { edge: "W", at: 10, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
   // 별관 복도: 동쪽 벽만 소유(서쪽은 연결 복도로 열림, 북/남은 방 벽이 담당).
   {
@@ -237,7 +238,15 @@ function buildingDoors(b: Building): DoorBox[] {
 }
 
 export const WALL_BOXES: WallBox[] = BUILDINGS.flatMap(buildingWalls);
-export const DOOR_BOXES: DoorBox[] = BUILDINGS.flatMap(buildingDoors);
+
+// 배수관 샛길 철창(표식 게이트): 동쪽 샛길(건물 동벽 x38 ~ 외벽 x42, 폭 4m)을 z=26에서 가로막는다.
+// 표식 4개를 다 얻으면 열린다(interactables.isDrainGateOpen로 openDoors에 반영). 문 취급이라
+// DOOR_BOXES에 넣어 열리면 충돌에서 빠진다. ⚠️ 서버 Collision.DOORS·Room과 좌표·id를 맞춘다.
+export const DRAIN_GATE = { id: "gate-drain", cx: 40, cz: 26, hx: 2, hz: 0.25 };
+export const DOOR_BOXES: DoorBox[] = [
+  ...BUILDINGS.flatMap(buildingDoors),
+  { id: DRAIN_GATE.id, cx: DRAIN_GATE.cx, cz: DRAIN_GATE.cz, hx: DRAIN_GATE.hx, hz: DRAIN_GATE.hz },
+];
 export const FLOORS: { rect: Rect; color: string }[] = BUILDINGS.filter(
   (b) => b.color,
 ).map((b) => ({ rect: b.rect, color: b.color! }));
@@ -394,19 +403,21 @@ export const OBSTACLES: ObstacleBox[] = [
   // 화장실: 변기·칸막이 열(북벽) + 세면대(서벽)
   OB(0, 26.8, 4.3, 0.55),
   OB(-5.4, 22.5, 0.35, 1.5),
-  // 식당: 좌측 냉장고 + 긴 배식대(북벽) + 식탁 6개(2열×3행, 뚫고 못 지나가게 충돌).
-  OB(7.2, 27.3, 0.6, 0.45),
-  OB(14.95, 27.3, 6.25, 0.45),
-  ...[21.4, 23.4, 25.4].flatMap((tz) => [9.5, 18.5].map((tx) => OB(tx, tz, 1.0, 0.45))),
+  // 식당(동쪽 1/4은 조리실로 분리): 식탁 6(서편 2열×3행) + 조리실 분리벽(x18, 북끝 출입구만 개방) + 조리실 냉장고.
+  ...[22, 24, 26].flatMap((tz) => [8.5, 11.5].map((tx) => OB(tx, tz, 1.0, 0.45))),
+  OB(18, 23.2, 0.2, 3.2), // 조리실 분리벽(z20~26.4; 북끝 z26.4~28은 출입구) — 배식대·유리창 전 높이 차단
+  OB(20.6, 27.4, 0.6, 0.5), // 조리실 냉장고
+  OB(21.3, 23, 0.45, 1.6), // 조리실 조리대(동벽)
   // 세탁실: 세탁기 4대(북벽) + 카트(동남쪽 구석 — 문(x30) 정면 동선을 비운다)
   OB(25, 26.8, 0.8, 0.9),
   OB(28.2, 26.8, 0.8, 0.9),
   OB(31.4, 26.8, 0.8, 0.9),
   OB(34.6, 26.8, 0.8, 0.9),
   OB(35, 21.6, 0.7, 0.5),
-  // 작업장: 작업대(북벽 서편 — 문(x14) 정면 동선을 비운다) + 상자 5개
-  OB(10, 12.4, 3, 0.7),
-  ...[10, 12, 14, 16, 18].map((x) => OB(x, 7.6, 0.5, 0.5)),
+  // 작업장: 작업대 6개(3열×2행 [9.5·14·18.5]×[11.5·7.5])는 뚫고 못 지나가게 충돌.
+  //   나머지 소품(공구 보관판·사다리·쓰레기통·도구함)은 시각 전용(걸어서 통과) — 작업대 사이 통로로 다닌다.
+  //   ⚠️ 좌표는 PrisonProps.WORKBENCHES / 서버 Collision.java와 같이 맞춘다.
+  ...[11.5, 7.5].flatMap((tz) => [9.5, 14, 18.5].map((tx) => OB(tx, tz, 0.9, 0.45))),
   // 의무실: 침대 3 + 약장(동벽)
   OB(25.5, 8.3, 0.6, 1.3),
   OB(30, 8.3, 0.6, 1.3),

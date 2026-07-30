@@ -195,32 +195,74 @@ function Plate({ emissive, glow }: VisualProps): JSX.Element {
   );
 }
 
-// 배식판: 칸이 파인 금속 식판을 바닥에 눕히고, 위쪽 면에 낙서 자국.
+// 배식 식판: 칸막이(밥칸·국칸·반찬칸 3)가 있는 금속 식판. 배식대 상판 위에 얹혀(바닥 오프셋 없음),
+// 식탁 쪽(-x)에서 잘 보이게 반찬칸을 앞줄에 둔다. 칸마다 음식 색·높이를 다르게 표현한다.
+// (interactables 위치 y = 배식대 상판 높이. 여기선 그 원점에 그대로 올린다 — GROUND_Y 안 쓴다.)
 function Tray({ emissive, glow }: VisualProps): JSX.Element {
+  const metal = {
+    color: "#c2c8d0",
+    metalness: 0.8,
+    roughness: 0.4,
+    emissive,
+    emissiveIntensity: glow * 0.4,
+  };
+  const DX = 0.3; // 깊이(식탁↔조리실 방향)
+  const DZ = 0.64; // 폭(배식대 길이 방향)
+  const RIM = 0.05; // 테두리·칸막이 높이
+  const TH = 0.04; // 바닥판 두께
   return (
-    <group position={[0, GROUND_Y + 0.04, 0]}>
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[0.74, 0.06, 0.52]} />
-        <meshStandardMaterial
-          color="#b8bec8"
-          metalness={0.85}
-          roughness={0.4}
-          emissive={emissive}
-          emissiveIntensity={glow * 0.4}
-        />
+    <group>
+      {/* 바닥판 */}
+      <mesh castShadow receiveShadow position={[0, TH / 2, 0]}>
+        <boxGeometry args={[DX, TH, DZ]} />
+        <meshStandardMaterial {...metal} />
       </mesh>
-      {/* 파인 칸 3개 */}
-      {[-0.22, 0.02, 0.26].map((x, i) => (
-        <mesh key={x} position={[x, 0.032, 0]}>
-          <boxGeometry args={[i === 1 ? 0.18 : 0.16, 0.02, 0.36]} />
-          <meshStandardMaterial color="#7d838d" metalness={0.7} roughness={0.5} />
+      {/* 테두리 4면 + 가운데 칸막이(앞 반찬줄 / 뒤 밥·국 구분) */}
+      {[
+        [DX / 2 - 0.01, RIM, DZ] as const,
+        [-DX / 2 + 0.01, RIM, DZ] as const,
+      ].map((s, i) => (
+        <mesh key={`rx${i}`} position={[i === 0 ? DX / 2 - 0.01 : -DX / 2 + 0.01, TH + RIM / 2, 0]}>
+          <boxGeometry args={[0.02, RIM, DZ]} />
+          <meshStandardMaterial {...metal} />
         </mesh>
       ))}
-      {/* 낙서 자국(뒷면 긁힘) */}
-      <mesh position={[0.28, 0.034, 0.16]} rotation={[0, 0.5, 0]}>
-        <boxGeometry args={[0.2, 0.006, 0.012]} />
-        <meshStandardMaterial color="#2a2e35" roughness={0.9} />
+      {[DZ / 2 - 0.01, -DZ / 2 + 0.01, 0].map((z, i) => (
+        <mesh key={`rz${i}`} position={[0, TH + RIM / 2, z]}>
+          <boxGeometry args={[DX, RIM, 0.02]} />
+          <meshStandardMaterial {...metal} />
+        </mesh>
+      ))}
+      <mesh position={[0, TH + RIM / 2, 0]}>
+        <boxGeometry args={[0.02, RIM, DZ]} />
+        <meshStandardMaterial {...metal} />
       </mesh>
+
+      {/* 밥칸(뒤 +x): 봉긋한 흰밥(제일 높다) */}
+      <mesh position={[0.075, TH + 0.055, -0.17]}>
+        <boxGeometry args={[0.11, 0.11, 0.26]} />
+        <meshStandardMaterial color="#f5f0e4" roughness={0.9} />
+      </mesh>
+      {/* 국칸(뒤 +x): 둥근 그릇 + 국물(낮다) */}
+      <mesh position={[0.075, TH + 0.03, 0.19]}>
+        <cylinderGeometry args={[0.11, 0.09, 0.06, 20]} />
+        <meshStandardMaterial {...metal} />
+      </mesh>
+      <mesh position={[0.075, TH + 0.058, 0.19]}>
+        <cylinderGeometry args={[0.095, 0.09, 0.02, 20]} />
+        <meshStandardMaterial color="#7d4a22" roughness={0.7} />
+      </mesh>
+      {/* 반찬칸 3(앞 -x, 식탁에서 잘 보이는 쪽): 색·높이 제각각(김치·나물·계란) */}
+      {[
+        { z: -0.19, c: "#c0392b", h: 0.06 },
+        { z: 0.0, c: "#6f8f3a", h: 0.04 },
+        { z: 0.19, c: "#e6b93f", h: 0.05 },
+      ].map((s, i) => (
+        <mesh key={`side${i}`} position={[-0.075, TH + s.h / 2, s.z]}>
+          <boxGeometry args={[0.11, s.h, 0.17]} />
+          <meshStandardMaterial color={s.c} roughness={0.85} />
+        </mesh>
+      ))}
     </group>
   );
 }
