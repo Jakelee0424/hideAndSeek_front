@@ -50,7 +50,7 @@ export interface Interactable {
   /** lockbox 전용: 풀면 열리는 감방문 id(예: "cell-A"). */
   opensDoor?: string;
   /** note 전용: 표 형태로 읽는 게시물(내용은 방 코드로 생성). 있으면 힌트 대신 표를 띄운다. */
-  board?: "cafe-order" | "cafe-menu" | "cafe-tray" | "laundry-plan";
+  board?: "cafe-order" | "cafe-menu" | "cafe-tray" | "laundry-plan" | "pipe-map";
 }
 
 /** 상호작용 사거리(m, XZ 평면 기준) */
@@ -116,11 +116,16 @@ export const INTERACTABLES: Interactable[] = [
   //   - 봇이 순회하는 것(서버 Interactables.java POI)은 BotNav 웨이포인트에서 닿는 자리로.
   //   ⚠️ 좌표는 서버 Interactables.java와 이중 관리 — 한쪽만 고치면 봇이 유령 지점으로 걸어간다.
   //
-  // ── 세탁실 ①진입(복도 쪽): 배관 밸브 4개 + 노선도 ──
-  // 밸브 옆에 걸린 배관 노선도를 읽어, 각 밸브에서 관이 이어지는 방향으로 핸들을 돌린다
-  // (45°씩 8방향). 노선도엔 답이 없다 — 갈림길마다 죽은 가지(폐수조·보일러·막힘)가 붙어
-  // 있어 급수 본관에서 세탁조까지 관을 실제로 따라가야 한다. 문제는 방 코드로 매판 랜덤
-  // (laundryPlan.laundryPipes). 아래 쪽지 둘은 답이 아니라 **작동 방식**만 알려준다.
+  // ── 세탁실 ①진입(복도 쪽): 배관 밸브 4개 + 벽에 걸린 노선도 ──
+  // 노선도를 읽어, 각 밸브에서 관이 이어지는 방향으로 핸들을 돌린다(45°씩 8방향).
+  // 노선도엔 답이 없다 — 갈림길마다 죽은 가지(폐수조·보일러·막힘)가 붙어 있어 급수 본관에서
+  // 세탁조까지 관을 실제로 따라가야 한다. 문제는 방 코드로 매판 랜덤(laundryPlan.laundryPipes).
+  //
+  // ⚠️ 노선도는 **밸브와 따로 떨어진 벽 게시물**이다(2026-07-31 사용자 지시. 처음엔 밸브 창
+  //    안에 같이 그렸다). 둘의 거리는 3.2m로 사거리(2.2m) 밖이라 한 자리에서 둘 다 열 수 없다
+  //    — 도면을 외우거나 둘이 나눠 맡아야 한다. 더 멀리 두면 네 방향을 외우느라 왕복만 는다.
+  // 아래 쪽지 둘은 답이 아니라 **작동 방식**만 알려준다.
+  { id: "note-pipe-map", type: "note", position: [27, 1.5, 19.6], label: "배관 노선도", board: "pipe-map" },
   { id: "note-laundry1", type: "note", position: [2, 0.6, 24.5], label: "세탁 안내문", hint: "배관 밸브는 노선도에서 관이 이어지는 쪽으로 돌려라. 물은 ①번부터 흐른다 — 위쪽 밸브가 어긋나 있으면 아래 램프는 맞아도 켜지지 않는다." },
   { id: "note-laundry2", type: "note", position: [24, 0.6, -10], label: "젖은 쪽지", hint: "건조대 옷은 겉만 봐선 못 고른다. 일정표의 기호 네 가지가 **전부** 같은 건 딱 한 벌뿐이고, 나머지는 하나씩 어긋나 있다." },
   {
@@ -128,7 +133,7 @@ export const INTERACTABLES: Interactable[] = [
     type: "lockbox",
     position: [30, 0.6, 18.4],
     label: "세탁실 배관 밸브",
-    hint: "노선도에서 ①~④ 밸브를 찾아, 그 자리에서 관이 이어지는 방향으로 핸들을 돌려라. 넷 다 초록불이면 문이 열린다.",
+    hint: "옆 벽에 배관 노선도가 걸려 있다. 노선도에서 ①~④ 밸브를 찾아, 그 자리에서 관이 이어지는 방향으로 핸들을 돌려라. 넷 다 초록불이면 문이 열린다.",
     puzzle: { kind: "valves" },
     opensDoor: "door-laundry",
   },

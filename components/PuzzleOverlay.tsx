@@ -65,9 +65,9 @@ export default function PuzzleOverlay() {
 
   // 노선도·건조대·세탁 일정표는 그림과 표가 넓다 — 이 셋만 모달을 넓게 쓴다.
   const wide =
-    data.puzzle?.kind === "valves" ||
     data.puzzle?.kind === "carelabel" ||
-    data.board === "laundry-plan";
+    data.board === "laundry-plan" ||
+    data.board === "pipe-map"; // 노선도가 빠진 밸브 창은 좁아도 된다
 
   function solve() {
     const roomId = useGameStore.getState().roomId;
@@ -118,6 +118,8 @@ export default function PuzzleOverlay() {
             {/* 게시물(배식 순서표·식단표·세탁 일정)은 방 코드로 만든 표를 띄운다. */}
             {data.board === "laundry-plan" ? (
               <LaundryPlanBoard roomId={roomId} />
+            ) : data.board === "pipe-map" ? (
+              <PipeMapBoard roomId={roomId} />
             ) : (
               data.board && <CafeBoard board={data.board} roomId={roomId} />
             )}
@@ -434,6 +436,22 @@ function PipeDiagram({ pm }: { pm: ReturnType<typeof laundryPipes> }) {
   );
 }
 
+/** 복도 벽에 걸린 배관 노선도(note-pipe-map). 밸브 창에는 도면이 없다 — 여기서 읽고 가야 한다. */
+function PipeMapBoard({ roomId }: { roomId: string }) {
+  const pm = laundryPipes(roomId);
+  return (
+    <div className="mb-4 rounded-lg border border-white/10 bg-black/30 p-3">
+      <p className="mb-2 text-center text-xs text-slate-400">
+        세탁동 급수 계통도 — <b className="text-sky-300">급수 본관</b>에서 <b className="text-emerald-300">세탁조</b>까지
+      </p>
+      <PipeDiagram pm={pm} />
+      <p className="mt-2 text-center text-[11px] text-slate-500">
+        ①~④는 밸브 자리다. 나머지 갈래는 세탁조로 가지 않는다.
+      </p>
+    </div>
+  );
+}
+
 /** 밸브 하나: 8방향 핸들 + 램프. */
 function ValveWheel({ no, dir, lit }: { no: number; dir: Dir; lit: boolean }) {
   const a = (dir * Math.PI) / 4;
@@ -509,10 +527,11 @@ function ValveLock({
 
   return (
     <>
-      <div className="mb-3 rounded-lg border border-white/10 bg-black/30 p-2">
-        <p className="mb-1 px-1 text-[11px] text-slate-400">배관 노선도 (급수 본관 → 세탁조)</p>
-        <PipeDiagram pm={pm} />
-      </div>
+      {/* ⚠️ 노선도는 여기 없다 — 옆 복도 벽에 걸린 게시물(note-pipe-map)로 따로 빼 뒀다.
+          한 화면에서 도면을 보며 돌리면 그냥 베끼기가 된다. */}
+      <p className="mb-3 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-center text-xs text-slate-400">
+        노선도는 옆 <b className="text-slate-200">복도 벽</b>에 걸려 있다. ①~④가 각각 어느 쪽으로 이어지는지 보고 오라.
+      </p>
 
       <div className="mb-3 flex justify-between gap-1">
         {pm.valves.map((v, i) => (
