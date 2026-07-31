@@ -7,6 +7,7 @@ import { useGLTF, useAnimations, Html } from "@react-three/drei";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
 import { applyPrisonSuit } from "./prisonSuit";
+import { EMOTES, type EmoteId } from "@/net/emotes";
 
 const MODEL = "/models/character.glb";
 const TARGET_HEIGHT = 2.4; // m
@@ -35,12 +36,15 @@ export default function Character({
   ringColor,
   nick,
   hitAt,
+  emote,
 }: {
   anim: AnimState;
   ringColor?: string;
   nick?: string;
   /** 마지막으로 맞은 시각(performance.now). 값이 커지면 몸이 한 번 빨갛게 번쩍인다. */
   hitAt?: number;
+  /** 지금 머리 위에 띄울 감정표현. 없으면 말풍선을 그리지 않는다. */
+  emote?: EmoteId | null;
 }) {
   const { scene, animations } = useGLTF(MODEL);
   const group = useRef<THREE.Group>(null);
@@ -132,6 +136,14 @@ export default function Character({
         <Html position={[0, TARGET_HEIGHT + 0.25, 0]} center distanceFactor={12}>
           <div className="pointer-events-none select-none whitespace-nowrap rounded bg-black/60 px-1.5 py-0.5 text-xs text-white">
             {nick}
+          </div>
+        </Html>
+      )}
+      {/* 감정표현 말풍선 — 채팅을 대신한다. 이름표보다 조금 더 위에 크게 띄운다. */}
+      {emote && (
+        <Html position={[0, TARGET_HEIGHT + 1.0, 0]} center distanceFactor={9}>
+          <div className="pointer-events-none select-none rounded-full bg-black/70 px-2 py-1 text-2xl leading-none">
+            {EMOTES[emote].glyph}
           </div>
         </Html>
       )}

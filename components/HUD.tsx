@@ -14,6 +14,7 @@ import {
 import PhaseBanner from "./PhaseBanner";
 import Minimap from "./Minimap";
 import SoundToggle from "./SoundToggle";
+import { EMOTE_LIST } from "@/net/emotes";
 
 export default function HUD() {
   const router = useRouter();
@@ -74,12 +75,28 @@ export default function HUD() {
       {/* 맵 개요 미니맵 + 내 위치 (상단 우측, M키로 접기) */}
       <Minimap />
 
-      <div className="absolute bottom-4 left-4 rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-300 backdrop-blur">
-        이동 <kbd className="font-mono">W A S D</kbd> · 달리기{" "}
-        <kbd className="font-mono">R</kbd> · 상호작용{" "}
-        <kbd className="font-mono">E</kbd> · 채팅{" "}
-        <kbd className="font-mono">Enter</kbd> · 지도{" "}
-        <kbd className="font-mono">M</kbd>
+      {/* 좌하단 안내: 감정표현 단축키 박스를 조작 안내 박스 위에 쌓는다. */}
+      <div className="absolute bottom-4 left-4 flex flex-col gap-2">
+        <div className="rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-300 backdrop-blur">
+          <div className="mb-1 text-[11px] font-semibold text-slate-400">
+            감정표현
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {EMOTE_LIST.map((e) => (
+              <span key={e.id} className="inline-flex items-center gap-1">
+                <kbd className="rounded bg-white/15 px-1 font-mono">{e.key}</kbd>
+                <span>{e.glyph}</span>
+                <span>{e.label}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-300 backdrop-blur">
+          이동 <kbd className="font-mono">W A S D</kbd> · 달리기{" "}
+          <kbd className="font-mono">R</kbd> · 상호작용{" "}
+          <kbd className="font-mono">E</kbd> · 지도{" "}
+          <kbd className="font-mono">M</kbd>
+        </div>
       </div>
 
       {/* 소음 게이지 (하단 우측) */}

@@ -6,6 +6,7 @@
 // 주의: 네이티브 WebSocket을 사용한다(SockJS 아님).
 //       → 백엔드는 registerStompEndpoints("/ws")에 .withSockJS()를 붙이지 말 것.
 import { Client } from "@stomp/stompjs";
+import { encodeEmote, type EmoteId } from "./emotes";
 import type {
   ChatEvent,
   ConnStatus,
@@ -23,10 +24,10 @@ interface Handlers {
 let client: Client | null = null;
 
 // 연결 세대. connect/disconnect마다 증가한다. deactivate()는 비동기라 옛 연결의 구독
-// 콜백이 정리되는 동안에도 살아 있는데, 그 콜백은 전역 스토어(useChat 등)를 직접 건드린다.
-// 방을 옮긴 뒤 도착한 옛 방 프레임이 새 세션의 스토어에 끼어드는 걸 막는다 — 특히 봇 채팅은
-// 방이 봇으로 유지되는 동안 계속 흐르므로, 이 가드가 없으면 옛 방 봇의 대화(옛 죄수번호)가
-// clear() 뒤에 새 게임 화면에 그대로 나타난다.
+// 콜백이 정리되는 동안에도 살아 있는데, 그 콜백은 전역 상태(worldState·emotes 버스 등)를
+// 직접 건드린다. 방을 옮긴 뒤 도착한 옛 방 프레임이 새 세션에 끼어드는 걸 막는다 — 특히 채팅
+// 토픽(지금은 감정표현 전용)은 봇 방이 유지되는 동안 계속 흐르므로, 이 가드가 없으면 옛 방의
+// 뒤늦은 발화가 clear() 뒤 새 화면에 새어 든다.
 let epoch = 0;
 
 const WS_URL =
@@ -139,15 +140,17 @@ export function sendVote(roomId: string, targetId: string): void {
 }
 
 /**
- * 채팅 발화. 말한 사람은 서버가 STOMP 세션에서 알아내므로 본문만 보낸다 —
- * 여기서 id를 실어 보내면 남의 이름으로 발언을 지어낼 수 있고, 마지막 단계가
- * 말을 근거로 AI를 가리는 투표라 그건 게임을 무너뜨린다.
+ * 감정표현(이모트) 발동. 채팅 토픽(/chat)을 그대로 재사용한다 — 저빈도 + 유실되면 안 되는
+ * 값이라 스냅샷이 아니라 전용 토픽이 맞고, 백엔드를 건드리지 않아도 된다. 표현을 정해진
+ * 토큰으로 인코딩해 본문에 싣는다(net/emotes). 누가 표현했는지는 서버가 STOMP 세션에서
+ * 정한다 — 여기서 id를 실어 보내면 남의 이름으로 지어낼 수 있고, 마지막 단계가 표현을
+ * 근거로 AI를 가리는 투표라 그건 게임을 무너뜨린다.
  */
-export function sendChat(roomId: string, text: string): void {
+export function sendEmote(roomId: string, id: EmoteId): void {
   if (client?.connected) {
     client.publish({
       destination: `/app/rooms/${roomId}/chat`,
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text: encodeEmote(id) }),
     });
   }
 }

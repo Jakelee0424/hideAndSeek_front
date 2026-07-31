@@ -7,6 +7,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { worldState, INTERP_DELAY_MS } from "@/net/worldState";
 import { punches } from "@/net/punches";
+import { emotes, EMOTE_TTL_MS, type EmoteId } from "@/net/emotes";
 import { PUNCH_ANIM_MS } from "./punchConfig";
 import { groundHeightAt } from "./prisonLayout";
 import Character, { type AnimState } from "./Character";
@@ -24,8 +25,11 @@ export default function RemotePlayer({
   const seenPunchAt = useRef(0); // 마지막으로 처리한 펀치 수신 시각
   const punchUntil = useRef(0); // 이 시각까지 펀치 모션 재생
   const seenHitAt = useRef(0); // 마지막으로 처리한 피격 수신 시각
+  const seenEmoteAt = useRef(0); // 마지막으로 처리한 감정표현 수신 시각
+  const emoteUntil = useRef(0); // 이 시각까지 말풍선 유지
   const [anim, setAnim] = useState<AnimState>("idle");
   const [hitAt, setHitAt] = useState(0); // 피격 플래시 트리거(맞을 때만 갱신 → 리렌더도 그때만)
+  const [emote, setEmote] = useState<EmoteId | null>(null); // 머리 위 감정표현(뜰 때·질 때만 갱신)
 
   useFrame((_, delta) => {
     const g = ref.current;
@@ -68,6 +72,16 @@ export default function RemotePlayer({
       setHitAt(hAt);
     }
 
+    // 이 원격 플레이어가 감정표현을 했으면 말풍선을 띄우고, TTL이 지나면 내린다.
+    // 피격 플래시와 같은 패턴 — 값이 바뀌는 순간에만 setState 한다.
+    const em = emotes.lastEmote(id);
+    if (em && em.at > seenEmoteAt.current) {
+      seenEmoteAt.current = em.at;
+      setEmote(em.emote);
+      emoteUntil.current = now + EMOTE_TTL_MS;
+    }
+    if (emote && now >= emoteUntil.current) setEmote(null);
+
     // 걷기(6m/s)와 달리기(10.8m/s)의 중간(≈8.4m/s)을 경계로 삼는다. 펀치가 최우선.
     // 접지는 그 좌표의 바닥(2층·계단 포함) 기준 — 절대 y로 보면 2층에 서 있는 사람이 늘 점프다.
     const speed = moved / Math.max(delta, 1e-4);
@@ -90,7 +104,13 @@ export default function RemotePlayer({
 
   return (
     <group ref={ref}>
-      <Character anim={anim} ringColor="#f472b6" nick={nick} hitAt={hitAt} />
+      <Character
+        anim={anim}
+        ringColor="#f472b6"
+        nick={nick}
+        hitAt={hitAt}
+        emote={emote}
+      />
     </group>
   );
 }

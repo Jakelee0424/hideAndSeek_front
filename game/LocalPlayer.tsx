@@ -22,7 +22,7 @@ import {
   PUNCH_COOLDOWN_MS,
 } from "./punchConfig";
 import { useGameStore } from "@/store/gameStore";
-import { useChat } from "@/net/chat";
+import { emotes, EMOTE_TTL_MS, type EmoteId } from "@/net/emotes";
 import {
   INTERACTABLES,
   INTERACT_RANGE,
@@ -79,6 +79,9 @@ export default function LocalPlayer() {
   const shake = useRef(0); // 피격 카메라 흔들림(0~1). 맞으면 1로 튀고 감쇠
   const lastAnim = useRef<AnimState>("idle");
   const [hitAt, setHitAt] = useState(0); // 내 캐릭터 피격 플래시 트리거(맞을 때만 갱신)
+  const seenEmoteAt = useRef(0); // 마지막으로 처리한 내 감정표현 시각
+  const emoteUntil = useRef(0); // 이 시각까지 말풍선 유지
+  const [emote, setEmote] = useState<EmoteId | null>(null); // 내 머리 위 감정표현
   const spawned = useRef(false); // 첫 서버 스냅샷 때 배정된 감방 위치로 스냅
   // 프론트 단독 실행 시 초기 위치: 랜덤 감방 안. 서버 연결 시 첫 스냅샷이 덮어쓴다.
   const initPos = useMemo(() => {
@@ -98,8 +101,6 @@ export default function LocalPlayer() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "KeyE") return;
-      // 채팅에 "e"를 칠 때마다 눈앞의 자물쇠가 열리면 안 된다.
-      if (useChat.getState().composing) return;
       const st = useInteraction.getState();
       if (st.openId || !st.nearId || st.solved[st.nearId]) return;
       st.open(st.nearId);
@@ -152,11 +153,8 @@ export default function LocalPlayer() {
       kz.current = 0;
     }
 
-    // 퍼즐 오버레이가 열려 있거나 채팅을 치는 중이면 이동을 멈춘다.
-    // (채팅 중엔 useKeyboard가 키를 안 먹지만, 열기 직전에 눌려 있던 값이 남을 수 있어
-    //  여기서도 한 번 더 잠근다 — 순찰 중이라면 한 걸음이 그대로 적발이다.)
-    const locked =
-      useInteraction.getState().openId !== null || useChat.getState().composing;
+    // 퍼즐 오버레이가 열려 있으면 이동을 멈춘다.
+    const locked = useInteraction.getState().openId !== null;
     const { yaw, pitch } = look.current;
 
     // 카메라가 보는 방향을 기준으로 입력을 월드 방향 벡터로 변환.
@@ -275,6 +273,16 @@ export default function LocalPlayer() {
     }
     const punching = now < punchUntil.current;
 
+    // 내 감정표현 말풍선. EmoteControls가 발동 즉시 버스에 넣고(로컬 피드백), 서버 echo도
+    // 같은 버스로 돌아온다. 값이 바뀌는 순간에만 setState 한다(피격 플래시와 같은 패턴).
+    const em = myId ? emotes.lastEmote(myId) : null;
+    if (em && em.at > seenEmoteAt.current) {
+      seenEmoteAt.current = em.at;
+      setEmote(em.emote);
+      emoteUntil.current = now + EMOTE_TTL_MS;
+    }
+    if (emote && now >= emoteUntil.current) setEmote(null);
+
     // 애니메이션은 상태가 바뀔 때만 setState(매 프레임 리렌더 방지). 펀치가 최우선.
     const nextAnim: AnimState = punching
       ? "punch"
@@ -376,7 +384,7 @@ export default function LocalPlayer() {
       <group ref={bodyRef}>
         {/* 내 이름표는 띄우지 않는다 — 3인칭 카메라상 화면 중앙에 떠 클릭 안내·자막과 겹친다.
             자기 식별은 발밑 하늘색 링으로 충분하다(원격 플레이어는 이름표를 유지한다). */}
-        <Character anim={anim} ringColor="#38bdf8" hitAt={hitAt} />
+        <Character anim={anim} ringColor="#38bdf8" hitAt={hitAt} emote={emote} />
       </group>
     </group>
   );

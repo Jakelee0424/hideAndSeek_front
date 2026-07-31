@@ -7,7 +7,7 @@ import { sfxDoor, sfxUnlock, sfxSiren } from "@/game/sfx";
 import { worldState } from "./worldState";
 import { punches } from "./punches";
 import { reimprison } from "./reimprison";
-import { useChat } from "./chat";
+import { emotes, parseEmote } from "./emotes";
 import * as stomp from "./stompClient";
 
 /**
@@ -46,8 +46,8 @@ export function joinRoom(
   // 새 방에서는 처음부터 다시 들려야 한다.
   heardSolved.clear();
   heardDoors.clear();
-  // 이전 방의 대화가 새 방에 남으면 안 된다.
-  useChat.getState().clear();
+  // 이전 방의 감정표현이 새 방에 남으면 안 된다.
+  emotes.clear();
 
   // 서버가 입장을 거절하면(방 정원 초과·대기열 초과) 아무 응답도 오지 않는다. 스냅샷에
   // 내가 안 실려 오는 것으로만 알 수 있으므로, 일정 시간 안에 못 보면 실패로 처리한다.
@@ -68,7 +68,12 @@ export function joinRoom(
     { id: myId, nick, token: opts?.token ?? null },
     {
       onStatus: (s) => useGameStore.getState().setStatus(s),
-      onChat: (e) => useChat.getState().receive(e),
+      // 채팅 토픽은 이제 감정표현 전용이다. 토큰인 것만 골라 버스에 넣고, 봇이 흘리는
+      // 자연어 채팅은 parseEmote가 null로 걸러 무시한다.
+      onChat: (e) => {
+        const id = parseEmote(e.text);
+        if (id) emotes.ingest(e.senderId, id, performance.now());
+      },
       onSnapshot: (snap) => {
         // 내가 스냅샷에 실려 왔다 = 서버가 받아줬다.
         if (!joined && snap.states.some((s) => s.id === myId)) {
@@ -162,6 +167,6 @@ export function leaveRoom(): void {
   worldState.clear();
   punches.clear();
   reimprison.clear();
-  useChat.getState().clear();
+  emotes.clear();
   useGameStore.getState().clear();
 }
