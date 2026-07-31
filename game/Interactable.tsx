@@ -187,6 +187,50 @@ function DryingRack({ emissive, glow }: { emissive: string; glow: number }) {
   );
 }
 
+// ── 격리 구역 기록판(quiz-med 전용): 바퀴 달린 차트 보드 + 접촉 기록지 ──
+// 병동에서 "읽는 물건"이라는 게 드러나게 자물쇠 대신 이젤형 기록판으로 그린다.
+function ChartBoard({ emissive, glow }: { emissive: string; glow: number }) {
+  const em = { emissive, emissiveIntensity: glow };
+  const steel = { color: "#9aa3ad", metalness: 0.8, roughness: 0.4, ...em };
+  return (
+    <group>
+      {/* 다리 두 짝 + 가로 지지대 */}
+      {[-0.28, 0.28].map((x) => (
+        <mesh key={x} position={[x, -0.05, 0]} castShadow>
+          <cylinderGeometry args={[0.028, 0.028, 1.1, 8]} />
+          <meshStandardMaterial {...steel} />
+        </mesh>
+      ))}
+      <mesh position={[0, -0.3, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.022, 0.022, 0.56, 8]} />
+        <meshStandardMaterial {...steel} />
+      </mesh>
+      {/* 판 + 종이 + 위쪽 집게 */}
+      <mesh position={[0, 0.62, 0]} rotation={[-0.18, 0, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.66, 0.8, 0.04]} />
+        <meshStandardMaterial color="#39424e" metalness={0.3} roughness={0.7} {...em} />
+      </mesh>
+      <mesh position={[0, 0.62, 0.035]} rotation={[-0.18, 0, 0]}>
+        <boxGeometry args={[0.56, 0.7, 0.02]} />
+        <meshStandardMaterial color="#eef2e9" roughness={0.9} metalness={0} {...em} />
+      </mesh>
+      <mesh position={[0, 0.98, 0.05]} rotation={[-0.18, 0, 0]}>
+        <boxGeometry args={[0.2, 0.06, 0.05]} />
+        <meshStandardMaterial {...steel} />
+      </mesh>
+      {/* 의무실 표시(붉은 십자) */}
+      <mesh position={[0, 0.86, 0.06]} rotation={[-0.18, 0, 0]}>
+        <boxGeometry args={[0.16, 0.045, 0.01]} />
+        <meshStandardMaterial color="#c2382f" {...em} />
+      </mesh>
+      <mesh position={[0, 0.86, 0.06]} rotation={[-0.18, 0, 0]}>
+        <boxGeometry args={[0.045, 0.16, 0.01]} />
+        <meshStandardMaterial color="#c2382f" {...em} />
+      </mesh>
+    </group>
+  );
+}
+
 // ── 자물쇠 변형(OBJ 프리팹) ──────────────────────────────────────
 // 예전엔 아홉 개 잠금이 전부 같은 황동 자물쇠였다. 이제 잠금마다 생김새가 다르다.
 //   - 감방 4개: 철창 색과 짝이 맞는 네 가지(어느 방 자물쇠인지 눈으로 구분된다)
@@ -276,6 +320,12 @@ export default function Interactable({ data }: { data: InteractableData }) {
         ) : data.id === "lock-laundry" ? (
           // 세탁실 배관 밸브 패널(자물쇠 대신 배관 모양).
           <ValveManifold
+            emissive={solved ? "#22c55e" : emissive}
+            glow={solved ? 0.4 : Math.max(glow, 0.22)}
+          />
+        ) : data.id === "quiz-med" ? (
+          // 격리 구역 기록판(병동에서 읽는 물건).
+          <ChartBoard
             emissive={solved ? "#22c55e" : emissive}
             glow={solved ? 0.4 : Math.max(glow, 0.22)}
           />

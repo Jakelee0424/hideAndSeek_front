@@ -34,6 +34,8 @@ export type Puzzle =
   | { kind: "fridgecode" } // 식당 냉장고 — 반찬 4개 실제 칼로리 합. 코드는 방 코드로 배정(cafeteriaPlan.ts)
   | { kind: "valves" } // 세탁실 입장 — 배관 노선도를 읽어 밸브 4개를 이어지는 방향으로 돌린다(laundryPlan.ts)
   | { kind: "carelabel" } // 세탁실 건조대 — 오늘 세탁 일정과 관리 기호 4개가 모두 같은 옷 고르기(laundryPlan.ts)
+  | { kind: "bloodtype" } // 의무실 입장 — 침대 넷의 혈액형을 단서로 복원해 네 자리(infirmaryPlan.ts)
+  | { kind: "outbreak" } // 의무실 격리 구역 — 접촉 기록에서 최초 감염자 지목(infirmaryPlan.ts)
   | { kind: "minigame" }; // 아케이드 한 판. 어느 게임인지는 방 코드로 배정된다
 
 export type InteractableType = "lockbox" | "note";
@@ -214,17 +216,37 @@ export const INTERACTABLES: Interactable[] = [
     puzzle: { kind: "fridgecode" },
   },
 
-  // 의무실: 숫자 "451" (note-med1은 식당이 잠기면서 화장실 쪽 개방 구역으로 옮겼다 — 잠긴 방 안에 두면 못 읽는다)
-  { id: "note-med1", type: "note", position: [3, 0.6, 22], label: "약장 라벨", hint: "약장 번호 앞 두 자리 = 45" },
-  { id: "note-med2", type: "note", position: [-24, 0.6, -18], label: "처방 기록", hint: "마지막 자리 = 1" },
+  // ── 의무실 ①진입(복도 쪽): 혈액형 판정 금고 ──
+  // 병동 침대 넷에 O·A·B·AB가 하나씩 누워 있는데 차트의 혈액형 칸만 젖어 지워졌다.
+  // 단서 넷으로 배치를 복원해 O·A·B·AB 환자의 침대 번호를 그 순서대로 입력한다(네 자리).
+  // 혈액 검사 키트는 두 침대 사이 "수혈 가능 여부"만 알려준다 — 2회 한정이라 찍기용으로는 모자란다.
+  // 배치·정답은 방 코드로 매판 랜덤(infirmaryPlan.bloodPlan). 옛 고정 코드 "451"은 폐기했다.
+  // (쪽지 둘은 답이 아니라 규칙만 알려준다. 좌표는 그대로 — 서버 봇 POI와 짝이다.)
+  { id: "note-med1", type: "note", position: [3, 0.6, 22], label: "약장 라벨", hint: "의무실 금고는 네 자리다. O형·A형·B형·AB형 환자가 누운 침대 번호를 그 순서대로 적으라고 적혀 있다." },
+  { id: "note-med2", type: "note", position: [-24, 0.6, -18], label: "처방 기록", hint: "혈액 검사 키트는 두 번밖에 못 쓴다. 수혈 가능 여부만 나오니 아껴 써라 — 단서 넷만으로도 배치는 정해진다." },
   {
     id: "lock-med",
     type: "lockbox",
     position: [30, 0.6, 15.6],
-    label: "의무실 문 자물쇠",
-    hint: "세 자리 숫자를 맞춰라.",
-    puzzle: { kind: "dial", code: "451" },
+    label: "의무실 문 금고",
+    hint: "차트의 단서로 침대별 혈액형을 알아내라. O·A·B·AB 환자의 침대 번호를 그 순서대로 입력한다.",
+    puzzle: { kind: "bloodtype" },
     opensDoor: "door-med",
+  },
+
+  // ── 의무실 ②표식 해금(방 안): 감염 경로 추적 ──
+  // 어제의 접촉 기록(누가 몇 시에 누구와)과 증상 발현 셋으로, 감염을 병동에 처음 들여온
+  // 사람을 지목한다. 감염은 접촉 즉시·발현은 6시간 뒤·발현 전에도 옮긴다는 규칙이라
+  // **정답은 끝내 증상이 없는 사람**이다 — 발현 기록만 훑으면 절대 못 찾는다.
+  // 틀리면 그 사람이 최초일 수 없는 이유를 돌려준다(찍기 대신 추리를 시킨다).
+  // 인물 배역은 방 코드로 매판 섞인다(infirmaryPlan.outbreakPlan). opensDoor 없음 — 표식 관문.
+  {
+    id: "quiz-med",
+    type: "lockbox",
+    position: [34.5, 0.6, 11.2], // 병동 동편, 침대 열과 문 사이(약장 x36.8과 겹치지 않는 자리)
+    label: "격리 구역 기록판",
+    hint: "접촉 기록과 발현 시각으로 최초 감염자를 찾아라. 증상이 없다고 무고한 것은 아니다.",
+    puzzle: { kind: "outbreak" },
   },
 
   // (해독 조각 문서 3곳(doc-cafe/hall/yard)은 없앴다 — 옛 "표식+수 셈법 코드" 시스템의 일부였고,
@@ -324,8 +346,8 @@ export function minigameFor(objectId: string, seed: string): MinigameDef | undef
 
 // ── 배수관 샛길 철창(표식 게이트) ────────────────────────────────
 // 배수관(최종 탈출구)으로 통하는 동쪽 샛길(건물 x38 ~ 외벽 x42)을 막는 철창. 별관 4방의 표식
-// 퀴즈를 모두 풀면(=표식 4개 획득) 자동으로 열린다. 지금은 작업장(A)·식당(B)·세탁실(D)까지
-// 구현돼 있어 아직 열리지 않는다 — 의무실(C, quiz-med)이 추가되면 그때 4개가 채워져 열린다.
+// 퀴즈를 모두 풀면(=표식 4개 획득) 자동으로 열린다. 2026-07-31에 의무실(C)까지 들어와
+// **네 개가 다 구현됐다** — 이제 별관 네 방을 모두 풀어야 배수관으로 가는 길이 열린다.
 // ⚠️ 게이트 박스 좌표는 prisonLayout.DRAIN_GATE / 서버 Collision·Room과 맞춘다.
 export const DRAIN_GATE_ID = "gate-drain";
 export const STAMP_QUIZ_IDS = ["quiz-work", "lock-fridge", "quiz-med", "quiz-laundry"];

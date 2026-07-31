@@ -1035,10 +1035,11 @@ const STAMP_PATHS = SYMBOLS.map((s) => symbolIcon(s, true)!);
 const STAMP_PAINT: [number, number, number] = [0xd8, 0xc7, 0xa4]; // 바랜 흰 페인트
 
 // 별관 방 → (표식을 드러내는 퀴즈 id, 대응 감방 clue, 표식을 찍을 벽). wall은 입구 맞은편 벽이다.
-// 지금은 작업장·식당·세탁실까지 구현. 의무실(C, quiz-med)이 추가되면 여기 등록한다.
+// 2026-07-31에 의무실까지 들어와 **네 방이 다 찼다** — 이제 표식 4개가 모여 배수관 샛길이 열린다.
 const ROOM_STAMPS: { room: string; quiz: string; cell: string; wall: Edge }[] = [
   { room: "workshop", quiz: "quiz-work", cell: "A", wall: "S" }, // 문=북벽 → 표식은 남벽
   { room: "cafeteria", quiz: "lock-fridge", cell: "B", wall: "E" }, // 냉장고 코드를 풀면 동벽에 표식
+  { room: "infirmary", quiz: "quiz-med", cell: "C", wall: "S" }, // 문=북벽 → 표식은 남벽(침대는 낮아 안 가린다)
   // 세탁실은 문=남벽이지만 북벽엔 세탁기 4대가 붙어 있어(표식이 가린다) 동벽에 찍는다.
   { room: "laundry", quiz: "quiz-laundry", cell: "D", wall: "E" },
 ];

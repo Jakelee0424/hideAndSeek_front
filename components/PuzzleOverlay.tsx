@@ -30,6 +30,8 @@ import {
   type Dir,
 } from "@/game/laundryPlan";
 import CareSymbol from "./CareSymbol";
+import { bloodPlan, outbreakPlan } from "@/game/infirmaryPlan";
+import { BloodTypeLock, OutbreakQuiz } from "./InfirmaryPuzzles";
 import { symbolIcon } from "@/game/symbols";
 import { useGameStore } from "@/store/gameStore";
 
@@ -66,6 +68,8 @@ export default function PuzzleOverlay() {
   // 노선도·건조대·세탁 일정표는 그림과 표가 넓다 — 이 셋만 모달을 넓게 쓴다.
   const wide =
     data.puzzle?.kind === "carelabel" ||
+    data.puzzle?.kind === "bloodtype" ||
+    data.puzzle?.kind === "outbreak" ||
     data.board === "laundry-plan" ||
     data.board === "pipe-map"; // 노선도가 빠진 밸브 창은 좁아도 된다
 
@@ -265,6 +269,20 @@ function PuzzleInput({
         />
       );
     }
+    case "bloodtype":
+      return (
+        <BloodTypeLock
+          // 배치·정답은 방 코드로 정해진다 — 같은 방이면 모두 같은 병동을 본다.
+          plan={bloodPlan(roomId)}
+          error={error}
+          onSolve={onSolve}
+          onFail={onFail}
+          clearError={clearError}
+        />
+      );
+    case "outbreak":
+      // 지목이 맞으면 전파 경로를 보여준 뒤 스스로 해결 처리한다(확인 버튼 없음).
+      return <OutbreakQuiz plan={outbreakPlan(roomId)} onSolve={onSolve} />;
     case "valves":
       // 노선도·정답은 방 코드로 정해진다. 램프가 상류부터 켜지므로 별도 확인 버튼이 없다.
       return <ValveLock pm={laundryPipes(roomId)} onSolve={onSolve} />;
