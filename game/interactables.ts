@@ -32,6 +32,8 @@ export type Puzzle =
   | { kind: "liar" } // 거짓말 탐정 — 표식 4개를 진짜 자리에 배열. 문제·답은 방 코드로 배정(liarPuzzle.ts)
   | { kind: "daycode" } // 식당 입장 — 요일별 배식 순서표에서 오늘 요일의 네 자리. 코드는 방 코드로 배정(cafeteriaPlan.ts)
   | { kind: "fridgecode" } // 식당 냉장고 — 반찬 4개 실제 칼로리 합. 코드는 방 코드로 배정(cafeteriaPlan.ts)
+  | { kind: "valves" } // 세탁실 입장 — 배관 노선도를 읽어 밸브 4개를 이어지는 방향으로 돌린다(laundryPlan.ts)
+  | { kind: "carelabel" } // 세탁실 건조대 — 오늘 세탁 일정과 관리 기호 4개가 모두 같은 옷 고르기(laundryPlan.ts)
   | { kind: "minigame" }; // 아케이드 한 판. 어느 게임인지는 방 코드로 배정된다
 
 export type InteractableType = "lockbox" | "note";
@@ -48,7 +50,7 @@ export interface Interactable {
   /** lockbox 전용: 풀면 열리는 감방문 id(예: "cell-A"). */
   opensDoor?: string;
   /** note 전용: 표 형태로 읽는 게시물(내용은 방 코드로 생성). 있으면 힌트 대신 표를 띄운다. */
-  board?: "cafe-order" | "cafe-menu" | "cafe-tray";
+  board?: "cafe-order" | "cafe-menu" | "cafe-tray" | "laundry-plan";
 }
 
 /** 상호작용 사거리(m, XZ 평면 기준) */
@@ -102,7 +104,7 @@ export const INTERACTABLES: Interactable[] = [
     opensDoor: "cell-D",
   },
 
-  // ── 별관 문 자물쇠(세탁실·의무실)의 힌트 쪽지 4장 ─────────────────────────────
+  // ── 별관 방(세탁실·의무실) 힌트 쪽지 4장 ─────────────────────────────────────
   //
   // 예전엔 쪽지가 전부 별관 복도 두 줄(z 15.6 / 18.4)에, 각자 제 자물쇠 4.5m 안에
   // 붙어 있었다. 문 앞에 서면 좌우로 다 보여 탐색도 채팅 공유도 일어나지 않았다.
@@ -114,21 +116,35 @@ export const INTERACTABLES: Interactable[] = [
   //   - 봇이 순회하는 것(서버 Interactables.java POI)은 BotNav 웨이포인트에서 닿는 자리로.
   //   ⚠️ 좌표는 서버 Interactables.java와 이중 관리 — 한쪽만 고치면 봇이 유령 지점으로 걸어간다.
   //
-  // 세탁실: 색 순서 [파랑·노랑·빨강·초록]
-  { id: "note-laundry1", type: "note", position: [2, 0.6, 24.5], label: "세탁 안내문", hint: "세제통을 그림 순서대로 눌러라." },
-  { id: "note-laundry2", type: "note", position: [24, 0.6, -10], label: "젖은 쪽지", hint: "하늘 → 태양 → 피 → 잔디" },
+  // ── 세탁실 ①진입(복도 쪽): 배관 밸브 4개 + 노선도 ──
+  // 밸브 옆에 걸린 배관 노선도를 읽어, 각 밸브에서 관이 이어지는 방향으로 핸들을 돌린다
+  // (45°씩 8방향). 노선도엔 답이 없다 — 갈림길마다 죽은 가지(폐수조·보일러·막힘)가 붙어
+  // 있어 급수 본관에서 세탁조까지 관을 실제로 따라가야 한다. 문제는 방 코드로 매판 랜덤
+  // (laundryPlan.laundryPipes). 아래 쪽지 둘은 답이 아니라 **작동 방식**만 알려준다.
+  { id: "note-laundry1", type: "note", position: [2, 0.6, 24.5], label: "세탁 안내문", hint: "배관 밸브는 노선도에서 관이 이어지는 쪽으로 돌려라. 물은 ①번부터 흐른다 — 위쪽 밸브가 어긋나 있으면 아래 램프는 맞아도 켜지지 않는다." },
+  { id: "note-laundry2", type: "note", position: [24, 0.6, -10], label: "젖은 쪽지", hint: "건조대 옷은 겉만 봐선 못 고른다. 일정표의 기호 네 가지가 **전부** 같은 건 딱 한 벌뿐이고, 나머지는 하나씩 어긋나 있다." },
   {
     id: "lock-laundry",
     type: "lockbox",
     position: [30, 0.6, 18.4],
-    label: "세탁실 문 자물쇠",
-    hint: "쪽지가 가리키는 색을 순서대로 누른다.",
-    puzzle: {
-      kind: "sequence",
-      palette: ["red", "yellow", "green", "blue"],
-      answer: ["blue", "yellow", "red", "green"],
-    },
+    label: "세탁실 배관 밸브",
+    hint: "노선도에서 ①~④ 밸브를 찾아, 그 자리에서 관이 이어지는 방향으로 핸들을 돌려라. 넷 다 초록불이면 문이 열린다.",
+    puzzle: { kind: "valves" },
     opensDoor: "door-laundry",
+  },
+
+  // ── 세탁실 ②표식 해금(방 안): 오늘 세탁 일정 ↔ 옷 라벨 대조 ──
+  // 벽의 일정표(note-laundry-plan)가 요구하는 관리 기호 4가지와 **모두** 일치하는 옷을
+  // 건조대에서 찾는다. 가짜는 대개 기호 하나만 다르다. 풀면 세탁실 벽에 표식이 나타난다
+  // (Map.RoomStamps). opensDoor가 없다 — 문이 아니라 표식을 여는 관문이다.
+  { id: "note-laundry-plan", type: "note", position: [26.5, 1.5, 20.4], label: "오늘 세탁 일정", board: "laundry-plan" },
+  {
+    id: "quiz-laundry",
+    type: "lockbox",
+    position: [26, 0.6, 22.6], // 건조대(세탁실 서편, 문에서 들어와 왼쪽)
+    label: "건조대",
+    hint: "벽의 오늘 세탁 일정과 관리 기호가 네 가지 모두 일치하는 옷은 한 벌뿐이다. 라벨을 하나씩 확인하라.",
+    puzzle: { kind: "carelabel" },
   },
 
   // ── 작업장 ①문 잠금(복도 쪽): 망치질로 자물쇠 부수기 ──
@@ -303,8 +319,8 @@ export function minigameFor(objectId: string, seed: string): MinigameDef | undef
 
 // ── 배수관 샛길 철창(표식 게이트) ────────────────────────────────
 // 배수관(최종 탈출구)으로 통하는 동쪽 샛길(건물 x38 ~ 외벽 x42)을 막는 철창. 별관 4방의 표식
-// 퀴즈를 모두 풀면(=표식 4개 획득) 자동으로 열린다. 지금은 작업장(A)·식당(B)만 구현돼 있어
-// 열리지 않는다 — 의무실(C)·세탁실(D) 표식 퍼즐이 추가되면 그때 4개가 채워져 열린다.
+// 퀴즈를 모두 풀면(=표식 4개 획득) 자동으로 열린다. 지금은 작업장(A)·식당(B)·세탁실(D)까지
+// 구현돼 있어 아직 열리지 않는다 — 의무실(C, quiz-med)이 추가되면 그때 4개가 채워져 열린다.
 // ⚠️ 게이트 박스 좌표는 prisonLayout.DRAIN_GATE / 서버 Collision·Room과 맞춘다.
 export const DRAIN_GATE_ID = "gate-drain";
 export const STAMP_QUIZ_IDS = ["quiz-work", "lock-fridge", "quiz-med", "quiz-laundry"];

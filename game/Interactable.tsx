@@ -96,18 +96,111 @@ function Toolbox({ emissive, glow }: { emissive: string; glow: number }) {
   );
 }
 
+// ── 세탁실 배관 밸브 패널(lock-laundry 전용): 수직 관 + 밸브 핸들 4개 + 노선도 판 ──
+// "돌리는 밸브"라는 게 멀리서도 읽히게 자물쇠 대신 배관 형태로 그린다. 풀리면 다른 잠금처럼
+// 초록 발광으로 알린다(발광만 갈아 끼운다).
+function ValveManifold({ emissive, glow }: { emissive: string; glow: number }) {
+  const em = { emissive, emissiveIntensity: glow };
+  const pipe = { color: "#8a9099", metalness: 0.85, roughness: 0.4, ...em };
+  const wheel = { color: "#b8433a", metalness: 0.5, roughness: 0.5, ...em };
+  return (
+    <group>
+      {/* 가로로 누운 본관(밸브 넷이 매달린다) + 양끝 수직 관 */}
+      <mesh position={[0, 0.35, 0]} rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.09, 0.09, 1.5, 12]} />
+        <meshStandardMaterial {...pipe} />
+      </mesh>
+      {[-0.75, 0.75].map((x) => (
+        <mesh key={x} position={[x, -0.05, 0]} castShadow>
+          <cylinderGeometry args={[0.09, 0.09, 0.9, 12]} />
+          <meshStandardMaterial {...pipe} />
+        </mesh>
+      ))}
+      {/* 밸브 4개: 짧은 목 + 붉은 핸들 휠(도넛 + 살 두 개) */}
+      {[-0.52, -0.17, 0.18, 0.53].map((x, i) => (
+        <group key={i} position={[x, 0.35, 0]}>
+          <mesh position={[0, 0.16, 0]}>
+            <cylinderGeometry args={[0.055, 0.055, 0.22, 10]} />
+            <meshStandardMaterial {...pipe} />
+          </mesh>
+          {/* 휠은 위를 향해 눕힌다(위에서 돌리는 모양) */}
+          <group position={[0, 0.3, 0]} rotation={[Math.PI / 2, 0, (i * Math.PI) / 5]}>
+            <mesh castShadow>
+              <torusGeometry args={[0.14, 0.028, 8, 18]} />
+              <meshStandardMaterial {...wheel} />
+            </mesh>
+            {[0, Math.PI / 2].map((r) => (
+              <mesh key={r} rotation={[0, 0, r]}>
+                <boxGeometry args={[0.27, 0.03, 0.03]} />
+                <meshStandardMaterial {...wheel} />
+              </mesh>
+            ))}
+          </group>
+        </group>
+      ))}
+      {/* 옆에 걸린 배관 노선도 판(안에서 읽는 그 도면) */}
+      <mesh position={[0, 0.95, -0.06]} castShadow>
+        <boxGeometry args={[0.9, 0.6, 0.04]} />
+        <meshStandardMaterial color="#1d2836" metalness={0.2} roughness={0.8} {...em} />
+      </mesh>
+    </group>
+  );
+}
+
+// ── 건조대(quiz-laundry 전용): 파이프 걸이 + 널린 세탁물 ──────────
+// 라벨을 대조할 옷이 걸린 곳. 옷감 색을 조금씩 달리해 여러 벌로 보이게 한다.
+const HUNG = ["#cfd6df", "#b9a37e", "#9fb1c4", "#c8b9a6", "#a8b7a0", "#d3c7bb"];
+function DryingRack({ emissive, glow }: { emissive: string; glow: number }) {
+  const em = { emissive, emissiveIntensity: glow * 0.5 };
+  const steel = { color: "#98a0aa", metalness: 0.8, roughness: 0.45, ...em };
+  return (
+    <group>
+      {/* 양쪽 기둥 + 위 가로대 */}
+      {[-0.85, 0.85].map((x) => (
+        <group key={x}>
+          <mesh position={[x, 0.05, 0]} castShadow>
+            <cylinderGeometry args={[0.035, 0.035, 1.3, 8]} />
+            <meshStandardMaterial {...steel} />
+          </mesh>
+          <mesh position={[x, -0.58, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.03, 0.03, 0.6, 8]} />
+            <meshStandardMaterial {...steel} />
+          </mesh>
+        </group>
+      ))}
+      <mesh position={[0, 0.7, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.035, 0.035, 1.75, 8]} />
+        <meshStandardMaterial {...steel} />
+      </mesh>
+      {/* 널린 세탁물 — 옷걸이 폭·길이를 조금씩 흩어 실제로 널어 둔 느낌을 준다 */}
+      {HUNG.map((c, i) => {
+        const x = -0.68 + i * 0.27;
+        const h = 0.5 + ((i * 7) % 3) * 0.12;
+        return (
+          <mesh key={c} position={[x, 0.68 - h / 2, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.22, h, 0.06]} />
+            <meshStandardMaterial color={c} roughness={0.95} metalness={0} {...em} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
 // ── 자물쇠 변형(OBJ 프리팹) ──────────────────────────────────────
 // 예전엔 아홉 개 잠금이 전부 같은 황동 자물쇠였다. 이제 잠금마다 생김새가 다르다.
 //   - 감방 4개: 철창 색과 짝이 맞는 네 가지(어느 방 자물쇠인지 눈으로 구분된다)
 //   - 별관 3개: 그 방 퍼즐 방식이 자물쇠 모양에 드러난다
-//     (세탁실=색 순서판 / 작업장=문자 휠 / 의무실=숫자 다이얼 — 낙서 힌트와 같은 성격)
+//     (작업장=문자 휠 / 의무실=숫자 다이얼 — 낙서 힌트와 같은 성격.
+//      세탁실은 프리팹을 안 쓰고 배관 밸브 패널을 직접 그린다)
 //   - 정문=크고 번듯한 황동 콤비네이션(함정답게 그럴듯하다) / 배수관=녹슨 콤비네이션
 const LOCK_ASSET: Record<string, string> = {
   "lock-A": "lockCellA",
   "lock-B": "lockCellB",
   "lock-C": "lockCellC",
   "lock-D": "lockCellD",
-  "lock-laundry": "lockColor",
+  // (lock-laundry는 색 순서판 프리팹을 쓰지 않는다 — 퍼즐이 배관 밸브로 바뀌면서
+  //  아래 Interactable에서 ValveManifold로 직접 그린다. quiz-laundry도 마찬가지로 건조대.)
   "lock-med": "lockNumber",
   // 식당 문 요일 코드 · 냉장고 칼로리 코드 — 숫자 다이얼 자물쇠 프리팹 재사용.
   "lock-cafe": "lockNumber",
@@ -177,6 +270,18 @@ export default function Interactable({ data }: { data: InteractableData }) {
         data.id === "quiz-work" ? (
           // 작업도구함(자물쇠 대신 도구함 모양). 해결되면 초록 발광.
           <Toolbox
+            emissive={solved ? "#22c55e" : emissive}
+            glow={solved ? 0.4 : Math.max(glow, 0.22)}
+          />
+        ) : data.id === "lock-laundry" ? (
+          // 세탁실 배관 밸브 패널(자물쇠 대신 배관 모양).
+          <ValveManifold
+            emissive={solved ? "#22c55e" : emissive}
+            glow={solved ? 0.4 : Math.max(glow, 0.22)}
+          />
+        ) : data.id === "quiz-laundry" ? (
+          // 건조대(세탁물이 널린 걸이). 라벨을 대조하는 곳.
+          <DryingRack
             emissive={solved ? "#22c55e" : emissive}
             glow={solved ? 0.4 : Math.max(glow, 0.22)}
           />

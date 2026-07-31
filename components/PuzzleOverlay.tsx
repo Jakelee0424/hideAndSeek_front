@@ -18,6 +18,18 @@ import { sendDoor, sendSolve } from "@/net/stompClient";
 import { toolCode } from "@/game/toolCode";
 import { liarPuzzle } from "@/game/liarPuzzle";
 import { cafeteriaPlan } from "@/game/cafeteriaPlan";
+import {
+  laundryPipes,
+  laundryCare,
+  careLabel,
+  CARE_CATS,
+  CAT_LABELS,
+  DIR_NAMES,
+  PIPE_COLS,
+  PIPE_ROWS,
+  type Dir,
+} from "@/game/laundryPlan";
+import CareSymbol from "./CareSymbol";
 import { symbolIcon } from "@/game/symbols";
 import { useGameStore } from "@/store/gameStore";
 
@@ -51,6 +63,12 @@ export default function PuzzleOverlay() {
 
   if (!data) return null;
 
+  // 노선도·건조대·세탁 일정표는 그림과 표가 넓다 — 이 셋만 모달을 넓게 쓴다.
+  const wide =
+    data.puzzle?.kind === "valves" ||
+    data.puzzle?.kind === "carelabel" ||
+    data.board === "laundry-plan";
+
   function solve() {
     const roomId = useGameStore.getState().roomId;
     // 서버에 해결 알림(방 전체 동기화) + 로컬 즉시 반영(오프라인에서도 동작)
@@ -73,7 +91,11 @@ export default function PuzzleOverlay() {
       style={{ zIndex: 16777300 }}
     >
       {/* 미니게임은 세로로 길다 — 작은 화면에서 잘리지 않게 모달 안에서 스크롤시킨다. */}
-      <div className="max-h-[94vh] w-full max-w-sm overflow-y-auto rounded-2xl border border-white/10 bg-[#12161f] p-6 text-slate-100 shadow-2xl">
+      <div
+        className={`max-h-[94vh] w-full overflow-y-auto rounded-2xl border border-white/10 bg-[#12161f] p-6 text-slate-100 shadow-2xl ${
+          wide ? "max-w-lg" : "max-w-sm"
+        }`}
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{data.label}</h2>
           <button
@@ -93,8 +115,12 @@ export default function PuzzleOverlay() {
 
         {data.type === "note" || !data.puzzle ? (
           <>
-            {/* 게시물(배식 순서표·식단표)은 방 코드로 만든 표를 띄운다. */}
-            {data.board && <CafeBoard board={data.board} roomId={roomId} />}
+            {/* 게시물(배식 순서표·식단표·세탁 일정)은 방 코드로 만든 표를 띄운다. */}
+            {data.board === "laundry-plan" ? (
+              <LaundryPlanBoard roomId={roomId} />
+            ) : (
+              data.board && <CafeBoard board={data.board} roomId={roomId} />
+            )}
             <button
               onClick={close}
               className="w-full rounded-lg border border-white/10 py-2.5 text-sm font-medium text-slate-200 hover:bg-white/5"
@@ -237,6 +263,19 @@ function PuzzleInput({
         />
       );
     }
+    case "valves":
+      // 노선도·정답은 방 코드로 정해진다. 램프가 상류부터 켜지므로 별도 확인 버튼이 없다.
+      return <ValveLock pm={laundryPipes(roomId)} onSolve={onSolve} />;
+    case "carelabel":
+      return (
+        <CareLabelQuiz
+          plan={laundryCare(roomId)}
+          error={error}
+          onSolve={onSolve}
+          onFail={onFail}
+          clearError={clearError}
+        />
+      );
     case "fridgecode": {
       // 정답 = 반찬 4개 실제 칼로리의 합. 식단표(기준량·칼로리)와 식판(실제량)으로 계산한다.
       const code = cafeteriaPlan(roomId).fridgeCode;
@@ -309,6 +348,316 @@ function CafeBoard({
         </tbody>
       </table>
     </div>
+  );
+}
+
+// ── 세탁실 ①: 배관 노선도 + 밸브 4개 ─────────────────────────────
+//
+// 노선도(위=북)는 급수 본관에서 세탁조까지 이어지는 관을 그린다. 갈림길마다 죽은 가지가
+// 붙어 있어 "이어지는 쪽"을 눈으로 따라가야 한다. 답은 어디에도 적혀 있지 않다.
+// 램프는 상류(①)부터 켜진다 — 물이 그 밸브까지 닿아야 압력이 걸리기 때문이다.
+
+const CELL_W = 76; // 노선도 격자 간격(px)
+const CELL_H = 52;
+const PAD_X = 46; // 급수/세탁조 라벨이 들어갈 좌우 여백
+const PAD_Y = 34;
+
+const px = (c: number) => PAD_X + c * CELL_W;
+const py = (r: number) => PAD_Y + r * CELL_H;
+
+function PipeDiagram({ pm }: { pm: ReturnType<typeof laundryPipes> }) {
+  const W = PAD_X * 2 + (PIPE_COLS - 1) * CELL_W;
+  const H = PAD_Y * 2 + (PIPE_ROWS - 1) * CELL_H;
+  // 본선: 급수 → ①②③④ → 세탁조
+  const route = [pm.source, ...pm.valves.map((v) => v.at), pm.target];
+  const routeD = route.map((c) => `${px(c.col)},${py(c.row)}`).join(" ");
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="배관 노선도">
+      {/* 도면 바탕 + 방위(위가 북) */}
+      <rect x="0" y="0" width={W} height={H} rx="8" fill="#0b1220" stroke="#1e293b" />
+      <g fill="#64748b" fontSize="9">
+        <text x={W - 8} y="13" textAnchor="end">
+          ↑ 북
+        </text>
+      </g>
+
+      {/* 죽은 가지(가늘고 어둡게) + 끝 라벨. 어느 것도 세탁조가 아니다. */}
+      {pm.dead.map((d, i) => {
+        const x1 = px(d.from.col);
+        const y1 = py(d.from.row);
+        const x2 = px(d.to.col);
+        const y2 = py(d.to.row);
+        const dx = x2 - x1;
+        return (
+          <g key={`dead-${i}`}>
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#3f4a5c" strokeWidth="4" strokeLinecap="round" />
+            <rect x={x2 - 5} y={y2 - 5} width="10" height="10" fill="#1f2937" stroke="#4b5563" />
+            <text
+              x={x2 + (dx > 0 ? 9 : dx < 0 ? -9 : 0)}
+              y={y2 + (dx === 0 ? (y2 > y1 ? 18 : -10) : 3.5)}
+              textAnchor={dx > 0 ? "start" : dx < 0 ? "end" : "middle"}
+              fontSize="9"
+              fill="#8492a6"
+            >
+              {d.label}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* 본선 관 */}
+      <polyline points={routeD} fill="none" stroke="#38bdf8" strokeWidth="5" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
+
+      {/* 급수 본관 / 세탁조 */}
+      <g fontSize="10">
+        <circle cx={px(pm.source.col)} cy={py(pm.source.row)} r="7" fill="#0ea5e9" />
+        <text x={px(pm.source.col) - 11} y={py(pm.source.row) + 3.5} textAnchor="end" fill="#7dd3fc">
+          급수 본관
+        </text>
+        <rect x={px(pm.target.col) - 8} y={py(pm.target.row) - 8} width="16" height="16" rx="3" fill="#10b981" />
+        <text x={px(pm.target.col) + 12} y={py(pm.target.row) + 3.5} fill="#6ee7b7">
+          세탁조
+        </text>
+      </g>
+
+      {/* 밸브 자리 ①~④ */}
+      {pm.valves.map((v) => (
+        <g key={v.no}>
+          <circle cx={px(v.at.col)} cy={py(v.at.row)} r="10" fill="#111827" stroke="#e2e8f0" strokeWidth="2" />
+          <text x={px(v.at.col)} y={py(v.at.row) + 4} textAnchor="middle" fontSize="11" fontWeight="700" fill="#e2e8f0">
+            {v.no}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/** 밸브 하나: 8방향 핸들 + 램프. */
+function ValveWheel({ no, dir, lit }: { no: number; dir: Dir; lit: boolean }) {
+  const a = (dir * Math.PI) / 4;
+  const hx = 24 + Math.sin(a) * 17;
+  const hy = 24 - Math.cos(a) * 17;
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <span
+        className={`h-2.5 w-2.5 rounded-full ${
+          lit ? "bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.7)]" : "bg-rose-900"
+        }`}
+      />
+      <svg viewBox="0 0 48 48" width="52" height="52">
+        <circle cx="24" cy="24" r="20" fill="#0f172a" stroke={lit ? "#34d399" : "#475569"} strokeWidth="2.5" />
+        {/* 8방향 눈금 */}
+        {Array.from({ length: 8 }, (_, i) => {
+          const t = (i * Math.PI) / 4;
+          return (
+            <line
+              key={i}
+              x1={24 + Math.sin(t) * 20}
+              y1={24 - Math.cos(t) * 20}
+              x2={24 + Math.sin(t) * 16.5}
+              y2={24 - Math.cos(t) * 16.5}
+              stroke="#334155"
+              strokeWidth="1.6"
+            />
+          );
+        })}
+        {/* 핸들 */}
+        <line x1="24" y1="24" x2={hx} y2={hy} stroke={lit ? "#34d399" : "#cbd5e1"} strokeWidth="4" strokeLinecap="round" />
+        <circle cx="24" cy="24" r="4" fill={lit ? "#34d399" : "#94a3b8"} />
+      </svg>
+      <span className="font-mono text-[11px] text-slate-400">
+        {no}. {DIR_NAMES[dir]}
+      </span>
+    </div>
+  );
+}
+
+function ValveLock({
+  pm,
+  onSolve,
+}: {
+  pm: ReturnType<typeof laundryPipes>;
+  onSolve: () => void;
+}) {
+  const [dirs, setDirs] = useState<Dir[]>(() => pm.valves.map(() => 0 as Dir));
+  const doneRef = useRef(false);
+
+  function turn(i: number, delta: number) {
+    setDirs((prev) => {
+      const next = [...prev];
+      next[i] = (((next[i] + delta) % 8) + 8) % 8 as Dir;
+      return next;
+    });
+  }
+
+  // 램프는 상류부터 — ①이 어긋나면 아래는 맞아도 안 켜진다(물이 거기서 막힌다).
+  const lit: boolean[] = [];
+  for (let i = 0; i < pm.valves.length; i++) {
+    lit.push((i === 0 || lit[i - 1]) && dirs[i] === pm.valves[i].answer);
+  }
+  const all = lit.every(Boolean);
+
+  // 넷 다 초록이면 확인 버튼 없이 열린다(물이 차오르는 연출을 잠깐 보여준 뒤).
+  useEffect(() => {
+    if (!all || doneRef.current) return;
+    doneRef.current = true;
+    const t = window.setTimeout(onSolve, 800);
+    return () => window.clearTimeout(t);
+  }, [all, onSolve]);
+
+  return (
+    <>
+      <div className="mb-3 rounded-lg border border-white/10 bg-black/30 p-2">
+        <p className="mb-1 px-1 text-[11px] text-slate-400">배관 노선도 (급수 본관 → 세탁조)</p>
+        <PipeDiagram pm={pm} />
+      </div>
+
+      <div className="mb-3 flex justify-between gap-1">
+        {pm.valves.map((v, i) => (
+          <div key={v.no} className="flex flex-col items-center gap-1">
+            <ValveWheel no={v.no} dir={dirs[i]} lit={lit[i]} />
+            <div className="flex gap-1">
+              <button
+                onClick={() => turn(i, -1)}
+                className="h-7 w-7 rounded bg-white/5 text-slate-300 hover:bg-white/10"
+                aria-label={`${v.no}번 밸브 반시계`}
+              >
+                ↺
+              </button>
+              <button
+                onClick={() => turn(i, +1)}
+                className="h-7 w-7 rounded bg-white/5 text-slate-300 hover:bg-white/10"
+                aria-label={`${v.no}번 밸브 시계`}
+              >
+                ↻
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="flex h-6 items-center justify-center text-sm font-semibold">
+        {all ? (
+          <span className="text-emerald-400">물이 세탁조까지 찼다 — 문이 열린다!</span>
+        ) : (
+          <span className="text-slate-500">
+            켜진 램프 {lit.filter(Boolean).length} / {pm.valves.length} · 위쪽 밸브부터 맞춰야 압력이 걸린다
+          </span>
+        )}
+      </p>
+    </>
+  );
+}
+
+// ── 세탁실 ②: 오늘 세탁 일정 ↔ 옷 라벨 대조 ───────────────────────
+// 벽 게시물(note-laundry-plan) — 오늘 요구되는 관리 기호 4가지.
+function LaundryPlanBoard({ roomId }: { roomId: string }) {
+  const plan = laundryCare(roomId);
+  return (
+    <div className="mb-4 rounded-lg border border-white/10 bg-black/30 p-3">
+      <p className="mb-3 text-center text-xs text-slate-400">
+        아래 네 가지를 <b className="text-amber-200">전부</b> 만족하는 세탁물만 오늘 처리한다.
+      </p>
+      <div className="grid grid-cols-4 gap-2">
+        {CARE_CATS.map((cat) => (
+          <div key={cat} className="flex flex-col items-center gap-1 rounded-lg border border-white/10 bg-black/30 p-2">
+            <span className="text-[10px] text-slate-400">{CAT_LABELS[cat]}</span>
+            <CareSymbol cat={cat} value={plan.today[cat]} className="text-amber-200" />
+            <span className="text-center text-[10px] leading-tight text-slate-300">
+              {careLabel(cat, plan.today[cat])}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CareLabelQuiz({
+  plan,
+  error,
+  onSolve,
+  onFail,
+  clearError,
+}: {
+  plan: ReturnType<typeof laundryCare>;
+  error: boolean;
+  onSolve: () => void;
+  onFail: () => void;
+  clearError: () => void;
+}) {
+  const [openNo, setOpenNo] = useState<number | null>(null);
+  const [seen, setSeen] = useState<number[]>([]);
+  const opened = plan.garments.find((g) => g.no === openNo);
+
+  function pick(no: number) {
+    clearError();
+    setOpenNo(no);
+    setSeen((s) => (s.includes(no) ? s : [...s, no]));
+  }
+
+  return (
+    <>
+      <p className="mb-2 text-xs text-slate-400">
+        건조대에 걸린 세탁물. 번호를 눌러 라벨을 확인하라 (확인한 것은 ·표시).
+      </p>
+      <div className="mb-3 grid grid-cols-4 gap-1.5">
+        {plan.garments.map((g) => (
+          <button
+            key={g.no}
+            onClick={() => pick(g.no)}
+            className={`flex flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 text-[11px] transition ${
+              openNo === g.no
+                ? "border-sky-400 bg-sky-500/15 text-sky-100"
+                : "border-white/10 bg-black/30 text-slate-300 hover:bg-white/5"
+            }`}
+          >
+            <span className="font-mono text-sm font-bold">{g.no}</span>
+            <span className="leading-tight">{g.name}</span>
+            <span className={seen.includes(g.no) ? "text-emerald-400" : "text-transparent"}>·</span>
+          </button>
+        ))}
+      </div>
+
+      {/* 고른 옷의 라벨 */}
+      <div className="mb-3 min-h-[104px] rounded-lg border border-white/10 bg-black/30 p-3">
+        {opened ? (
+          <>
+            <p className="mb-2 text-center text-xs text-slate-300">
+              <span className="font-mono font-bold text-sky-300">{opened.no}</span> · {opened.name} 라벨
+            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {CARE_CATS.map((cat) => (
+                <div key={cat} className="flex flex-col items-center gap-1">
+                  <span className="text-[10px] text-slate-500">{CAT_LABELS[cat]}</span>
+                  <CareSymbol cat={cat} value={opened.care[cat]} className="text-slate-100" />
+                  <span className="text-center text-[10px] leading-tight text-slate-400">
+                    {careLabel(cat, opened.care[cat])}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="pt-8 text-center text-xs text-slate-500">세탁물 번호를 누르면 라벨이 보인다.</p>
+        )}
+      </div>
+
+      {error && (
+        <p className="mb-2 text-center text-sm text-rose-400">
+          일정과 어긋난 기호가 있다. 네 가지를 모두 맞춰 보라.
+        </p>
+      )}
+      <button
+        onClick={() => (openNo === plan.answerNo ? onSolve() : onFail())}
+        disabled={openNo === null}
+        className="w-full rounded-lg bg-sky-500 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-400 disabled:opacity-40"
+      >
+        {openNo === null ? "세탁물을 고르라" : `${openNo}번을 오늘 세탁물로 제출`}
+      </button>
+    </>
   );
 }
 

@@ -37,6 +37,7 @@ const NOTE_KIND: Record<string, NoteKind> = {
   "note-cafe-order": "poster", // 배식 순서표(벽에 세로로)
   "note-cafe-menu": "poster", // 오늘의 식단표(벽에 세로로)
   "note-cafe-tray": "tray", // 배식대 위 식판(금속 식판 비주얼)
+  "note-laundry-plan": "poster", // 오늘 세탁 일정(세탁실 남벽에 세로로)
   "gate-note1": "stone", // 서쪽 감시탑 각인
   "gate-note2": "stone", // 동쪽 감시탑 각인
 };
