@@ -1,13 +1,15 @@
 "use client";
-// 소등(ONBOARDING) 단계에 한 번 흐르는 도입 내레이션.
+// 게임이 시작될 때(PLAY 진입) 한 번 흐르는 도입 내레이션.
 //
 // 화면 하단 자막 밴드에 한 줄씩 타자 치듯 드러내고, 다음 줄이 앞줄을 대체한다. 전체를 60초에
 // 고정해 천천히 진행한다(예전 3초 페이드로 스쳐 못 읽던 문제 해결).
 //   ⚠️ 중앙에 두지 않는다 — 3인칭 카메라상 캐릭터 이름표·클릭 안내가 중앙에 있어 겹친다.
-//      또 "소등" 자체는 PhaseBanner의 전환 토스트가 이미 크게 띄우므로 여기서 또 쓰지 않는다.
 //
 // 엔딩이 "자정의 종"·"정문 너머"·"가면을 쓴 자"라는 말을 쓴다. 그 전제를 여기서 깐다.
-// 시작(phase가 ONBOARDING이 되는 순간)한 뒤에는 단계가 넘어가도 60초 시퀀스를 끝까지 돌린다.
+// 시작(phase가 PLAY가 되는 순간)한 뒤에는 60초 시퀀스를 끝까지 돌린다.
+//   ⚠️ 예전엔 이걸 위한 단계(ONBOARDING)가 따로 있었다. 2026-07-31에 단계는 없애고 PLAY
+//      앞부분에 겹치게 바꿨다 — 서버는 같은 길이를 game.phases.intro로 들고 있고, 순찰이
+//      내레이션 위로 겹쳐 돌지 않게 하는 데 쓴다. **여기 60초와 그 설정값을 함께 고칠 것.**
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useGameStore } from "@/store/gameStore";
 import { cafeteriaPlan, DAYS } from "@/game/cafeteriaPlan";
@@ -50,7 +52,7 @@ export default function OnboardingOverlay() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    if (!startedRef.current && phase === "ONBOARDING") {
+    if (!startedRef.current && phase === "PLAY") {
       startedRef.current = true;
       setStarted(true);
     }

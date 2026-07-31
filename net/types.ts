@@ -53,13 +53,7 @@ export interface RosterEntry {
 }
 
 /** 게임 진행 단계. 백엔드 GamePhase enum의 이름과 일치해야 한다(이중 관리). */
-export type GamePhase =
-  | "LOBBY"
-  | "ONBOARDING"
-  | "MISSION"
-  | "SHARING"
-  | "VOTE"
-  | "ENDED";
+export type GamePhase = "LOBBY" | "PLAY" | "VOTE" | "ENDED";
 
 /**
  * 단계 표시 이름.
@@ -67,12 +61,14 @@ export type GamePhase =
  * 기계적인 이름("온보딩"·"개별 미션")이었는데, 엔딩이 자정의 종·정문이라는 설정을 쓰면서
  * 앞단만 개발 용어로 남으면 이야기가 끊긴다. 같은 세계의 말로 바꿨다.
  * (백엔드 GamePhase.label()과 이중 관리지만, 클라는 enum 이름만 받아 여기서 이름을 붙인다.)
+ *
+ * 2026-07-31: 소등·감방 탈출·단서 공유를 PLAY 하나로 합쳤다(서버 GamePhase와 짝). 셋은 시계로만
+ * 갈렸을 뿐 할 일이 같아, 감방도 못 나왔는데 배너가 "단서 공유"로 바뀌는 식으로 화면이 거짓말을
+ * 했다. 이제 배너는 탈옥 → 색출 → 자정 셋만 지난다.
  */
 export const PHASE_LABEL: Record<GamePhase, string> = {
   LOBBY: "수감 대기",
-  ONBOARDING: "소등",
-  MISSION: "감방 탈출",
-  SHARING: "단서 공유",
+  PLAY: "탈옥",
   VOTE: "색출",
   ENDED: "자정",
 };
