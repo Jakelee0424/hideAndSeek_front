@@ -128,14 +128,14 @@ export const INTERACTABLES: Interactable[] = [
   //    — 도면을 외우거나 둘이 나눠 맡아야 한다. 더 멀리 두면 네 방향을 외우느라 왕복만 는다.
   // 아래 쪽지 둘은 답이 아니라 **작동 방식**만 알려준다.
   { id: "note-pipe-map", type: "note", position: [27, 1.5, 19.6], label: "배관 노선도", board: "pipe-map" },
-  { id: "note-laundry1", type: "note", position: [2, 0.6, 24.5], label: "세탁 안내문", hint: "배관 밸브는 노선도에서 관이 이어지는 쪽으로 돌려라. 물은 ①번부터 흐른다 — 위쪽 밸브가 어긋나 있으면 아래 램프는 맞아도 켜지지 않는다." },
-  { id: "note-laundry2", type: "note", position: [24, 0.6, -10], label: "젖은 쪽지", hint: "건조대 옷은 겉만 봐선 못 고른다. 일정표의 기호 네 가지가 **전부** 같은 건 딱 한 벌뿐이고, 나머지는 하나씩 어긋나 있다." },
+  { id: "note-laundry1", type: "note", position: [2, 0.6, 24.5], label: "세탁 안내문", hint: "배관 밸브는 노선도에서 관이 이어지는 쪽으로 돌려라. 넷을 다 맞춘 뒤에야 물이 흐른다 — 어느 밸브가 어긋났는지는 알려주지 않으니 노선도를 정확히 읽어라." },
+  { id: "note-laundry2", type: "note", position: [24, 0.6, -10], label: "젖은 쪽지", hint: "건조대 옷은 겉만 봐선 못 고른다. 일정표와 기호 네 가지가 **전부** 같은 것이 한 벌이 아니다 — 빠짐없이 골라야 하고, 나머지는 하나씩 어긋나 있다." },
   {
     id: "lock-laundry",
     type: "lockbox",
     position: [30, 0.6, 18.4],
     label: "세탁실 배관 밸브",
-    hint: "옆 벽에 배관 노선도가 걸려 있다. 노선도에서 ①~④ 밸브를 찾아, 그 자리에서 관이 이어지는 방향으로 핸들을 돌려라. 넷 다 초록불이면 문이 열린다.",
+    hint: "옆 벽에 배관 노선도가 걸려 있다. 노선도에서 ①~④ 밸브를 찾아, 그 자리에서 관이 이어지는 방향으로 핸들을 돌려라. 넷을 다 돌린 뒤 물을 흘려 봐야 안다.",
     puzzle: { kind: "valves" },
     opensDoor: "door-laundry",
   },
@@ -150,7 +150,7 @@ export const INTERACTABLES: Interactable[] = [
     type: "lockbox",
     position: [26, 0.6, 22.6], // 건조대(세탁실 서편, 문에서 들어와 왼쪽)
     label: "건조대",
-    hint: "벽의 오늘 세탁 일정과 관리 기호가 네 가지 모두 일치하는 옷은 한 벌뿐이다. 라벨을 하나씩 확인하라.",
+    hint: "벽의 오늘 세탁 일정과 관리 기호가 네 가지 모두 일치하는 옷을 **전부** 골라라. 몇 벌인지는 적혀 있지 않다 — 라벨을 하나씩 다 확인하라.",
     puzzle: { kind: "carelabel" },
   },
 
@@ -222,14 +222,14 @@ export const INTERACTABLES: Interactable[] = [
   // 혈액 검사 키트는 두 침대 사이 "수혈 가능 여부"만 알려준다 — 2회 한정이라 찍기용으로는 모자란다.
   // 배치·정답은 방 코드로 매판 랜덤(infirmaryPlan.bloodPlan). 옛 고정 코드 "451"은 폐기했다.
   // (쪽지 둘은 답이 아니라 규칙만 알려준다. 좌표는 그대로 — 서버 봇 POI와 짝이다.)
-  { id: "note-med1", type: "note", position: [3, 0.6, 22], label: "약장 라벨", hint: "의무실 금고는 네 자리다. O형·A형·B형·AB형 환자가 누운 침대 번호를 그 순서대로 적으라고 적혀 있다." },
-  { id: "note-med2", type: "note", position: [-24, 0.6, -18], label: "처방 기록", hint: "혈액 검사 키트는 두 번밖에 못 쓴다. 수혈 가능 여부만 나오니 아껴 써라 — 단서 넷만으로도 배치는 정해진다." },
+  { id: "note-med1", type: "note", position: [3, 0.6, 22], label: "약장 라벨", hint: "의무실 금고는 침대 여섯의 혈액형 차트를 통째로 받는다. 같은 혈액형이 여럿 누워 있을 수 있다고 적혀 있다." },
+  { id: "note-med2", type: "note", position: [-24, 0.6, -18], label: "처방 기록", hint: "혈액 검사 키트는 두 번밖에 못 쓴다. 수혈 가능 여부만 나오니 아껴 써라 — 벽의 단서만으로도 배치는 하나로 정해진다." },
   {
     id: "lock-med",
     type: "lockbox",
     position: [30, 0.6, 15.6],
     label: "의무실 문 금고",
-    hint: "차트의 단서로 침대별 혈액형을 알아내라. O·A·B·AB 환자의 침대 번호를 그 순서대로 입력한다.",
+    hint: "차트의 단서로 침대 여섯의 혈액형을 복원해 그대로 채워 넣어라. 하나씩이라는 보장은 없다 — 같은 형이 여럿일 수 있다.",
     puzzle: { kind: "bloodtype" },
     opensDoor: "door-med",
   },
@@ -245,7 +245,7 @@ export const INTERACTABLES: Interactable[] = [
     type: "lockbox",
     position: [34.5, 0.6, 11.2], // 병동 동편, 침대 열과 문 사이(약장 x36.8과 겹치지 않는 자리)
     label: "격리 구역 기록판",
-    hint: "접촉 기록과 발현 시각으로 최초 감염자를 찾아라. 증상이 없다고 무고한 것은 아니다.",
+    hint: "접촉 기록과 발현 시각으로 여섯 명이 각각 누구에게서 옮았는지 표를 채워라. 증상이 없다고 무고한 것은 아니다.",
     puzzle: { kind: "outbreak" },
   },
 
