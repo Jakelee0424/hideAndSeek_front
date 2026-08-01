@@ -1,20 +1,28 @@
 "use client";
 // 의무실 퍼즐 두 개의 화면. 문제·정답은 game/infirmaryPlan.ts가 방 코드로 만든다.
-//   BloodTypeLock — 문 금고(lock-med). 침대 넷의 혈액형을 단서로 복원해 네 자리를 맞춘다.
-//   OutbreakQuiz  — 표식(quiz-med). 접촉 기록·발현 시각으로 최초 감염자를 지목한다.
+//   BloodTypeLock — 문 금고(lock-med). 침대 여섯의 혈액형을 단서로 복원해 차트에 그대로 적는다.
+//   OutbreakQuiz  — 표식(quiz-med). 접촉 기록·발현 시각으로 감염 경로표를 채운다.
 //
 // 둘 다 사용자가 만든 HTML 프로토타입을 옮긴 것이라 구성(병동 카드·수혈표·검사 키트 /
-// 접촉 도표·규칙·발현 기록·지목)을 그대로 지킨다. 게임 모달은 폭이 좁으므로 배치만 세로로 폈다.
+// 접촉 도표·규칙·발현 기록)을 그대로 지킨다. 게임 모달은 폭이 좁으므로 배치만 세로로 폈다.
+//
+// ⚠️ 2026-08-01에 둘 다 **찍기 방지**로 답 내는 방식을 바꿨다(고르기 → 채워 넣기).
+//    자세한 배경은 game/infirmaryPlan.ts 머리말 참고.
 import { useState } from "react";
 import {
+  BED_COUNT,
   BLOOD_TYPES,
   GIVES,
   INCUBATION_H,
+  SRC_NONE,
+  SRC_OUTSIDE,
   canTransfuse,
   type BloodPlan,
   type BloodType,
   type OutbreakPlan,
 } from "@/game/infirmaryPlan";
+
+const BEDS = Array.from({ length: BED_COUNT }, (_, i) => i + 1);
 
 // ── ① 혈액형 판정(문 금고) ────────────────────────────────────────
 export function BloodTypeLock({
@@ -30,28 +38,20 @@ export function BloodTypeLock({
   onFail: () => void;
   clearError: () => void;
 }) {
-  // 침대별 메모(정답 판정과 무관 — 종이에 적는 대신 눌러 두는 용도다).
-  const [memo, setMemo] = useState<Record<number, BloodType | null>>({ 1: null, 2: null, 3: null, 4: null });
-  const [dial, setDial] = useState<string[]>(["", "", "", ""]);
+  // ⚠️ 이 표가 곧 **정답 입력**이다. 예전엔 메모지(판정과 무관)였고 답은 따로 네 자리를
+  // 눌렀는데, 그 요약값이 순열 24가지뿐이라 찍기가 통했다.
+  const [chart, setChart] = useState<Record<number, BloodType | null>>(() =>
+    Object.fromEntries(BEDS.map((n) => [n, null])),
+  );
   const [from, setFrom] = useState(1);
   const [to, setTo] = useState(3);
   const [charges, setCharges] = useState(plan.charges);
   const [log, setLog] = useState<{ text: string; ok: boolean }[]>([]);
 
-  /** 같은 혈액형은 한 침대에만 — 다른 곳에 찍혀 있으면 옮겨온다. */
+  /** 한 침대에 한 형. 중복은 허용된다(같은 형이 여럿일 수 있다). 같은 걸 다시 누르면 지운다. */
   function mark(bed: number, t: BloodType) {
-    setMemo((prev) => {
-      const next = { ...prev };
-      if (next[bed] === t) {
-        next[bed] = null;
-        return next;
-      }
-      for (const k of Object.keys(next)) {
-        if (next[Number(k)] === t) next[Number(k)] = null;
-      }
-      next[bed] = t;
-      return next;
-    });
+    clearError();
+    setChart((prev) => ({ ...prev, [bed]: prev[bed] === t ? null : t }));
   }
 
   function runKit() {
@@ -61,26 +61,27 @@ export function BloodTypeLock({
     setLog((l) => [...l, { text: `${from}번 → ${to}번 · ${ok ? "수혈 가능" : "수혈 불가"}`, ok }]);
   }
 
-  function setDigit(i: number, v: string) {
-    clearError();
-    const d = v.replace(/[^1-4]/g, "").slice(-1);
-    setDial((prev) => prev.map((x, k) => (k === i ? d : x)));
+  const filled = BEDS.every((n) => chart[n] !== null);
+
+  function submit() {
+    if (!filled) return;
+    BEDS.every((n) => chart[n] === plan.beds[n]) ? onSolve() : onFail();
   }
 
   return (
     <>
       <p className="mb-3 text-xs leading-relaxed text-slate-400">
-        침대 넷에 환자가 한 명씩 누워 있다. 혈액형은 <b className="text-slate-200">O · A · B · AB</b>가 하나씩이다.
-        차트가 젖어 혈액형 칸만 지워졌다.
+        침대 여섯에 환자가 한 명씩 누워 있다. 차트가 젖어 혈액형 칸만 지워졌다.
+        <b className="text-slate-200"> 같은 혈액형이 여럿일 수 있다.</b> 단서로 복원해 차트를 채워라.
       </p>
 
-      {/* 병동 — 침대 4개. 버튼은 메모지 대용이다(판정과 무관). */}
-      <div className="mb-1 grid grid-cols-4 gap-1.5">
-        {[1, 2, 3, 4].map((n) => (
+      {/* 병동 — 침대 6개. 여기 찍은 것이 그대로 제출된다. */}
+      <div className="mb-1 grid grid-cols-3 gap-1.5">
+        {BEDS.map((n) => (
           <div key={n} className="rounded-lg border border-white/10 bg-black/30 p-1.5">
             <div className="mb-1 flex items-center justify-between text-[10px]">
               <span className="font-mono font-bold text-slate-200">{n}번</span>
-              <span className="text-slate-500">{n === 1 ? "창가" : n === 4 ? "문가" : ""}</span>
+              <span className="text-slate-500">{n === 1 ? "창가" : n === BED_COUNT ? "문가" : ""}</span>
             </div>
             <div className="grid grid-cols-2 gap-1">
               {BLOOD_TYPES.map((t) => (
@@ -88,7 +89,7 @@ export function BloodTypeLock({
                   key={t}
                   onClick={() => mark(n, t)}
                   className={`rounded py-1 font-mono text-[11px] transition ${
-                    memo[n] === t
+                    chart[n] === t
                       ? "bg-rose-700 text-rose-50"
                       : "bg-white/5 text-slate-300 hover:bg-white/10"
                   }`}
@@ -146,7 +147,7 @@ export function BloodTypeLock({
             onChange={(e) => setFrom(Number(e.target.value))}
             className="rounded border border-white/15 bg-black/40 px-1.5 py-1 font-mono text-xs text-slate-100"
           >
-            {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}번</option>)}
+            {BEDS.map((n) => <option key={n} value={n}>{n}번</option>)}
           </select>
           <span className="text-slate-500">→</span>
           <select
@@ -154,7 +155,7 @@ export function BloodTypeLock({
             onChange={(e) => setTo(Number(e.target.value))}
             className="rounded border border-white/15 bg-black/40 px-1.5 py-1 font-mono text-xs text-slate-100"
           >
-            {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}번</option>)}
+            {BEDS.map((n) => <option key={n} value={n}>{n}번</option>)}
           </select>
           <button
             onClick={runKit}
@@ -181,34 +182,24 @@ export function BloodTypeLock({
         )}
       </div>
 
-      {/* 금고 */}
+      {/* 제출 — 차트 여섯 칸이 전부 채워져야 넣을 수 있다. */}
       <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/40 p-3">
-        <p className="mb-2 text-[11px] leading-relaxed text-emerald-200/80">
-          금고 — <b>O · A · B · AB</b> 환자의 침대 번호를 그 순서대로 네 자리.
+        <p className="text-[11px] leading-relaxed text-emerald-200/80">
+          금고 — 복원한 차트를 그대로 밀어 넣는다. 여섯 칸이 <b>전부</b> 맞아야 열린다.
         </p>
-        <div className="flex justify-center gap-2">
-          {dial.map((d, i) => (
-            <input
-              key={i}
-              value={d}
-              onChange={(e) => setDigit(i, e.target.value)}
-              inputMode="numeric"
-              maxLength={1}
-              aria-label={`${i + 1}번째 자리`}
-              className="h-12 w-11 rounded border border-emerald-800 bg-black/50 text-center font-mono text-xl text-emerald-50 outline-none focus:border-emerald-500"
-            />
-          ))}
-        </div>
       </div>
 
       {error && (
-        <p className="mt-3 text-center text-sm text-rose-400">일치하는 기록이 없다.</p>
+        <p className="mt-3 text-center text-sm text-rose-400">
+          차트가 기록과 맞지 않는다. 어긋난 칸이 어디인지는 알려주지 않는다.
+        </p>
       )}
       <button
-        onClick={() => (dial.join("") === plan.code ? onSolve() : onFail())}
-        className="mt-3 w-full rounded-lg bg-sky-500 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-400"
+        onClick={submit}
+        disabled={!filled}
+        className="mt-3 w-full rounded-lg bg-sky-500 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-400 disabled:opacity-40"
       >
-        입력
+        {filled ? "차트를 금고에 넣는다" : `아직 ${BEDS.filter((n) => chart[n] === null).length}칸 비었다`}
       </button>
     </>
   );
@@ -277,20 +268,35 @@ function ContactChart({ plan }: { plan: OutbreakPlan }) {
 
 export function OutbreakQuiz({
   plan,
+  error,
   onSolve,
+  onFail,
+  clearError,
 }: {
   plan: OutbreakPlan;
+  error: boolean;
   onSolve: () => void;
+  onFail: () => void;
+  clearError: () => void;
 }) {
-  const [picked, setPicked] = useState<string | null>(null);
+  // 사람 → 고른 감염원. 여섯 줄을 **전부** 맞춰야 열린다(예전엔 최초 감염자 하나만 찍었다).
+  const [pick, setPick] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
+  const filled = plan.people.every((p) => pick[p.name]);
 
-  function accuse(name: string) {
+  function choose(name: string, src: string) {
     if (done) return;
-    setPicked(name);
-    if (name === plan.answer) {
+    clearError();
+    setPick((prev) => ({ ...prev, [name]: src }));
+  }
+
+  function submit() {
+    if (done || !filled) return;
+    if (plan.people.every((p) => pick[p.name] === plan.sourceOf[p.name])) {
       setDone(true);
       window.setTimeout(onSolve, 2600); // 전파 경로를 잠깐 보여준 뒤 표식 해금
+    } else {
+      onFail();
     }
   }
 
@@ -312,7 +318,10 @@ export function OutbreakQuiz({
           <li>감염된 시각으로부터 정확히 {INCUBATION_H}시간 뒤에 증상이 나타난다.</li>
           <li>감염된 직후부터 남에게 옮길 수 있다. 증상을 기다리지 않는다.</li>
           <li>끝내 증상이 나타나지 않는 사람도 있다. 증상이 없어도 옮기는 것은 똑같다.</li>
-          <li>기록에 남은 접촉이라고 해서 모두 전파가 일어난 것은 아니다.</li>
+          <li>기록에 남은 접촉이라고 해서 모두 전파가 일어난 것은 아니다(상대가 아직 감염 전이면 아무 일도 없다).</li>
+          {/* ⚠️ 아래 줄은 장식이 아니라 **유일해의 전제**다. 지우면 사슬을 거꾸로 읽는 해석이
+              또 하나 성립해 정답이 둘이 된다(infirmaryPlan.ts sourceOf 주석 참고). */}
+          <li>감염을 이 병동에 처음 들여온 사람은 <b className="text-amber-200">한 명</b>이고, 그는 끝내 증상이 없었다.</li>
         </ol>
       </div>
 
@@ -336,34 +345,62 @@ export function OutbreakQuiz({
         <p className="px-2 py-1.5 text-[10px] text-slate-500">나머지 세 명은 어제 하루 증상 기록이 없다.</p>
       </div>
 
-      <p className="mb-2 text-xs text-slate-300">감염을 이 병동에 처음 들여온 사람을 지목하라.</p>
-      <div className="mb-3 grid grid-cols-3 gap-1.5">
-        {plan.people.map((p) => {
-          const hit = done && p.name === plan.answer;
-          return (
-            <button
-              key={p.name}
-              onClick={() => accuse(p.name)}
-              disabled={done && !hit}
-              className={`rounded-lg border px-1 py-2 text-[11px] leading-tight transition ${
-                hit
-                  ? "border-emerald-400 bg-emerald-500/20 text-emerald-100"
-                  : picked === p.name
-                    ? "border-rose-500 bg-rose-500/15 text-rose-100"
-                    : "border-white/10 bg-black/30 text-slate-300 hover:bg-white/5 disabled:opacity-40"
-              }`}
-            >
-              {p.name}
-            </button>
-          );
-        })}
+      <p className="mb-2 text-xs text-slate-300">
+        여섯 명이 각각 <b className="text-amber-200">누구에게서 옮았는지</b> 전부 채워라.
+      </p>
+      <div className="mb-3 overflow-hidden rounded-lg border border-white/10">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-white/5 text-slate-400">
+              <th className="px-2 py-1 text-left font-medium">대상</th>
+              <th className="px-2 py-1 text-left font-medium">감염원</th>
+            </tr>
+          </thead>
+          <tbody>
+            {plan.people.map((p) => (
+              <tr key={p.name} className="border-t border-white/5">
+                <td className="whitespace-nowrap px-2 py-1 text-slate-200">{p.name}</td>
+                <td className="px-1 py-1">
+                  <select
+                    value={pick[p.name] ?? ""}
+                    disabled={done}
+                    onChange={(e) => choose(p.name, e.target.value)}
+                    className="w-full rounded border border-white/15 bg-black/40 px-1.5 py-1 text-xs text-slate-100 disabled:opacity-60"
+                  >
+                    <option value="">— 고르라 —</option>
+                    <option value={SRC_OUTSIDE}>{SRC_OUTSIDE}</option>
+                    <option value={SRC_NONE}>{SRC_NONE}</option>
+                    {plan.people
+                      .filter((o) => o.name !== p.name)
+                      .map((o) => (
+                        <option key={o.name} value={o.name}>
+                          {o.name}
+                        </option>
+                      ))}
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      {/* 판정 — 틀리면 그 사람이 최초일 수 없는 이유를 보여준다(찍기 대신 추리를 시킨다). */}
-      {picked && !done && (
-        <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs leading-relaxed text-rose-200">
-          {plan.rebuttals[picked]}
-        </p>
+      {/* 판정 — 어느 줄이 틀렸는지는 알려주지 않는다(알려주면 한 줄씩 찍어 맞출 수 있다). */}
+      {!done && (
+        <>
+          {error && (
+            <p className="mb-2 text-center text-sm text-rose-400">
+              경로가 기록과 맞지 않는다. 발현 시각에서 {INCUBATION_H}시간을 거슬러 보라.
+            </p>
+          )}
+          <button
+            onClick={submit}
+            disabled={!filled}
+            className="mb-3 w-full rounded-lg bg-sky-500 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-400 disabled:opacity-40"
+          >
+            {filled ? "역학 조사서를 제출한다" : "표를 모두 채워라"}
+          </button>
+        </>
       )}
       {done && (
         <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">

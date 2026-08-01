@@ -1,14 +1,17 @@
 // 의무실 퍼즐 — 두 단계. 둘 다 방 코드로 매판 생성한다(같은 방이면 모두 같은 문제를 본다).
 //
-// ① 진입(문 밖 복도, lock-med): **혈액형 판정**. 침대 넷에 O·A·B·AB가 하나씩 누워 있는데
-//    차트의 혈액형 칸만 젖어 지워졌다. 단서 넷을 읽어 배치를 복원하고, O·A·B·AB 순서로
-//    그 환자의 침대 번호를 적으면(네 자리) 문 옆 금고가 열린다.
+// ① 진입(문 밖 복도, lock-med): **혈액형 판정**. 침대 여섯의 혈액형을 단서로 복원해
+//    **배치 그대로** 차트에 적어 넣으면 문 옆 금고가 열린다.
+//    ⚠️ **2026-08-01에 침대 4 → 6, 혈액형 중복 허용으로 바꿨다.** 예전엔 O·A·B·AB가
+//    하나씩이고 답이 "번호 네 자리"였는데, 그건 복원한 배치가 아니라 그 **요약**이라
+//    답 공간이 1~4의 순열 = 24가지뿐이었다(스물세 번 찍으면 열렸다). 지금은 4⁶ = 4096이다.
 //    혈액 검사 키트는 두 침대 사이 "수혈 가능 여부"만 알려준다(혈액형은 안 알려준다). 2회 한정.
 //
 // ② 표식(방 안, quiz-med): **감염 경로 추적**. 어제 하루의 접촉 기록(누가 몇 시에 누구와)과
 //    증상 발현 시각 셋이 있다. 감염은 접촉 즉시, 발현은 정확히 6시간 뒤, 발현 전에도 옮긴다.
-//    이 병동에 감염을 처음 들여온 사람 하나를 지목한다 — 답은 **증상이 끝내 없는 사람**이라
-//    발현 기록만 훑어서는 못 찾는다.
+//    ⚠️ **2026-08-01에 "최초 감염자 1명 지목" → "감염 경로표 채우기"로 바꿨다.** 여섯 명이
+//    각각 **누구에게서 옮았는지**(또는 외부 유입/미감염)를 전부 채워야 한다. 예전엔 6지선다라
+//    다섯 번 찍으면 열렸고, 오답마다 뜨던 반박문이 추론을 대신 해 줬다(그래서 반박문도 뺐다).
 //
 // 두 문제 다 사용자가 만든 HTML 프로토타입(의무실-혈액형퍼즐 / 의무실-감염경로퍼즐)의 로직을
 // 그대로 옮겼다. 다만 **인물 배역은 방 코드로 섞는다** — 정답이 고정이면 한 번 푼 사람이 다음
@@ -57,14 +60,17 @@ export const GIVES: Record<BloodType, BloodType[]> = {
   AB: ["AB"],
 };
 
+/** 병동 침대 수. 1이 창가, 마지막이 문가. */
+export const BED_COUNT = 6;
+
 export interface BloodPlan {
-  /** 침대 1~4 → 혈액형. 1이 창가, 4가 문가. */
+  /** 침대 1~BED_COUNT → 혈액형. **중복이 있을 수 있다**(같은 형이 둘 이상 누워 있어도 된다). */
   beds: Record<number, BloodType>;
   clues: string[];
-  /** 정답 네 자리 = O·A·B·AB 환자의 침대 번호. */
-  code: string;
   /** 검사 키트 사용 가능 횟수. */
   charges: number;
+  /** 단서로 좁혀지는 배치 수. **항상 1이어야 한다**(전수 검사 스크립트가 이걸 본다). */
+  solutions: number;
 }
 
 /** 두 침대 사이 수혈이 가능한가(검사 키트). 혈액형은 알려주지 않는다. */
@@ -72,45 +78,171 @@ export function canTransfuse(plan: BloodPlan, from: number, to: number): boolean
   return GIVES[plan.beds[from]].includes(plan.beds[to]);
 }
 
+/** 침대를 부르는 말. 양 끝만 창가·문가로 부른다(단서 문장에 그대로 들어간다). */
+function bedName(n: number): string {
+  if (n === 1) return "1번(창가)";
+  if (n === BED_COUNT) return `${BED_COUNT}번(문가)`;
+  return `${n}번`;
+}
+
+/** 배치 후보 하나. 인덱스 0 = 1번 침대. */
+type Layout = BloodType[];
+interface ClueDef {
+  text: string;
+  test: (b: Layout) => boolean;
+}
+
+/** 이 사람이 나머지 전원에게 줄 수 있는가 / 아무에게도 못 주는가. */
+const givesAll = (b: Layout, i: number) =>
+  b.every((t, j) => j === i || GIVES[b[i]].includes(t));
+const givesNone = (b: Layout, i: number) =>
+  b.every((t, j) => j === i || !GIVES[b[i]].includes(t));
+
+/** 4^BED_COUNT 배치를 모두 만든다(4096개). 유일해 검사에 쓴다. */
+function allLayouts(): Layout[] {
+  let acc: Layout[] = [[]];
+  for (let i = 0; i < BED_COUNT; i++) {
+    acc = acc.flatMap((l) => BLOOD_TYPES.map((t) => [...l, t]));
+  }
+  return acc;
+}
+const LAYOUTS = allLayouts();
+
+/**
+ * 실제 배치에 대해 **참인** 단서 후보를 모두 만든다.
+ *
+ * 앞쪽 무리부터 고르게 해 뒀다 — 수혈 관계·인원수처럼 추리할 맛이 있는 줄이 먼저 붙고,
+ * "N번은 X형이 아니다"는 마지막에 온다. 단, 부정문 18줄이 후보에 늘 들어 있으므로
+ * (침대마다 3줄) 어떤 배치든 단서를 다 붙이면 반드시 유일해가 된다 — 생성이 실패할 수 없다.
+ */
+function clueCandidates(rand: () => number, beds: Layout): ClueDef[] {
+  const groups: ClueDef[][] = [];
+
+  // ① 수혈 관계 — 프로토타입의 뼈대(O는 모두에게, AB는 누구에게도)를 그대로 남긴다.
+  const rel: ClueDef[] = [];
+  for (let i = 0; i < BED_COUNT; i++) {
+    if (givesAll(beds, i)) {
+      rel.push({
+        text: `${bedName(i + 1)} 환자는 나머지 다섯 명 모두에게 수혈해 줄 수 있다.`,
+        test: (b) => givesAll(b, i),
+      });
+    }
+    if (givesNone(beds, i)) {
+      rel.push({
+        text: `${bedName(i + 1)} 환자는 나머지 다섯 명 중 누구에게도 수혈해 줄 수 없다.`,
+        test: (b) => givesNone(b, i),
+      });
+    }
+    for (let j = 0; j < BED_COUNT; j++) {
+      if (i === j) continue;
+      const ok = GIVES[beds[i]].includes(beds[j]);
+      rel.push({
+        text: `${bedName(i + 1)} 환자는 ${bedName(j + 1)} 환자에게 수혈해 줄 수 ${ok ? "있다" : "없다"}.`,
+        test: (b) => GIVES[b[i]].includes(b[j]) === ok,
+      });
+    }
+  }
+  groups.push(rel);
+
+  // ② 인원수 — "O형은 두 명이다" / "AB형은 한 명도 없다"
+  const counts: ClueDef[] = BLOOD_TYPES.map((t) => {
+    const k = beds.filter((x) => x === t).length;
+    return {
+      text: k === 0 ? `이 병동에 ${t}형은 한 명도 없다.` : `이 병동에 ${t}형은 ${k}명이다.`,
+      test: (b: Layout) => b.filter((x) => x === t).length === k,
+    };
+  });
+  groups.push(counts);
+
+  // ③ 두 침대 비교 — 같다 / 다르다
+  const pairs: ClueDef[] = [];
+  for (let i = 0; i < BED_COUNT; i++) {
+    for (let j = i + 1; j < BED_COUNT; j++) {
+      const same = beds[i] === beds[j];
+      pairs.push({
+        text: `${bedName(i + 1)}과 ${bedName(j + 1)} 환자는 ${same ? "같은" : "서로 다른"} 혈액형이다.`,
+        test: (b) => (b[i] === b[j]) === same,
+      });
+    }
+  }
+  groups.push(pairs);
+
+  // ④ 부정문 — 마지막 수단. 이게 있어 어떤 배치든 반드시 유일해로 좁혀진다.
+  const nots: ClueDef[] = [];
+  for (let i = 0; i < BED_COUNT; i++) {
+    for (const t of BLOOD_TYPES) {
+      if (t === beds[i]) continue;
+      nots.push({
+        text: `${bedName(i + 1)} 환자는 ${t}형이 아니다.`,
+        test: (b) => b[i] !== t,
+      });
+    }
+  }
+  groups.push(nots);
+
+  return groups.flatMap((g) => shuffle(rand, g));
+}
+
 /**
  * 방 코드로 혈액형 문제를 만든다.
  *
- * 단서 구성은 프로토타입 그대로다. 배치가 유일하게 정해지는 근거는 셋뿐이라 이 뼈대를 지킨다:
- *   - O형만 셋 모두에게 줄 수 있다 → O의 자리가 정해진다
- *   - AB형만 누구에게도 못 준다   → AB의 자리가 정해진다
- *   - 남은 둘(A·B)은 **수혈 관계로는 절대 구분되지 않는다**(서로 못 주고, 받는 쪽도 대칭이다).
- *     그래서 A의 자리를 직접 지목하는 단서가 반드시 하나 있어야 한다. 이걸 빼면 답이 둘이 된다.
- * 나머지 한 줄(창가 부정문)은 교차 확인용이고, 언제나 참이 되게 만든다.
+ * 배치를 먼저 정하고, **답이 하나로 좁혀질 때까지** 참인 단서를 붙인 뒤 군더더기를 걷어낸다.
+ * 손으로 짠 단서 네 줄로는 침대 여섯·중복 허용을 감당할 수 없다(유일해가 깨진다).
  */
-export function bloodPlan(seed: string): BloodPlan {
+function buildBloodPlan(seed: string): BloodPlan {
   const rand = rng(hash(`infirmary|blood|${seed || "solo"}`));
 
-  const order = shuffle(rand, BLOOD_TYPES);
-  const beds: Record<number, BloodType> = { 1: order[0], 2: order[1], 3: order[2], 4: order[3] };
-  const bedOf = (t: BloodType) => Number(Object.keys(beds).find((k) => beds[Number(k)] === t));
+  // 배치: 너무 단조로우면(전원 같은 형 등) 추리가 안 되므로 최소 3종 이상, 한 형 최대 3명.
+  let beds: Layout = [];
+  for (let tries = 0; tries < 200; tries++) {
+    beds = Array.from({ length: BED_COUNT }, () => BLOOD_TYPES[Math.floor(rand() * 4)]);
+    const kinds = new Set(beds).size;
+    const maxDup = Math.max(...BLOOD_TYPES.map((t) => beds.filter((x) => x === t).length));
+    if (kinds >= 3 && maxDup <= 3) break;
+  }
 
-  const oBed = bedOf("O");
-  const abBed = bedOf("AB");
-  const aBed = bedOf("A");
+  // 유일해가 될 때까지 단서를 붙인다(해집합을 걸러 나가므로 후보 한 바퀴면 끝난다).
+  const cands = clueCandidates(rand, beds);
+  let sols = LAYOUTS;
+  const chosen: ClueDef[] = [];
+  for (const c of cands) {
+    if (sols.length === 1) break;
+    const next = sols.filter((l) => c.test(l));
+    if (next.length === sols.length) continue; // 아무것도 못 줄이는 줄은 버린다
+    sols = next;
+    chosen.push(c);
+  }
 
-  // 창가(1번) 부정문 — 1번이 아닌 혈액형 중 하나를 고른다(항상 참).
-  const notAtWindow = shuffle(rand, BLOOD_TYPES.filter((t) => t !== beds[1]))[0];
-  // A의 자리를 지목하는 줄. 창가·문가면 그 말로, 아니면 번호로 부른다.
-  const aWhere = aBed === 1 ? "창가 침대" : aBed === 4 ? "문가 침대" : `${aBed}번 침대`;
+  // 군더더기 제거 — 빼도 여전히 유일하면 뺀다(순서를 뒤에서부터 훑어야 앞의 강한 줄이 남는다).
+  const kept = [...chosen];
+  for (let i = kept.length - 1; i >= 0; i--) {
+    const without = kept.filter((_, k) => k !== i);
+    if (LAYOUTS.filter((l) => without.every((c) => c.test(l))).length === 1) {
+      kept.splice(i, 1);
+    }
+  }
 
-  const clues = shuffle(rand, [
-    `창가 침대 환자는 ${notAtWindow}형이 아니다.`,
-    `${oBed}번 침대 환자는 나머지 세 명 모두에게 수혈해 줄 수 있다.`,
-    `${abBed}번 침대 환자는 나머지 세 명 중 누구에게도 수혈해 줄 수 없다.`,
-    `A형 환자는 ${aWhere}에 있다.`,
-  ]);
-
+  const bedsRec: Record<number, BloodType> = {};
+  beds.forEach((t, i) => (bedsRec[i + 1] = t));
   return {
-    beds,
-    clues,
-    code: `${oBed}${aBed}${bedOf("B")}${abBed}`,
+    beds: bedsRec,
+    clues: shuffle(rand, kept).map((c) => c.text),
     charges: 2,
+    solutions: LAYOUTS.filter((l) => kept.every((c) => c.test(l))).length,
   };
+}
+
+// 모달이 다시 그려질 때마다 4096개를 훑지 않도록 방 코드별로 한 번만 만든다.
+const bloodCache = new Map<string, BloodPlan>();
+
+export function bloodPlan(seed: string): BloodPlan {
+  const key = seed || "solo";
+  let p = bloodCache.get(key);
+  if (!p) {
+    p = buildBloodPlan(seed);
+    bloodCache.set(key, p);
+  }
+  return p;
 }
 
 // ── ② 감염 경로 추적(표식) ────────────────────────────────────────
@@ -155,15 +287,19 @@ export interface Onset {
   name: string;
   hour: number;
 }
+/** 감염원 칸의 특별 선택지. 사람 이름과 같은 자리에 들어간다. */
+export const SRC_NONE = "감염되지 않음";
+export const SRC_OUTSIDE = "외부에서 들여옴";
+
 export interface OutbreakPlan {
   /** 도표 행 순서 */
   people: OutbreakPerson[];
   contacts: Contact[];
   onsets: Onset[];
-  /** 정답(최초 감염자 이름) */
+  /** 정답(최초 감염자 이름) — 해금 문구에 쓴다. */
   answer: string;
-  /** 지목이 틀렸을 때 보여줄 반박. 이름 → 문구. */
-  rebuttals: Record<string, string>;
+  /** **정답표**: 사람 → 감염원(다른 사람 이름 / SRC_OUTSIDE / SRC_NONE). 이걸 다 채워야 열린다. */
+  sourceOf: Record<string, string>;
   /** 정답 뒤 공개하는 전파 경로. */
   chain: string[];
 }
@@ -201,19 +337,25 @@ export function outbreakPlan(seed: string): OutbreakPlan {
     { name: of.third, hour: 17 + INCUBATION_H },
   ];
 
-  const rebuttals: Record<string, string> = {
-    [of.first]:
-      `${hh(17)} 발현이니 감염된 시각은 ${hh(11)}이다. 그 시각에 만난 상대가 따로 있다.`,
-    [of.second]:
-      `${hh(21)} 발현이니 감염된 시각은 ${hh(15)}이다. 그 시각의 접촉 상대는 ${of.first}다.`,
-    [of.third]:
-      `${hh(23)} 발현으로 가장 늦다. 감염은 ${hh(17)}, 상대는 ${of.second}다.`,
-    [of.extra]:
-      `${hh(2)}과 ${hh(8)}에 접촉 기록이 있지만 상대 두 사람 다 그 시각에는 아직 감염 전이었다. ` +
-      `${of.extra}가 최초였다면 ${of.second}가 ${hh(8)}에 발현했어야 한다. 실제 발현은 ${hh(21)}이다.`,
-    [of.late]:
-      `증상 기록이 없어 의심스럽지만, ${of.late}가 최초였다면 ${hh(5)}에 만난 ${of.first}가 ` +
-      `${hh(11)}에 발현했어야 한다. ${of.first}의 실제 발현은 ${hh(17)}이다.`,
+  /**
+   * 정답표. 각 줄이 기록 하나로 확정된다:
+   *   - 발현자 셋은 발현 −6시간의 접촉 상대가 감염원이다(11·15·17시 접촉 하나씩).
+   *   - late는 20:00에 index와 만났고 그때 index는 이미 감염 상태다 → 규칙상 반드시 옮는다.
+   *     발현은 자정 넘어서라 기록에 없다.
+   *   - extra의 접촉 상대(02시 second·08시 late)는 그 시각 둘 다 미감염 → 옮을 길이 없다.
+   *   - index는 감염원이 기록에 없다 → 외부.
+   *
+   * ⚠️ 규칙 "외부에서 들여온 사람은 끝내 증상이 없었다"가 **유일해의 전제**다. 이게 없으면
+   * "first가 외부에서 감염돼(11:00) 같은 자리에서 index에게 옮겼다"는 뒤집은 해석도 성립해
+   * 답이 둘이 된다. 화면 규칙 목록(OutbreakQuiz)에 이 줄을 반드시 함께 띄울 것.
+   */
+  const sourceOf: Record<string, string> = {
+    [of.index]: SRC_OUTSIDE,
+    [of.first]: of.index,
+    [of.second]: of.first,
+    [of.third]: of.second,
+    [of.late]: of.index,
+    [of.extra]: SRC_NONE,
   };
 
   const chain = [
@@ -229,5 +371,5 @@ export function outbreakPlan(seed: string): OutbreakPlan {
     ROLES.map((r) => ({ name: of[r], role: r })),
   );
 
-  return { people, contacts, onsets, answer: of.index, rebuttals, chain };
+  return { people, contacts, onsets, answer: of.index, sourceOf, chain };
 }

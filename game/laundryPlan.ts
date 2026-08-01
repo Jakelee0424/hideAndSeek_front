@@ -5,11 +5,15 @@
 //    ①~④ 밸브 자리에서 관이 **어느 쪽으로 이어지는지**를 스스로 읽어야 한다.
 //    갈림길마다 죽은 가지(폐수조·보일러·막힘)가 하나씩 붙어 있어 그냥 눈에 띄는 쪽을
 //    고르면 틀린다. 밸브는 45°씩 도는 핸들이라 8방향 중 하나를 고르는 셈이다.
-//    램프는 **상류부터** 켜진다(물이 그 밸브까지 닿아야 압력이 걸린다) — ①이 틀리면
-//    ②~④는 맞아도 안 켜진다. 넷 다 초록이면 문이 열린다.
+//    ⚠️ **밸브별 램프는 없앴다(2026-08-01).** 예전엔 상류부터 하나씩 켜져서 ①을 3번 안에
+//    맞추고 ②로 넘어가는 식으로 밸브를 **하나씩 독립적으로** 풀 수 있었다(12클릭이면 열렸다).
+//    지금은 넷을 다 돌린 뒤 확인을 눌러야 하고, 틀려도 어느 밸브가 어긋났는지 알려주지 않는다.
 //
 // ② 표식(방 안 건조대, quiz-laundry): 벽의 "오늘 세탁 일정"이 요구하는 관리 기호 4가지
 //    (세탁·표백·건조·다림질)와 **네 가지 모두** 일치하는 옷을 건조대에서 찾는다.
+//    ⚠️ **정답은 한 벌이 아니라 여러 벌이다(2026-08-01).** 예전엔 딱 한 벌이라 8지선다였고
+//    일곱 번 찍으면 열렸다. 지금은 완전 일치하는 옷이 3벌이고 **그걸 전부** 골라야 한다
+//    (몇 벌인지는 알려주지 않는다 — 알려주면 C(8,3)=56, 안 알려주면 2^8=256).
 //    가짜는 대부분 기호 하나만 다르다 — 한 칸만 보고 고르면 틀린다. 맞히면 세탁실 벽에
 //    표식이 드러난다(Map.RoomStamps).
 //
@@ -75,66 +79,115 @@ export interface PipeValve {
 export interface PipeMap {
   source: PipeCell; // 급수 본관
   target: PipeCell; // 세탁조
+  /** 급수→세탁조 본선 전체. 밸브가 아닌 꺾임 칸도 들어 있다 — 노선도는 이 선을 그린다. */
+  path: PipeCell[];
   valves: PipeValve[];
   dead: PipeDead[]; // 죽은 가지(노선도에만 그린다)
 }
 
-// 죽은 가지 끝에 붙는 이름. 어느 것도 세탁조가 아니다 — 관을 끝까지 따라가야 구분된다.
-const DEAD_LABELS = ["폐수조", "보일러(정비중)", "막힘", "온수 탱크", "구 배관(폐쇄)", "정화조"];
+/** 본선 칸 수(급수 + 중간 6칸 + 세탁조). 밸브는 이 중 중간 칸 넷에 앉는다. */
+const PATH_CELLS = 8;
+
+const cellKey = (c: PipeCell) => `${c.col},${c.row}`;
+
+/** 두 이웃 칸 사이의 방향. 인접하지 않으면 호출하지 않는다. */
+function dirBetween(a: PipeCell, b: PipeCell): Dir {
+  const dc = b.col - a.col;
+  const dr = b.row - a.row;
+  return DIR_STEP.findIndex(([x, y]) => x === dc && y === dr) as Dir;
+}
+
+/**
+ * 급수(col 0)에서 세탁조(마지막 col)까지 PATH_CELLS칸짜리 **단순경로**를 찾는다(8방향 DFS).
+ *
+ * 칸 수를 가로폭보다 넉넉히 잡은 것이 요점이다. 예전 생성기는 매 칸 동쪽으로 한 칸씩만
+ * 전진해서 밸브 정답이 북동·동·남동 **셋뿐**이었다 — 램프를 없앤 지금은 그 제한이 곧
+ * 찍기 공간(3⁴=81)이 된다. 여유 칸이 있으면 북·남으로 꺾이는 구간이 생겨 정답이 8방향에
+ * 고루 퍼진다. 자기교차는 막는다(관이 겹치면 노선도를 읽을 수 없다).
+ */
+function findPipePath(rand: () => number, start: PipeCell): PipeCell[] | null {
+  const path: PipeCell[] = [start];
+  const seen = new Set<string>([cellKey(start)]);
+  const ALL: Dir[] = [0, 1, 2, 3, 4, 5, 6, 7];
+
+  function step(): boolean {
+    const cur = path[path.length - 1];
+    const left = PATH_CELLS - path.length; // 남은 이동 횟수
+    if (left === 0) return cur.col === PIPE_COLS - 1;
+    for (const d of shuffle(rand, ALL)) {
+      const to = { col: cur.col + DIR_STEP[d][0], row: cur.row + DIR_STEP[d][1] };
+      if (to.col < 0 || to.col >= PIPE_COLS || to.row < 0 || to.row >= PIPE_ROWS) continue;
+      if (seen.has(cellKey(to))) continue;
+      // 남은 이동으로 세탁조 열까지 못 닿으면 가지 않는다.
+      if (PIPE_COLS - 1 - to.col > left - 1) continue;
+      seen.add(cellKey(to));
+      path.push(to);
+      if (step()) return true;
+      path.pop();
+      seen.delete(cellKey(to));
+    }
+    return false;
+  }
+
+  return step() ? path : null;
+}
 
 /**
  * 방 코드로 배관 노선도를 만든다.
  *
- * 관은 항상 동쪽으로 한 칸씩 전진하되 위/아래로 꺾일 수 있다(북동·동·남동 셋 중 하나).
- * 그래서 노선도가 스스로 겹치지 않고, 밸브가 가질 수 있는 정답도 세 방향으로 좁혀진다
- * — 8방향 전부를 열어 두면 노선도를 못 읽어도 찍어서 맞을 수 있다.
+ * 밸브는 본선 중간 칸 여섯 중 넷에 앉는다. 밸브의 정답은 **그 칸을 떠나는** 방향이다.
+ * 밸브가 아닌 꺾임 칸이 섞이므로 "밸브에서 밸브로 직선"이라는 짐작이 통하지 않는다.
  */
 export function laundryPipes(seed: string): PipeMap {
   const rand = rng(hash(`laundry|pipes|${seed || "solo"}`));
 
-  // 경로: (0,r0) → 밸브 4개(col 1~4) → 세탁조(col 5). 매 칸 북동/동/남동 중 하나로 전진.
-  const path: PipeCell[] = [{ col: 0, row: 1 + Math.floor(rand() * 2) }];
-  const steps: Dir[] = [];
-  for (let i = 0; i < 5; i++) {
-    const prev = path[i];
-    const options: Dir[] = [2];
-    if (prev.row > 0) options.push(1);
-    if (prev.row < PIPE_ROWS - 1) options.push(3);
-    const d = options[Math.floor(rand() * options.length)];
-    steps.push(d);
-    path.push({ col: prev.col + 1, row: prev.row + DIR_STEP[d][1] });
+  // 시작 행을 섞어 시도한다. 6×4 격자에 8칸이면 어느 행에서든 경로가 나오지만,
+  // 경로를 못 찾은 채 되돌아오면 문이 영영 안 열리므로 전 행을 훑는 폴백을 둔다.
+  let path: PipeCell[] | null = null;
+  for (const row of shuffle(rand, [0, 1, 2, 3].slice(0, PIPE_ROWS))) {
+    path = findPipePath(rand, { col: 0, row });
+    if (path) break;
+  }
+  if (!path) {
+    // 여기 오는 시드는 없다(전수 검사 완료). 와도 게임이 막히지 않게 직선으로 깐다.
+    path = Array.from({ length: PATH_CELLS }, (_, i) => ({ col: Math.min(i, PIPE_COLS - 1), row: 1 }));
   }
 
-  // 밸브 = path[1..4]. 밸브 i의 정답은 **그 밸브를 떠나는** 방향(steps[i]).
-  const valves: PipeValve[] = [1, 2, 3, 4].map((i) => ({
-    no: i,
-    at: path[i],
-    answer: steps[i],
+  // 밸브 자리 = 중간 칸(1 … PATH_CELLS-2) 중 넷. 상류부터 ①②③④.
+  const middle = Array.from({ length: PATH_CELLS - 2 }, (_, i) => i + 1);
+  const valveIdx = shuffle(rand, middle).slice(0, 4).sort((a, b) => a - b);
+  const valves: PipeValve[] = valveIdx.map((idx, i) => ({
+    no: i + 1,
+    at: path![idx],
+    answer: dirBetween(path![idx], path![idx + 1]),
   }));
 
-  // 죽은 가지: 밸브마다 1~2개. 경로 칸/다른 가지 끝과 겹치지 않는 이웃 칸으로 한 홉.
-  const taken = new Set(path.map((c) => `${c.col},${c.row}`));
+  // 죽은 가지: 밸브마다 1~2개. 본선 칸/다른 가지 끝과 겹치지 않는 이웃 칸으로 한 홉.
+  const taken = new Set(path.map(cellKey));
   const labels = shuffle(rand, DEAD_LABELS);
   const dead: PipeDead[] = [];
-  for (const v of valves) {
-    const incoming = steps[v.no - 1]; // 이 밸브로 들어온 방향
-    const back = ((incoming + 4) % 8) as Dir; // 들어온 쪽(관이 이미 그려져 있다)
+  valveIdx.forEach((idx, i) => {
+    const at = path![idx];
+    const back = dirBetween(at, path![idx - 1]); // 관이 이미 그려진 상류 쪽
     const cand = ([0, 1, 2, 3, 4, 5, 6, 7] as Dir[]).filter((d) => {
-      if (d === v.answer || d === back) return false;
-      const to = { col: v.at.col + DIR_STEP[d][0], row: v.at.row + DIR_STEP[d][1] };
+      if (d === valves[i].answer || d === back) return false;
+      const to = { col: at.col + DIR_STEP[d][0], row: at.row + DIR_STEP[d][1] };
       if (to.col < 0 || to.col >= PIPE_COLS || to.row < 0 || to.row >= PIPE_ROWS) return false;
-      return !taken.has(`${to.col},${to.row}`);
+      return !taken.has(cellKey(to));
     });
     const pick = shuffle(rand, cand).slice(0, 1 + Math.floor(rand() * 2));
     for (const d of pick) {
-      const to = { col: v.at.col + DIR_STEP[d][0], row: v.at.row + DIR_STEP[d][1] };
-      taken.add(`${to.col},${to.row}`);
-      dead.push({ from: v.at, to, label: labels[dead.length % labels.length] });
+      const to = { col: at.col + DIR_STEP[d][0], row: at.row + DIR_STEP[d][1] };
+      taken.add(cellKey(to));
+      dead.push({ from: at, to, label: labels[dead.length % labels.length] });
     }
-  }
+  });
 
-  return { source: path[0], target: path[5], valves, dead };
+  return { source: path[0], target: path[PATH_CELLS - 1], path, valves, dead };
 }
+
+// 죽은 가지 끝에 붙는 이름. 어느 것도 세탁조가 아니다 — 관을 끝까지 따라가야 구분된다.
+const DEAD_LABELS = ["폐수조", "보일러(정비중)", "막힘", "온수 탱크", "구 배관(폐쇄)", "정화조"];
 
 // ── ② 세탁 라벨 대조 ──────────────────────────────────────────────
 
@@ -190,8 +243,12 @@ export interface Garment {
 export interface CarePlan {
   today: CareSet; // 벽의 "오늘 세탁 일정"
   garments: Garment[]; // 건조대의 옷 8벌
-  answerNo: number; // 네 기호가 전부 일치하는 딱 한 벌
+  /** 네 기호가 전부 일치하는 옷들의 번호(오름차순). 이걸 **전부** 골라야 열린다. */
+  answerNos: number[];
 }
+
+/** 완전 일치하는 옷 수. 화면에는 알려주지 않는다 — 알려주면 답 공간이 2^8에서 C(8,3)으로 준다. */
+const ANSWER_COUNT = 3;
 
 const GARMENT_NAMES = [
   "죄수복 상의",
@@ -208,7 +265,7 @@ const GARMENT_NAMES = [
 
 const GARMENT_COUNT = 8;
 
-/** 방 코드로 세탁 라벨 문제를 만든다. 정답 1벌 + 기호 하나만 다른 가짜들. */
+/** 방 코드로 세탁 라벨 문제를 만든다. 완전 일치 3벌 + 기호 한둘만 다른 가짜 5벌. */
 export function laundryCare(seed: string): CarePlan {
   const rand = rng(hash(`laundry|care|${seed || "solo"}`));
 
@@ -222,10 +279,10 @@ export function laundryCare(seed: string): CarePlan {
   const used = new Set<string>([key(today)]);
   const fakes: CareSet[] = [];
 
-  // 가짜는 기호를 몇 개 바꿔 만든다. 대부분(6벌) 한 개만 달라 한 칸만 보고는 못 고른다.
+  // 가짜는 기호를 몇 개 바꿔 만든다. 대부분(4벌) 한 개만 달라 한 칸만 보고는 못 고른다.
   // 마지막 한 벌만 두 개를 바꾼다 — 전부 "한 개 차이"면 "한 칸만 다르면 가짜"라는
   // 엉뚱한 규칙으로도 풀려 버린다.
-  const diffPlan = [1, 1, 1, 1, 1, 1, 2];
+  const diffPlan = [1, 1, 1, 1, 2];
   for (const diffs of diffPlan) {
     let cand: CareSet | null = null;
     for (let tries = 0; tries < 40 && !cand; tries++) {
@@ -243,14 +300,15 @@ export function laundryCare(seed: string): CarePlan {
   }
 
   const names = shuffle(rand, GARMENT_NAMES).slice(0, GARMENT_COUNT);
-  // 정답을 아무 자리에나 섞는다(늘 1번이면 찍어서 맞는다).
-  const sets = shuffle(rand, [today, ...fakes]);
+  // 정답 3벌은 라벨이 서로 같다(같은 관리 기호를 가진 옷이 여럿인 건 자연스럽다).
+  // 자리는 섞는다 — 늘 앞자리에 몰리면 찍어서 맞는다.
+  const sets = shuffle(rand, [...Array.from({ length: ANSWER_COUNT }, () => today), ...fakes]);
   const garments: Garment[] = sets.map((care, i) => ({
     no: i + 1,
     name: names[i] ?? `세탁물 ${i + 1}`,
     care,
   }));
-  const answer = garments.find((g) => key(g.care) === key(today))!;
+  const answerNos = garments.filter((g) => key(g.care) === key(today)).map((g) => g.no);
 
-  return { today, garments, answerNo: answer.no };
+  return { today, garments, answerNos };
 }

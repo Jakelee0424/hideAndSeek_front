@@ -281,11 +281,27 @@ function PuzzleInput({
         />
       );
     case "outbreak":
-      // 지목이 맞으면 전파 경로를 보여준 뒤 스스로 해결 처리한다(확인 버튼 없음).
-      return <OutbreakQuiz plan={outbreakPlan(roomId)} onSolve={onSolve} />;
+      // 감염 경로표를 다 채워 제출한다. 맞으면 전파 경로를 보여준 뒤 스스로 해결 처리한다.
+      return (
+        <OutbreakQuiz
+          plan={outbreakPlan(roomId)}
+          error={error}
+          onSolve={onSolve}
+          onFail={onFail}
+          clearError={clearError}
+        />
+      );
     case "valves":
-      // 노선도·정답은 방 코드로 정해진다. 램프가 상류부터 켜지므로 별도 확인 버튼이 없다.
-      return <ValveLock pm={laundryPipes(roomId)} onSolve={onSolve} />;
+      // 노선도·정답은 방 코드로 정해진다. 판정은 제출한 뒤에만 한다(밸브별 램프 없음).
+      return (
+        <ValveLock
+          pm={laundryPipes(roomId)}
+          error={error}
+          onSolve={onSolve}
+          onFail={onFail}
+          clearError={clearError}
+        />
+      );
     case "carelabel":
       return (
         <CareLabelQuiz
@@ -388,9 +404,8 @@ const py = (r: number) => PAD_Y + r * CELL_H;
 function PipeDiagram({ pm }: { pm: ReturnType<typeof laundryPipes> }) {
   const W = PAD_X * 2 + (PIPE_COLS - 1) * CELL_W;
   const H = PAD_Y * 2 + (PIPE_ROWS - 1) * CELL_H;
-  // 본선: 급수 → ①②③④ → 세탁조
-  const route = [pm.source, ...pm.valves.map((v) => v.at), pm.target];
-  const routeD = route.map((c) => `${px(c.col)},${py(c.row)}`).join(" ");
+  // 본선 전체를 그린다 — 밸브가 아닌 꺾임 칸도 있으므로 밸브만 이으면 관이 어긋난다.
+  const routeD = pm.path.map((c) => `${px(c.col)},${py(c.row)}`).join(" ");
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="배관 노선도">
@@ -470,20 +485,20 @@ function PipeMapBoard({ roomId }: { roomId: string }) {
   );
 }
 
-/** 밸브 하나: 8방향 핸들 + 램프. */
-function ValveWheel({ no, dir, lit }: { no: number; dir: Dir; lit: boolean }) {
+/**
+ * 밸브 하나: 8방향 핸들.
+ *
+ * ⚠️ 램프(맞았는지 알려주는 초록불)는 뺐다 — 밸브를 하나씩 독립적으로 풀 수 있는 오라클이었다.
+ * 열린 뒤(open)에만 전부 초록으로 물든다.
+ */
+function ValveWheel({ no, dir, open }: { no: number; dir: Dir; open: boolean }) {
   const a = (dir * Math.PI) / 4;
   const hx = 24 + Math.sin(a) * 17;
   const hy = 24 - Math.cos(a) * 17;
   return (
     <div className="flex flex-col items-center gap-1">
-      <span
-        className={`h-2.5 w-2.5 rounded-full ${
-          lit ? "bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.7)]" : "bg-rose-900"
-        }`}
-      />
       <svg viewBox="0 0 48 48" width="52" height="52">
-        <circle cx="24" cy="24" r="20" fill="#0f172a" stroke={lit ? "#34d399" : "#475569"} strokeWidth="2.5" />
+        <circle cx="24" cy="24" r="20" fill="#0f172a" stroke={open ? "#34d399" : "#475569"} strokeWidth="2.5" />
         {/* 8방향 눈금 */}
         {Array.from({ length: 8 }, (_, i) => {
           const t = (i * Math.PI) / 4;
@@ -500,8 +515,8 @@ function ValveWheel({ no, dir, lit }: { no: number; dir: Dir; lit: boolean }) {
           );
         })}
         {/* 핸들 */}
-        <line x1="24" y1="24" x2={hx} y2={hy} stroke={lit ? "#34d399" : "#cbd5e1"} strokeWidth="4" strokeLinecap="round" />
-        <circle cx="24" cy="24" r="4" fill={lit ? "#34d399" : "#94a3b8"} />
+        <line x1="24" y1="24" x2={hx} y2={hy} stroke={open ? "#34d399" : "#cbd5e1"} strokeWidth="4" strokeLinecap="round" />
+        <circle cx="24" cy="24" r="4" fill={open ? "#34d399" : "#94a3b8"} />
       </svg>
       <span className="font-mono text-[11px] text-slate-400">
         {no}. {DIR_NAMES[dir]}
@@ -512,15 +527,23 @@ function ValveWheel({ no, dir, lit }: { no: number; dir: Dir; lit: boolean }) {
 
 function ValveLock({
   pm,
+  error,
   onSolve,
+  onFail,
+  clearError,
 }: {
   pm: ReturnType<typeof laundryPipes>;
+  error: boolean;
   onSolve: () => void;
+  onFail: () => void;
+  clearError: () => void;
 }) {
   const [dirs, setDirs] = useState<Dir[]>(() => pm.valves.map(() => 0 as Dir));
+  const [open, setOpen] = useState(false);
   const doneRef = useRef(false);
 
   function turn(i: number, delta: number) {
+    clearError();
     setDirs((prev) => {
       const next = [...prev];
       next[i] = (((next[i] + delta) % 8) + 8) % 8 as Dir;
@@ -528,20 +551,20 @@ function ValveLock({
     });
   }
 
-  // 램프는 상류부터 — ①이 어긋나면 아래는 맞아도 안 켜진다(물이 거기서 막힌다).
-  const lit: boolean[] = [];
-  for (let i = 0; i < pm.valves.length; i++) {
-    lit.push((i === 0 || lit[i - 1]) && dirs[i] === pm.valves[i].answer);
-  }
-  const all = lit.every(Boolean);
-
-  // 넷 다 초록이면 확인 버튼 없이 열린다(물이 차오르는 연출을 잠깐 보여준 뒤).
-  useEffect(() => {
-    if (!all || doneRef.current) return;
+  // ⚠️ 판정은 **제출한 뒤에만** 한다. 예전엔 상류부터 램프가 켜져 ①을 맞추면 바로 알려줬고,
+  // 그러면 밸브 하나씩 8방향을 훑어 노선도 없이 열 수 있었다. 지금은 넷을 한꺼번에 본다.
+  function submit() {
+    if (doneRef.current) return;
+    const all = pm.valves.every((v, i) => dirs[i] === v.answer);
+    if (!all) {
+      // 어느 밸브가 어긋났는지는 알려주지 않는다 — 알려주면 그게 곧 밸브별 정답 확인이다.
+      onFail();
+      return;
+    }
     doneRef.current = true;
-    const t = window.setTimeout(onSolve, 800);
-    return () => window.clearTimeout(t);
-  }, [all, onSolve]);
+    setOpen(true);
+    window.setTimeout(onSolve, 800); // 물이 차오르는 연출을 잠깐 보여준 뒤
+  }
 
   return (
     <>
@@ -554,18 +577,20 @@ function ValveLock({
       <div className="mb-3 flex justify-between gap-1">
         {pm.valves.map((v, i) => (
           <div key={v.no} className="flex flex-col items-center gap-1">
-            <ValveWheel no={v.no} dir={dirs[i]} lit={lit[i]} />
+            <ValveWheel no={v.no} dir={dirs[i]} open={open} />
             <div className="flex gap-1">
               <button
                 onClick={() => turn(i, -1)}
-                className="h-7 w-7 rounded bg-white/5 text-slate-300 hover:bg-white/10"
+                disabled={open}
+                className="h-7 w-7 rounded bg-white/5 text-slate-300 hover:bg-white/10 disabled:opacity-40"
                 aria-label={`${v.no}번 밸브 반시계`}
               >
                 ↺
               </button>
               <button
                 onClick={() => turn(i, +1)}
-                className="h-7 w-7 rounded bg-white/5 text-slate-300 hover:bg-white/10"
+                disabled={open}
+                className="h-7 w-7 rounded bg-white/5 text-slate-300 hover:bg-white/10 disabled:opacity-40"
                 aria-label={`${v.no}번 밸브 시계`}
               >
                 ↻
@@ -575,15 +600,25 @@ function ValveLock({
         ))}
       </div>
 
-      <p className="flex h-6 items-center justify-center text-sm font-semibold">
-        {all ? (
-          <span className="text-emerald-400">물이 세탁조까지 찼다 — 문이 열린다!</span>
-        ) : (
-          <span className="text-slate-500">
-            켜진 램프 {lit.filter(Boolean).length} / {pm.valves.length} · 위쪽 밸브부터 맞춰야 압력이 걸린다
-          </span>
-        )}
-      </p>
+      {open ? (
+        <p className="flex h-10 items-center justify-center text-sm font-semibold text-emerald-400">
+          물이 세탁조까지 찼다 — 문이 열린다!
+        </p>
+      ) : (
+        <>
+          {error && (
+            <p className="mb-2 text-center text-sm text-rose-400">
+              물이 세탁조까지 닿지 않는다. 관이 어디로 이어지는지 노선도를 다시 보라.
+            </p>
+          )}
+          <button
+            onClick={submit}
+            className="w-full rounded-lg bg-sky-500 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-400"
+          >
+            밸브를 열고 물을 흘린다
+          </button>
+        </>
+      )}
     </>
   );
 }
@@ -627,7 +662,10 @@ function CareLabelQuiz({
 }) {
   const [openNo, setOpenNo] = useState<number | null>(null);
   const [seen, setSeen] = useState<number[]>([]);
+  // 오늘 처리할 세탁물로 표시한 번호들. **정답이 여럿이라** 고르기 한 번으로는 못 끝낸다.
+  const [picked, setPicked] = useState<number[]>([]);
   const opened = plan.garments.find((g) => g.no === openNo);
+  const isPicked = openNo !== null && picked.includes(openNo);
 
   function pick(no: number) {
     clearError();
@@ -635,22 +673,34 @@ function CareLabelQuiz({
     setSeen((s) => (s.includes(no) ? s : [...s, no]));
   }
 
+  function toggle() {
+    if (openNo === null) return;
+    clearError();
+    setPicked((p) => (p.includes(openNo) ? p.filter((n) => n !== openNo) : [...p, openNo].sort((a, b) => a - b)));
+  }
+
   return (
     <>
       <p className="mb-2 text-xs text-slate-400">
-        건조대에 걸린 세탁물. 번호를 눌러 라벨을 확인하라 (확인한 것은 ·표시).
+        건조대에 걸린 세탁물. 번호를 눌러 라벨을 확인하고, 오늘 일정과 <b className="text-amber-200">네 기호가
+        모두 맞는 것</b>을 <b className="text-amber-200">전부</b> 골라라 (확인한 것은 ·표시).
       </p>
       <div className="mb-3 grid grid-cols-4 gap-1.5">
         {plan.garments.map((g) => (
           <button
             key={g.no}
             onClick={() => pick(g.no)}
-            className={`flex flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 text-[11px] transition ${
-              openNo === g.no
-                ? "border-sky-400 bg-sky-500/15 text-sky-100"
-                : "border-white/10 bg-black/30 text-slate-300 hover:bg-white/5"
+            className={`relative flex flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 text-[11px] transition ${
+              picked.includes(g.no)
+                ? "border-amber-400 bg-amber-500/15 text-amber-100"
+                : openNo === g.no
+                  ? "border-sky-400 bg-sky-500/15 text-sky-100"
+                  : "border-white/10 bg-black/30 text-slate-300 hover:bg-white/5"
             }`}
           >
+            {picked.includes(g.no) && (
+              <span className="absolute right-1 top-0.5 text-[10px] text-amber-300">✓</span>
+            )}
             <span className="font-mono text-sm font-bold">{g.no}</span>
             <span className="leading-tight">{g.name}</span>
             <span className={seen.includes(g.no) ? "text-emerald-400" : "text-transparent"}>·</span>
@@ -676,23 +726,44 @@ function CareLabelQuiz({
                 </div>
               ))}
             </div>
+            <button
+              onClick={toggle}
+              className={`mt-2 w-full rounded-lg border py-1.5 text-[11px] font-medium transition ${
+                isPicked
+                  ? "border-amber-400/60 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
+                  : "border-white/15 text-slate-300 hover:bg-white/5"
+              }`}
+            >
+              {isPicked ? `${opened.no}번을 오늘 목록에서 빼기` : `${opened.no}번을 오늘 목록에 넣기`}
+            </button>
           </>
         ) : (
           <p className="pt-8 text-center text-xs text-slate-500">세탁물 번호를 누르면 라벨이 보인다.</p>
         )}
       </div>
 
+      <p className="mb-2 text-center text-[11px] text-slate-400">
+        오늘 목록:{" "}
+        {picked.length === 0 ? (
+          <span className="text-slate-600">비어 있다</span>
+        ) : (
+          <span className="font-mono text-amber-200">{picked.join(", ")}번</span>
+        )}
+      </p>
+
       {error && (
         <p className="mb-2 text-center text-sm text-rose-400">
-          일정과 어긋난 기호가 있다. 네 가지를 모두 맞춰 보라.
+          목록이 오늘 일정과 맞지 않는다. 빠뜨린 것이나 잘못 넣은 것이 있다.
         </p>
       )}
       <button
-        onClick={() => (openNo === plan.answerNo ? onSolve() : onFail())}
-        disabled={openNo === null}
+        onClick={() =>
+          picked.join(",") === plan.answerNos.join(",") ? onSolve() : onFail()
+        }
+        disabled={picked.length === 0}
         className="w-full rounded-lg bg-sky-500 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-400 disabled:opacity-40"
       >
-        {openNo === null ? "세탁물을 고르라" : `${openNo}번을 오늘 세탁물로 제출`}
+        {picked.length === 0 ? "오늘 세탁물을 고르라" : `${picked.length}벌을 오늘 세탁물로 제출`}
       </button>
     </>
   );
