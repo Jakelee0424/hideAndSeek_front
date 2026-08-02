@@ -204,7 +204,8 @@ export default function PrisonProps() {
 
       {/* 탈출 관련 소품 */}
       <AssetProp template={a.drain} position={[-18, 0.02, -14]} />
-      <AssetProp template={a.vent} position={[0, 2.5, 19.8]} rotationY={Math.PI} />
+      {/* 환풍구: 입구(화장실 남벽) 왼편 벽 — 예전엔 문 위 정중앙(x=0)이었다. */}
+      <AssetProp template={a.vent} position={[-4.5, 2.5, 19.8]} rotationY={Math.PI} />
       <AssetProp template={a.rope} position={[4, 0, -27]} />
     </group>
   );

@@ -384,6 +384,9 @@ interface InteractionStore {
   nearId: string | null; // 사거리 내 가장 가까운 오브젝트
   openId: string | null; // 현재 열려 있는 퍼즐/힌트
   solved: Record<string, boolean>;
+  /** 서버가 확정한 "열린 문" 맵(매 tick 스냅샷 openDoors). 자유 토글 문(철창 게이트)의
+   *  로컬 충돌·비주얼이 이걸 본다 — solved 파생 문과 달리 여닫이가 반복되기 때문. */
+  serverDoors: Record<string, boolean>;
 
   setNear: (id: string | null) => void;
   open: (id: string) => void;
@@ -393,12 +396,17 @@ interface InteractionStore {
   unmarkSolved: (id: string) => void;
   /** 서버 스냅샷의 solvedIds를 병합(협동). 실제로 늘어날 때만 갱신. */
   syncSolved: (ids: string[]) => void;
+  /** 서버 스냅샷의 openDoors 목록으로 serverDoors를 교체(권위). 바뀔 때만 갱신. */
+  setServerDoors: (ids: string[]) => void;
+  /** E로 문을 눌렀을 때의 낙관적 즉시 반영(다음 스냅샷이 서버 값으로 확정한다). */
+  setDoorOptimistic: (id: string, open: boolean) => void;
 }
 
 export const useInteraction = create<InteractionStore>((set, get) => ({
   nearId: null,
   openId: null,
   solved: {},
+  serverDoors: {},
 
   setNear: (id) => {
     if (get().nearId !== id) set({ nearId: id }); // 변화 시에만 리렌더
@@ -423,5 +431,29 @@ export const useInteraction = create<InteractionStore>((set, get) => ({
     const next = { ...cur };
     for (const id of missing) next[id] = true;
     set({ solved: next });
+  },
+
+  setServerDoors: (ids) => {
+    const cur = get().serverDoors;
+    const want = new Set(ids);
+    // 실제로 달라졌을 때만 새 객체로 교체(불필요한 리렌더 방지).
+    const keys = new Set([...Object.keys(cur).filter((k) => cur[k]), ...ids]);
+    let changed = false;
+    for (const k of keys) {
+      if (!!cur[k] !== want.has(k)) {
+        changed = true;
+        break;
+      }
+    }
+    if (!changed) return;
+    const next: Record<string, boolean> = {};
+    for (const id of ids) next[id] = true;
+    set({ serverDoors: next });
+  },
+
+  setDoorOptimistic: (id, open) => {
+    const cur = get().serverDoors;
+    if (!!cur[id] === open) return;
+    set({ serverDoors: { ...cur, [id]: open } });
   },
 }));

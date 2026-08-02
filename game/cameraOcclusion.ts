@@ -7,6 +7,8 @@
 // 창살 문·난간·소품처럼 가늘거나 낮은 것은 일부러 뺐다: 사이로 시야가 통하는 데다,
 // 차폐물로 넣으면 지나칠 때마다 카메라가 잘게 튄다.
 import {
+  ANNEX_H,
+  ANNEX_ROOF,
   CELL_BLOCK_H,
   FLOOR2_Y,
   SLAB2,
@@ -47,6 +49,10 @@ const OCCLUDERS: AABB[] = [
   { x0: STAIR.x0, x1: STAIR.x1, y0: 0, y1: FLOOR2_Y, z0: STAIR.z0, z1: STAIR.z1 },
   // 2층 복도 동측 막이(콘크리트 판, Map·OBSTACLES와 같은 자리)
   { x0: -6.2, x1: -5.8, y0: WALL_H, y1: CELL_BLOCK_H, z0: 14, z1: 20 },
+  // 별관 지붕 슬래브(Map의 AnnexRoof와 같은 자리) — 안에 있을 때 카메라를 지붕 밑으로 당긴다.
+  { x0: ANNEX_ROOF.x0, x1: ANNEX_ROOF.x1, y0: ANNEX_H, y1: ANNEX_H + 0.3, z0: ANNEX_ROOF.z0, z1: ANNEX_ROOF.z1 },
+  // 화장실 지붕 슬래브(Map의 ToiletRoof, y=ANNEX_H). 화장실 rect(x −6~6 · z 20~28).
+  { x0: -6, x1: 6, y0: ANNEX_H, y1: ANNEX_H + 0.3, z0: 20, z1: 28 },
 ];
 
 /**

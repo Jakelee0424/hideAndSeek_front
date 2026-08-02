@@ -14,9 +14,14 @@ import { SYMBOLS, escapePlan } from "./escapePlan";
 import { symbolIcon } from "./symbols";
 import { useGameStore } from "@/store/gameStore";
 import {
+  ANNEX_H,
+  ANNEX_ROOF,
   BUILDINGS,
+  CELLBLOCK_GATE,
   CELL_BLOCK_H,
   DOOR_META,
+  DOOR_W,
+  ENTRANCE_GATE,
   DRAIN_GATE,
   FLOOR2_Y,
   FLOORS,
@@ -206,7 +211,9 @@ const cx = (b: Building) => (b.rect.x0 + b.rect.x1) / 2;
 const cz = (b: Building) => (b.rect.z0 + b.rect.z1) / 2;
 
 // ── 방향별 창살 문: 잠금 문(cell-*, door-*)을 개구부에 그린다. 풀면 경첩 회전으로 열린다. ──
-function BarDoor({ meta, mat }: { meta: DoorMeta; mat: THREE.Material }) {
+// h: 문 높이(기본 WALL_H). 수감동 감방문은 벽(9m)·천장(2층 슬래브 4.5m)까지 비므로 h=FLOOR2_Y로
+// 채워 문 위 빈공간을 없앤다.
+function BarDoor({ meta, mat, h = WALL_H }: { meta: DoorMeta; mat: THREE.Material; h?: number }) {
   const [ax, az] = meta.at;
   const w = meta.width;
   const horizontal = meta.edge === "N" || meta.edge === "S";
@@ -228,15 +235,15 @@ function BarDoor({ meta, mat }: { meta: DoorMeta; mat: THREE.Material }) {
   return (
     <group position={hinge} rotation={[0, baseRotY, 0]}>
       {/* 문틀 기둥 2개 */}
-      <mesh position={[0, WALL_H / 2, 0]} material={mat}>
-        <boxGeometry args={[0.16, WALL_H, 0.2]} />
+      <mesh position={[0, h / 2, 0]} material={mat}>
+        <boxGeometry args={[0.16, h, 0.2]} />
       </mesh>
-      <mesh position={[w, WALL_H / 2, 0]} material={mat}>
-        <boxGeometry args={[0.16, WALL_H, 0.2]} />
+      <mesh position={[w, h / 2, 0]} material={mat}>
+        <boxGeometry args={[0.16, h, 0.2]} />
       </mesh>
       {/* 문짝(경첩=원점 기준 회전) */}
       <group ref={panel}>
-        <mesh position={[w / 2, WALL_H - 0.3, 0]} material={mat}>
+        <mesh position={[w / 2, h - 0.3, 0]} material={mat}>
           <boxGeometry args={[w, 0.1, 0.1]} />
         </mesh>
         <mesh position={[w / 2, 0.25, 0]} material={mat}>
@@ -245,8 +252,8 @@ function BarDoor({ meta, mat }: { meta: DoorMeta; mat: THREE.Material }) {
         {Array.from({ length: nBars }, (_, i) => {
           const bx = ((i + 0.5) / nBars) * w;
           return (
-            <mesh key={i} position={[bx, (WALL_H - 0.3) / 2, 0]} material={mat}>
-              <boxGeometry args={[BAR_W, WALL_H - 0.5, BAR_W]} />
+            <mesh key={i} position={[bx, (h - 0.05) / 2, 0]} material={mat}>
+              <boxGeometry args={[BAR_W, h - 0.55, BAR_W]} />
             </mesh>
           );
         })}
@@ -509,7 +516,7 @@ function SecondFloor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
       />
       {/* 2층 감방 입구: 방 색깔의 활짝 열린 철창 문 */}
       {DOOR_META.filter((d) => d.id.startsWith("cell-")).map((d) => (
-        <OpenCellGate key={d.id} meta={d} mat={barMatFor(mat, d.id)} />
+        <OpenCellGate key={d.id} meta={d} mat={mat.steel} />
       ))}
     </group>
   );
@@ -619,38 +626,80 @@ function Watchtower({ at, mat }: { at: [number, number]; mat: ReturnType<typeof 
   );
 }
 
-// ── 열린 철창(연결 복도, 수감동 쪽 경계): 항상 열려 있는 창살 문.
-// 기둥만 실체(OBSTACLES의 철창 기둥) — x=-3, 출입구 동선(x=0)을 비켜 세운다. ──
-function LinkGate({ mat }: { mat: THREE.Material }) {
-  const bars = (w: number) => (
-    <>
-      <mesh position={[w / 2, WALL_H - 0.3, 0]} material={mat}>
-        <boxGeometry args={[w, 0.1, 0.1]} />
-      </mesh>
-      <mesh position={[w / 2, 0.25, 0]} material={mat}>
-        <boxGeometry args={[w, 0.1, 0.1]} />
-      </mesh>
-      {[0.5, 1.1, 1.7].map((bx) => (
-        <mesh key={bx} position={[bx, (WALL_H - 0.3) / 2, 0]} material={mat}>
-          <boxGeometry args={[BAR_W, WALL_H - 0.5, BAR_W]} />
-        </mesh>
-      ))}
-    </>
-  );
+// ── 수감동↔복도 철창 게이트: 개구부(x=-6, z14~20)를 철창으로 막고 가운데 2m만 작은 문. ──
+// 문은 E로 여닫는다(서버 openDoors가 권위 — LocalPlayer가 sendDoor로 토글). 양옆 철창벽은
+// 상시 실체(prisonLayout OBSTACLES / 서버 Collision.OBSTACLES). ⚠️ 좌표는 CELLBLOCK_GATE와 맞춘다.
+function CellBlockGate({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  const steel = mat.steel;
+  const open = useInteraction((s) => !!s.serverDoors[CELLBLOCK_GATE.id]);
+  const near = useInteraction((s) => s.nearId === CELLBLOCK_GATE.id);
+  const panel = useRef<THREE.Group>(null);
+  const h = CELLBLOCK_GATE.h; // 3
+  const cz = (CELLBLOCK_GATE.doorZ0 + CELLBLOCK_GATE.doorZ1) / 2; // 17 (문 중심)
+  const doorW = CELLBLOCK_GATE.doorZ1 - CELLBLOCK_GATE.doorZ0; // 2
+  const barY = (h - 0.05) / 2;
+  const barH = h - 0.55;
+  // 고정 철창벽 한 구간(로컬 z0~z1): 위·아래 가로 레일 + 세로 살.
+  const seg = (z0: number, z1: number, key: string) => {
+    const n = Math.max(2, Math.round((z1 - z0) / 0.34));
+    return (
+      <group key={key}>
+        {[h - 0.3, 0.25].map((y, i) => (
+          <mesh key={i} position={[0, y, (z0 + z1) / 2]} material={steel}>
+            <boxGeometry args={[0.1, 0.1, z1 - z0]} />
+          </mesh>
+        ))}
+        {Array.from({ length: n }, (_, i) => (
+          <mesh key={i} position={[0, barY, z0 + ((i + 0.5) / n) * (z1 - z0)]} material={steel}>
+            <boxGeometry args={[BAR_W, barH, BAR_W]} />
+          </mesh>
+        ))}
+      </group>
+    );
+  };
+  useFrame((_, dt) => {
+    if (!panel.current) return;
+    const target = open ? -1.7 : 0; // 닫힘(개구부를 메움) ↔ 열림(복도 쪽으로 스윙)
+    panel.current.rotation.y = THREE.MathUtils.damp(panel.current.rotation.y, target, 6, dt);
+  });
+  const nBars = Math.max(3, Math.round(doorW / 0.4));
   return (
-    <group position={[-3, 0, 17]}>
-      {/* 문틀(복도 폭 z 14.5~19.5) + 상인방 */}
-      {[-2.5, 2.5].map((dz, i) => (
-        <mesh key={i} position={[0, WALL_H / 2, dz]} material={mat}>
-          <boxGeometry args={[0.16, WALL_H, 0.2]} />
+    <group position={[CELLBLOCK_GATE.cx, 0, cz]}>
+      {/* 문틀 기둥: 개구부 양끝(z14/z20) + 문 양옆(z16/z18) */}
+      {[-3, -1, 1, 3].map((dz, i) => (
+        <mesh key={i} position={[0, h / 2, dz]} material={steel}>
+          <boxGeometry args={[0.16, h, 0.18]} />
         </mesh>
       ))}
-      <mesh position={[0, WALL_H - 0.1, 0]} material={mat}>
-        <boxGeometry args={[0.12, 0.2, 5.2]} />
+      {/* 상인방(개구부 위 가로) */}
+      <mesh position={[0, h - 0.08, 0]} material={steel}>
+        <boxGeometry args={[0.12, 0.16, 6]} />
       </mesh>
-      {/* 활짝 열린 문짝 두 짝(수감동 쪽으로 젖혀짐) */}
-      <group position={[0, 0, -2.5]} rotation={[0, -Math.PI / 2 + 2.1, 0]}>{bars(2.2)}</group>
-      <group position={[0, 0, 2.5]} rotation={[0, Math.PI / 2 - 2.1, 0]}>{bars(2.2)}</group>
+      {/* 고정 철창벽(문 gap 양옆) */}
+      {seg(-3, -1, "s")}
+      {seg(1, 3, "n")}
+      {/* 작은 문(경첩=문 남쪽 기둥 z=16, 로컬 +x가 +z를 향하게 -90°) */}
+      <group position={[0, 0, -1]} rotation={[0, -Math.PI / 2, 0]}>
+        <group ref={panel}>
+          {[h - 0.3, 0.25].map((y, i) => (
+            <mesh key={i} position={[doorW / 2, y, 0]} material={steel}>
+              <boxGeometry args={[doorW, 0.1, 0.1]} />
+            </mesh>
+          ))}
+          {Array.from({ length: nBars }, (_, i) => (
+            <mesh key={i} position={[((i + 0.5) / nBars) * doorW, barY, 0]} material={steel}>
+              <boxGeometry args={[BAR_W, barH, BAR_W]} />
+            </mesh>
+          ))}
+        </group>
+      </group>
+      {near && (
+        <Html center distanceFactor={10} position={[0, 2.0, 0]}>
+          <div className="pointer-events-none select-none whitespace-nowrap rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white">
+            {open ? "[E] 철창문 닫기" : "[E] 철창문 열기"}
+          </div>
+        </Html>
+      )}
     </group>
   );
 }
@@ -1237,33 +1286,36 @@ function YardMarkings({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   );
 }
 
-// 복도 머리 위 배관 2줄 + 매달린 케이지 램프. 빈 천장 공간을 채운다(발높이 위라 통행 무관).
-function OverheadPipes({ mat }: { mat: ReturnType<typeof useMaterials> }) {
-  const y = 2.78;
-  const runs = [15.4, 18.6];
+// 천장 부착형 조명(짧은 갓 + 발광 돔). ceilingY는 천장 밑면 — 거기에 바짝 붙인다.
+function CeilingLamp({ x, z, ceilingY, mat }: { x: number; z: number; ceilingY: number; mat: ReturnType<typeof useMaterials> }) {
+  return (
+    <group position={[x, ceilingY, z]}>
+      <mesh position={[0, -0.04, 0]} material={mat.steel}>
+        <cylinderGeometry args={[0.16, 0.16, 0.08, 10]} />
+      </mesh>
+      <mesh position={[0, -0.14, 0]} material={mat.lamp}>
+        <sphereGeometry args={[0.13, 10, 10]} />
+      </mesh>
+    </group>
+  );
+}
+
+// 복도 천장 부착 조명. 조명은 매달지 않고 천장에 붙인다:
+// 수감동은 2층 테라스 슬래브 밑(y=4.42), 별관은 지붕 밑(y=ANNEX_H).
+// 수감동↔별관 연결 복도(x −6~6)엔 조명을 두지 않는다.
+// (예전엔 복도를 가로지르는 머리 위 배관 2줄이 있었으나 제거했다.)
+function CorridorLamps({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   return (
     <group>
-      {runs.map((z, i) => (
-        <mesh key={i} position={[0, y, z]} rotation={[0, 0, Math.PI / 2]} material={mat.pipe} castShadow>
-          <cylinderGeometry args={[0.12, 0.12, 76, 10]} />
-        </mesh>
-      ))}
-      {/* 세로 연결 배관 몇 개 */}
-      {[-30, -12, 12, 30].map((x, i) => (
-        <mesh key={i} position={[x, y, 17]} rotation={[Math.PI / 2, 0, 0]} material={mat.pipe}>
-          <cylinderGeometry args={[0.1, 0.1, 3.2, 8]} />
-        </mesh>
-      ))}
-      {/* 매달린 케이지 램프 */}
-      {[-33, -21, -9, 9, 21, 33].map((x, i) => (
-        <group key={i} position={[x, y - 0.1, 17]}>
-          <mesh position={[0, -0.18, 0]} material={mat.steel}>
-            <cylinderGeometry args={[0.02, 0.02, 0.36, 6]} />
-          </mesh>
-          <mesh position={[0, -0.46, 0]} material={mat.lamp}>
-            <sphereGeometry args={[0.16, 10, 10]} />
-          </mesh>
-        </group>
+      {/* 수감동: 2층 테라스(북 z=19 · 남 z=15) 슬래브 바로 아래에 붙인다. */}
+      {[-32, -20, -10].flatMap((x) =>
+        [15, 19].map((lz) => (
+          <CeilingLamp key={`w${x}-${lz}`} x={x} z={lz} ceilingY={FLOOR2_Y - 0.08} mat={mat} />
+        )),
+      )}
+      {/* 별관: 지붕(y=ANNEX_H) 천장에 바짝 붙인다. 복도 중앙(z=17). */}
+      {[9, 21, 33].map((x) => (
+        <CeilingLamp key={`e${x}`} x={x} z={17} ceilingY={ANNEX_H} mat={mat} />
       ))}
     </group>
   );
@@ -1306,8 +1358,166 @@ function Decor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
       <RazorWire />
       {/* 조명탑은 OBJ light_tower(PrisonProps)로 대체 */}
       <YardMarkings mat={mat} />
-      <OverheadPipes mat={mat} />
+      <CorridorLamps mat={mat} />
       <Backdrop mat={mat} />
+    </group>
+  );
+}
+
+// ── 평지붕: 사각형 구역(rect)을 y 높이에서 덮는 슬래브 + 가장자리 낮은 파라펫. ──
+// 카메라는 cameraOcclusion의 같은 자리 차폐 슬래브가 지붕 밑으로 당겨 준다(안에서 시야 확보).
+function FlatRoof({
+  rect,
+  y,
+  mat,
+}: {
+  rect: { x0: number; z0: number; x1: number; z1: number };
+  y: number;
+  mat: ReturnType<typeof useMaterials>;
+}) {
+  const { x0, z0, x1, z1 } = rect;
+  const cx = (x0 + x1) / 2;
+  const cz = (z0 + z1) / 2;
+  const w = x1 - x0;
+  const d = z1 - z0;
+  const OVER = 0.5; // 처마: 벽 바깥으로 살짝 내민다
+  const SLAB_T = 0.3;
+  const PAR_H = 0.6; // 옥상 난간(파라펫) 높이
+  const parY = y + SLAB_T + PAR_H / 2;
+  return (
+    <group>
+      {/* 지붕 슬래브 */}
+      <mesh
+        position={[cx, y + SLAB_T / 2, cz]}
+        geometry={mat.box(w + OVER * 2, SLAB_T, d + OVER * 2, TILE.concrete)}
+        material={mat.concrete}
+        castShadow
+        receiveShadow
+      />
+      {/* 파라펫(옥상 가장자리 낮은 턱) */}
+      {([
+        [cx, z1 + OVER, w + OVER * 2, WALL_T], // 북
+        [cx, z0 - OVER, w + OVER * 2, WALL_T], // 남
+        [x1 + OVER, cz, WALL_T, d + OVER * 2], // 동
+        [x0 - OVER, cz, WALL_T, d + OVER * 2], // 서
+      ] as [number, number, number, number][]).map(([px, pz, sx, sz], i) => (
+        <mesh
+          key={i}
+          position={[px, parY, pz]}
+          geometry={mat.box(sx, PAR_H, sz, TILE.concrete)}
+          material={mat.concrete}
+          castShadow
+          receiveShadow
+        />
+      ))}
+    </group>
+  );
+}
+
+// ── 별관 지붕: 네 방+복도(x 6~38 · z 6~28)를 통째로 덮는다(y=ANNEX_H). ──
+// 벽은 ANNEX_H(=4.5)까지 올렸고, 문 개구부는 전 높이로 뚫리므로 문(높이 WALL_H) 위
+// WALL_H~ANNEX_H 구간을 콘크리트 상인방으로 막아 지붕까지 벽을 잇는다.
+const ANNEX_DOOR_IDS = ["door-cafe", "door-laundry", "door-work", "door-med"];
+
+function AnnexRoof({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  const headerH = ANNEX_H - WALL_H; // 문 위 상인방 높이(1.5)
+  const headerY = (WALL_H + ANNEX_H) / 2;
+  return (
+    <group>
+      {/* 문 위 상인방(개구부 상단 ~ 지붕) */}
+      {DOOR_META.filter((dm) => ANNEX_DOOR_IDS.includes(dm.id)).map((dm) => {
+        const [dx, dz] = dm.at;
+        const horizontal = dm.edge === "N" || dm.edge === "S";
+        const size: [number, number, number] = horizontal
+          ? [dm.width, headerH, WALL_T]
+          : [WALL_T, headerH, dm.width];
+        return (
+          <mesh
+            key={dm.id}
+            position={[dx, headerY, dz]}
+            geometry={mat.box(size[0], size[1], size[2], TILE.concrete)}
+            material={mat.concrete}
+            castShadow
+            receiveShadow
+          />
+        );
+      })}
+      <FlatRoof rect={ANNEX_ROOF} y={ANNEX_H} mat={mat} />
+    </group>
+  );
+}
+
+// ── 화장실 지붕: 화장실(x −6~6 · z 20~28)을 별관과 같은 높이(ANNEX_H)에서 덮는다. ──
+// 벽을 ANNEX_H로 올렸으므로 남쪽 출입 개구부(x0, z20) 위 WALL_H~ANNEX_H를 상인방으로 채운다.
+function ToiletRoof({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  return (
+    <group>
+      {/* 화장실 출입 개구부 상인방(개구부 상단 ~ 지붕) */}
+      <mesh
+        position={[0, (WALL_H + ANNEX_H) / 2, 20]}
+        geometry={mat.box(DOOR_W, ANNEX_H - WALL_H, WALL_T, TILE.concrete)}
+        material={mat.concrete}
+        castShadow
+        receiveShadow
+      />
+      <FlatRoof rect={getBuilding("toilet")!.rect} y={ANNEX_H} mat={mat} />
+    </group>
+  );
+}
+
+// ── 건물 출입구(화장실 맞은편, 연병장 쪽) 철창 슬라이딩 게이트: 링크 남벽 개구부(x0, z14, 폭 3m)를
+// 덮고, 열리면 옆(서쪽)으로 미끄러진다. E로 개폐(서버 openDoors 권위). 위는 벽 높이(ANNEX_H)까지 상인방. ──
+function EntranceGate({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  const steel = mat.steel;
+  const open = useInteraction((s) => !!s.serverDoors[ENTRANCE_GATE.id]);
+  const near = useInteraction((s) => s.nearId === ENTRANCE_GATE.id);
+  const panel = useRef<THREE.Group>(null);
+  const h = ENTRANCE_GATE.h; // 3
+  const w = ENTRANCE_GATE.w; // 3
+  const barY = (h - 0.05) / 2;
+  const barH = h - 0.55;
+  const nBars = Math.max(4, Math.round(w / 0.34));
+  useFrame((_, dt) => {
+    if (!panel.current) return;
+    const target = open ? -w : 0; // 닫힘(개구부를 메움) ↔ 열림(옆으로 미끄러짐)
+    panel.current.position.x = THREE.MathUtils.damp(panel.current.position.x, target, 6, dt);
+  });
+  return (
+    <group position={[ENTRANCE_GATE.cx, 0, ENTRANCE_GATE.cz]}>
+      {/* 문틀 기둥(개구부 양끝) */}
+      {[-w / 2, w / 2].map((dx, i) => (
+        <mesh key={i} position={[dx, h / 2, 0]} material={steel}>
+          <boxGeometry args={[0.16, h, 0.22]} />
+        </mesh>
+      ))}
+      {/* 개구부 위 상인방(벽 높이 ANNEX_H까지 콘크리트로 채운다) */}
+      <mesh
+        position={[0, (WALL_H + ANNEX_H) / 2, 0]}
+        geometry={mat.box(w + 0.3, ANNEX_H - WALL_H, WALL_T, TILE.concrete)}
+        material={mat.concrete}
+        castShadow
+        receiveShadow
+      />
+      {/* 슬라이딩 철창짝(위·아래 가로 레일 + 세로 살) */}
+      <group ref={panel}>
+        {[h - 0.3, 0.25].map((y, i) => (
+          <mesh key={i} position={[0, y, 0]} material={steel}>
+            <boxGeometry args={[w, 0.1, 0.08]} />
+          </mesh>
+        ))}
+        {Array.from({ length: nBars }, (_, i) => (
+          <mesh key={i} position={[-w / 2 + ((i + 0.5) / nBars) * w, barY, 0]} material={steel}>
+            <boxGeometry args={[BAR_W, barH, BAR_W]} />
+          </mesh>
+        ))}
+      </group>
+      {near && (
+        <Html center distanceFactor={10} position={[0, 2.0, 0]}>
+          <div className="pointer-events-none select-none whitespace-nowrap rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white">
+            {open ? "[E] 출입구 닫기" : "[E] 출입구 열기"}
+          </div>
+        </Html>
+      )}
     </group>
   );
 }
@@ -1320,7 +1530,10 @@ function BuildingDecor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
       <ToiletDecor b={getBuilding("toilet")!} mat={mat} />
       <ParadeDecor mat={mat} />
       <CafeteriaDecor b={getBuilding("cafeteria")!} mat={mat} />
-      <LinkGate mat={mat.steel} />
+      <AnnexRoof mat={mat} />
+      <ToiletRoof mat={mat} />
+      <CellBlockGate mat={mat} />
+      <EntranceGate mat={mat} />
       <MainGate mat={mat} />
       <DrainPipe mat={mat} />
     </group>
@@ -1374,13 +1587,19 @@ export default function GameMap() {
 
       {/* 잠금 문(방향별, 방마다 다른 창살 색). 정문(gate-main)은 MainGate가 따로 그리고,
           식당 문(door-cafe)은 창살이 아니라 진짜 식당 양여닫이 문으로 그린다. */}
-      {DOOR_META.filter((d) => d.id !== "gate-main").map((d) =>
-        d.id === "door-cafe" ? (
-          <CafeteriaDoor key={d.id} meta={d} mat={mat} />
-        ) : (
-          <BarDoor key={d.id} meta={d} mat={barMatFor(mat, d.id)} />
-        ),
-      )}
+      {DOOR_META.filter((d) => d.id !== "gate-main").map((d) => {
+        if (d.id === "door-cafe") return <CafeteriaDoor key={d.id} meta={d} mat={mat} />;
+        // 수감동 감방문(cell-*): 복도 철창과 같은 무채색 철재 + 천장(2층 슬래브)까지 채운 높이.
+        const isCell = d.id.startsWith("cell-");
+        return (
+          <BarDoor
+            key={d.id}
+            meta={d}
+            mat={isCell ? mat.steel : barMatFor(mat, d.id)}
+            h={isCell ? FLOOR2_Y : WALL_H}
+          />
+        );
+      })}
 
       {/* 배수관 샛길 철창(표식 4개면 열림) */}
       <DrainGate mat={mat} />

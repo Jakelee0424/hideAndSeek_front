@@ -24,6 +24,9 @@
 //    Collision.java의 BUILDINGS를 같은 값으로 고치면 벽·문은 자동으로 맞는다.
 
 export const WALL_H = 3; // 실내 벽 높이(m)
+// 별관(식당·세탁실·작업장·의무실·복도) 벽 높이 — 기본 벽보다 절반(1.5배) 더 높이고 그 위를 지붕으로 덮는다.
+// 높이는 렌더 전용(충돌은 무시)이라 서버 Collision.java와 맞출 필요 없다.
+export const ANNEX_H = WALL_H * 1.5; // = 4.5m
 export const FLOOR2_Y = 4.5; // 수감동 2층 바닥 높이(m). 3인칭 카메라(pitch↑)가 천장에 가리지 않을 층고.
 export const CELL_BLOCK_H = FLOOR2_Y * 2; // 수감동(2층) 벽 높이(m)
 export const WALL_T = 0.4; // 벽 두께(m)
@@ -122,7 +125,7 @@ export const BUILDINGS: Building[] = [
 
   // ── 연결 복도(중앙): 수감동↔별관. 남벽 중앙이 단지 출입구(연병장으로). 열린 철창은 Map이 얹는다 ──
   {
-    id: "link", kind: "hall", rect: { x0: -6, z0: 14, x1: 6, z1: 20 }, color: "#30343c",
+    id: "link", kind: "hall", rect: { x0: -6, z0: 14, x1: 6, z1: 20 }, h: ANNEX_H, color: "#30343c",
     openings: [
       { edge: "N", at: 0, width: 12 + WALL_T }, // 화장실 남벽이 담당
       { edge: "E", at: 17, width: 6 },
@@ -135,7 +138,7 @@ export const BUILDINGS: Building[] = [
   },
   // 화장실(연결 복도 북측). 동/서 벽은 이웃 건물이 담당.
   {
-    id: "toilet", kind: "room", label: "화장실", rect: { x0: -6, z0: 20, x1: 6, z1: 28 }, color: "#3b444f",
+    id: "toilet", kind: "room", label: "화장실", rect: { x0: -6, z0: 20, x1: 6, z1: 28 }, h: ANNEX_H, color: "#3b444f",
     openings: [
       { edge: "W", at: 24, width: 8 },
       { edge: "E", at: 24, width: 8 },
@@ -150,15 +153,15 @@ export const BUILDINGS: Building[] = [
   // ── 별관(북동): 식당(개방) · 세탁실 · 작업장 · 의무실. 문은 모두 가운데 복도로 ──
   // 바닥에 방마다 다른 색을 깔아 구분한다(식당=따뜻한 갈색, 세탁실=파랑, 작업장=황토, 의무실=청록).
   // 식당 문은 진짜 식당 문(감옥 창살 아님, Map.CafeteriaDoor). 요일 코드(lock-cafe)를 풀어야 들어간다.
-  { id: "cafeteria", kind: "room", label: "식당", rect: { x0: 6, z0: 20, x1: 22, z1: 28 }, color: "#4a4033", openings: [{ edge: "S", at: 14, width: 4, door: "door-cafe" }] },
-  { id: "laundry", kind: "room", label: "세탁실", rect: { x0: 22, z0: 20, x1: 38, z1: 28 }, color: "#33455c", openings: [{ edge: "S", at: 30, width: DOOR_W, door: "door-laundry" }, { edge: "W", at: 24, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
+  { id: "cafeteria", kind: "room", label: "식당", rect: { x0: 6, z0: 20, x1: 22, z1: 28 }, h: ANNEX_H, color: "#4a4033", openings: [{ edge: "S", at: 14, width: 4, door: "door-cafe" }] },
+  { id: "laundry", kind: "room", label: "세탁실", rect: { x0: 22, z0: 20, x1: 38, z1: 28 }, h: ANNEX_H, color: "#33455c", openings: [{ edge: "S", at: 30, width: DOOR_W, door: "door-laundry" }, { edge: "W", at: 24, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
   // 작업장 문은 볼트-너트 잠금장치(lock-work)로 연다 — 식당처럼 문 밖 자물쇠를 풀고 들어가,
   // 방 안 퀴즈(quiz-work)로 표식을 드러낸다. 서버 Room.LOCK_OPENS의 door-work와 짝을 맞춘다.
-  { id: "workshop", kind: "room", label: "작업장", rect: { x0: 6, z0: 6, x1: 22, z1: 14 }, color: "#4b452a", openings: [{ edge: "N", at: 14, width: DOOR_W, door: "door-work" }] },
-  { id: "infirmary", kind: "room", label: "의무실", rect: { x0: 22, z0: 6, x1: 38, z1: 14 }, color: "#2f4a44", openings: [{ edge: "N", at: 30, width: DOOR_W, door: "door-med" }, { edge: "W", at: 10, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
+  { id: "workshop", kind: "room", label: "작업장", rect: { x0: 6, z0: 6, x1: 22, z1: 14 }, h: ANNEX_H, color: "#4b452a", openings: [{ edge: "N", at: 14, width: DOOR_W, door: "door-work" }] },
+  { id: "infirmary", kind: "room", label: "의무실", rect: { x0: 22, z0: 6, x1: 38, z1: 14 }, h: ANNEX_H, color: "#2f4a44", openings: [{ edge: "N", at: 30, width: DOOR_W, door: "door-med" }, { edge: "W", at: 10, width: 8 }, { edge: "N", at: 22, width: CORNER }, { edge: "S", at: 22, width: CORNER }] },
   // 별관 복도: 동쪽 벽만 소유(서쪽은 연결 복도로 열림, 북/남은 방 벽이 담당).
   {
-    id: "hall-east", kind: "hall", label: "별관", rect: { x0: 6, z0: 14, x1: 38, z1: 20 }, color: "#30343c",
+    id: "hall-east", kind: "hall", label: "별관", rect: { x0: 6, z0: 14, x1: 38, z1: 20 }, h: ANNEX_H, color: "#30343c",
     openings: [
       { edge: "N", at: 22, width: FULL_NS },
       { edge: "S", at: 22, width: FULL_NS },
@@ -239,13 +242,56 @@ function buildingDoors(b: Building): DoorBox[] {
 
 export const WALL_BOXES: WallBox[] = BUILDINGS.flatMap(buildingWalls);
 
+// 별관 지붕 사각형: 네 방+복도가 빈틈없이 채우는 하나의 덩어리(x 6~38 · z 6~28)를 통째로 덮는다.
+// Map이 이 위(y=ANNEX_H)에 지붕 슬래브를, cameraOcclusion이 같은 자리에 차폐 슬래브를 얹어
+// (수감동 2층 슬래브 SLAB2와 같은 방식) 안에 있을 때 카메라가 지붕 밑으로 내려가게 한다.
+export const ANNEX_ROOF: Rect = { x0: 6, z0: 6, x1: 38, z1: 28 };
+
 // 배수관 샛길 철창(표식 게이트): 동쪽 샛길(건물 동벽 x38 ~ 외벽 x42, 폭 4m)을 z=26에서 가로막는다.
 // 표식 4개를 다 얻으면 열린다(interactables.isDrainGateOpen로 openDoors에 반영). 문 취급이라
 // DOOR_BOXES에 넣어 열리면 충돌에서 빠진다. ⚠️ 서버 Collision.DOORS·Room과 좌표·id를 맞춘다.
 export const DRAIN_GATE = { id: "gate-drain", cx: 40, cz: 26, hx: 2, hz: 0.25 };
+
+// 수감동↔복도 철창 게이트(E로 개폐). 수감동 출입구(x=-6 개구부, z14~20)를 철창으로 막고,
+// 가운데 2m(z16~18)만 작은 문이다. 문은 DOOR_BOXES에 넣어 열리면 충돌에서 빠지고, 나머지
+// 철창벽은 OBSTACLES(상시 실체)가 담당한다. 봇은 닫힌 문을 근접 시 스스로 연다(서버 Room.tick).
+// ⚠️ 서버 Collision.DOORS(gate-cellblock)·prisonLayout OBSTACLES와 좌표·id를 맞춘다.
+export const CELLBLOCK_GATE = {
+  id: "gate-cellblock",
+  cx: -6, // 개구부가 있는 x(수감동 동벽)
+  z0: 14, z1: 20, // 개구부 전체 z 범위
+  doorZ0: 16, doorZ1: 18, // 작은 문(폭 2m) z 범위
+  h: WALL_H, // 게이트 높이(1층)
+  t: 0.1, // 두께 반값(hx)
+};
+
+// 건물 출입구(화장실 맞은편, 연병장 쪽) 철창 슬라이딩 게이트(E로 개폐). 링크 남벽 개구부
+// (x=0, z14, 폭 3m) 전체를 덮고, 열리면 옆으로 미끄러진다. ⚠️ 서버 Collision.DOORS(gate-entrance)와 맞춘다.
+export const ENTRANCE_GATE = {
+  id: "gate-entrance",
+  cx: 0, // 개구부 중심 x
+  cz: 14, // 링크 남벽(z14)
+  w: 3, // 개구부 폭
+  h: WALL_H, // 문틀 높이(위 헤더는 ANNEX_H까지 채운다)
+  t: 0.2, // 두께 반값(hz)
+};
 export const DOOR_BOXES: DoorBox[] = [
   ...BUILDINGS.flatMap(buildingDoors),
   { id: DRAIN_GATE.id, cx: DRAIN_GATE.cx, cz: DRAIN_GATE.cz, hx: DRAIN_GATE.hx, hz: DRAIN_GATE.hz },
+  {
+    id: CELLBLOCK_GATE.id,
+    cx: CELLBLOCK_GATE.cx,
+    cz: (CELLBLOCK_GATE.doorZ0 + CELLBLOCK_GATE.doorZ1) / 2, // 17
+    hx: CELLBLOCK_GATE.t,
+    hz: (CELLBLOCK_GATE.doorZ1 - CELLBLOCK_GATE.doorZ0) / 2, // 1.0
+  },
+  {
+    id: ENTRANCE_GATE.id,
+    cx: ENTRANCE_GATE.cx,
+    cz: ENTRANCE_GATE.cz, // 14
+    hx: ENTRANCE_GATE.w / 2, // 1.5
+    hz: ENTRANCE_GATE.t, // 0.2
+  },
 ];
 export const FLOORS: { rect: Rect; color: string }[] = BUILDINGS.filter(
   (b) => b.color,
@@ -436,11 +482,13 @@ export const OBSTACLES: ObstacleBox[] = [
   //   → 배수관 구역(세탁실 북측 순찰로)에 드는 길은 동쪽 샛길 철창(gate-drain, 표식 4개)뿐이 된다.
   //   ⚠️ 서버 Collision.OBSTACLES와 같은 값.
   OB(22, 29, 0.2, 1),
-  // 정문 기둥 + 연결 복도 철창 기둥(x=-3: 출입구·복도 교차점(x=0) 동선을 비켜 세운다)
+  // 정문 기둥
   OB(-4.5, -30, 0.5, 0.5),
   OB(4.5, -30, 0.5, 0.5),
-  OB(-3, 14.5, 0.1, 0.12),
-  OB(-3, 19.5, 0.1, 0.12),
+  // 수감동↔복도 철창 게이트(x=-6 개구부 z14~20): 가운데 2m(z16~18)만 문(gate-cellblock)이고
+  //   나머지(z14~16 · z18~20)는 상시 철창벽. E로 문을 여닫는다. ⚠️ 서버 Collision.OBSTACLES와 같은 값.
+  OB(-6, 15, 0.1, 1),
+  OB(-6, 19, 0.1, 1),
   // 감시탑 안쪽 다리(맵 안으로 들어온 다리 하나씩)
   OB(-40.8, -28.8, 0.15, 0.15),
   OB(40.8, -28.8, 0.15, 0.15),

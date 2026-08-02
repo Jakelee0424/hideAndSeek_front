@@ -10,7 +10,7 @@ import * as THREE from "three";
 import { useKeyboard } from "./useKeyboard";
 import { useMouseLook } from "./useMouseLook";
 import Character, { type AnimState } from "./Character";
-import { sendInput, sendPunch } from "@/net/stompClient";
+import { sendInput, sendPunch, sendDoor } from "@/net/stompClient";
 import { worldState, INTERP_DELAY_MS } from "@/net/worldState";
 import { punches } from "@/net/punches";
 import { reimprison } from "@/net/reimprison";
@@ -30,7 +30,14 @@ import {
   openDoorsFromSolved,
   useInteraction,
 } from "./interactables";
-import { STEP_UP, cellIdAt, groundHeightAt, randomCellSpawn } from "./prisonLayout";
+import { CELLBLOCK_GATE, ENTRANCE_GATE, STEP_UP, cellIdAt, groundHeightAt, randomCellSpawn } from "./prisonLayout";
+
+// E로 여닫는 철창 게이트들의 상호작용 지점(근접 판정용). 문이라 사거리를 조금 넉넉히 본다.
+const GATE_POINTS: [string, number, number][] = [
+  [CELLBLOCK_GATE.id, CELLBLOCK_GATE.cx, (CELLBLOCK_GATE.doorZ0 + CELLBLOCK_GATE.doorZ1) / 2],
+  [ENTRANCE_GATE.id, ENTRANCE_GATE.cx, ENTRANCE_GATE.cz],
+];
+const GATE_IDS = new Set(GATE_POINTS.map(([id]) => id));
 import { pushOutOfPlayer, resolveCollision } from "./collision";
 import { cameraClearT } from "./cameraOcclusion";
 import { localPos } from "./localPos";
@@ -102,7 +109,17 @@ export default function LocalPlayer() {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "KeyE") return;
       const st = useInteraction.getState();
-      if (st.openId || !st.nearId || st.solved[st.nearId]) return;
+      if (st.openId) return;
+      // 철창 게이트: 근접 시 E로 여닫는다(퍼즐 열기가 아니라 문 토글). 서버가 확정하지만
+      // 낙관적으로 즉시 반영해 러버밴딩을 없앤다 — 다음 스냅샷이 서버 값으로 되돌린다.
+      if (st.nearId && GATE_IDS.has(st.nearId)) {
+        const gid = st.nearId;
+        const gs = useGameStore.getState();
+        st.setDoorOptimistic(gid, !st.serverDoors[gid]);
+        if (gs.status === "connected") sendDoor(gs.roomId, gid);
+        return;
+      }
+      if (!st.nearId || st.solved[st.nearId]) return;
       st.open(st.nearId);
     };
     window.addEventListener("keydown", onKey);
@@ -232,7 +249,12 @@ export default function LocalPlayer() {
     // 벽/소품 충돌 해석(서버와 동일 로직). 미션을 푼 방의 감방문은 통과.
     // 충돌은 XZ 밀어내기 + 발높이 층 판정 — 점프해도 장애물은 못 넘는다(서버 Room.tick과 같은 규약).
     {
-      const openDoors = openDoorsFromSolved(useInteraction.getState().solved);
+      const st = useInteraction.getState();
+      const openDoors = openDoorsFromSolved(st.solved);
+      // 자유 토글 문(철창 게이트)은 solved 파생이 아니라 서버 openDoors가 권위 — 병합한다.
+      // (openDoorsFromSolved는 매 프레임 재사용 객체라 게이트 키를 명시적으로 덮어써야 한다.)
+      openDoors[CELLBLOCK_GATE.id] = !!st.serverDoors[CELLBLOCK_GATE.id];
+      openDoors[ENTRANCE_GATE.id] = !!st.serverDoors[ENTRANCE_GATE.id];
       const [rx, rz] = resolveCollision(g.position.x, g.position.z, g.position.y, openDoors);
       g.position.x = rx;
       g.position.z = rz;
@@ -356,6 +378,16 @@ export default function LocalPlayer() {
         if (d2 < best && canInteract(it, g.position.x, g.position.z, assistOpen)) {
           best = d2;
           nearId = it.id;
+        }
+      }
+      // 철창 게이트 근접(문이라 사거리를 조금 넉넉히). 더 가까운 오브젝트가 없을 때만 잡는다.
+      for (const [gid, gx, gz] of GATE_POINTS) {
+        const gdx = gx - g.position.x;
+        const gdz = gz - g.position.z;
+        const gd2 = gdx * gdx + gdz * gdz;
+        if (gd2 < 2.6 * 2.6 && (nearId === null || gd2 < best)) {
+          best = gd2;
+          nearId = gid;
         }
       }
     }

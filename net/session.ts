@@ -114,6 +114,9 @@ export function joinRoom(
             sfxDoor();
           }
         }
+        // 자유 토글 문(철창 게이트)의 로컬 충돌·비주얼은 서버 openDoors가 권위다.
+        // solved 파생 문과 달리 여닫이가 반복되므로 매 스냅샷의 목록으로 교체한다.
+        useInteraction.getState().setServerDoors(snap.openDoors ?? []);
 
         // 퍼즐 해결 상태 협동 동기화(감방문 열림은 solved에서 파생 → 함께 동기화됨)
         if (snap.solvedIds) useInteraction.getState().syncSolved(snap.solvedIds);
