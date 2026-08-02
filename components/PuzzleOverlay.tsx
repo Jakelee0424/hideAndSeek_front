@@ -821,7 +821,7 @@ function LiarLock({
       </div>
 
       {/* 배열 입력 */}
-      <p className="mb-2 text-xs text-slate-400">표식 4개를 진짜 자리에 배열하라.</p>
+      <p className="mb-2 text-xs text-slate-400">별관 네 방에서 찾아낸 표식 4개를 진짜 자리에 배열하라.</p>
       <div className="mb-4 space-y-2">
         {slots.map((symIdx, slot) => {
           const sym = lp.symbols[symIdx];

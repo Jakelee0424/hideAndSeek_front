@@ -1385,6 +1385,16 @@ export default function GameMap() {
       {/* 배수관 샛길 철창(표식 4개면 열림) */}
       <DrainGate mat={mat} />
 
+      {/* 배수관 우회 차단벽: 세탁실 서벽을 북쪽 순찰로(z28~30)까지 연장 — 서편 우회로를 막아
+          배수관 구역은 동쪽 철창(표식 4개)으로만 들어가게 한다. prisonLayout/Collision OBSTACLES와 같은 자리. */}
+      <mesh
+        position={[22, WALL_H / 2, 29]}
+        geometry={mat.box(0.4, WALL_H, 2, TILE.concrete)}
+        material={mat.concrete}
+        castShadow
+        receiveShadow
+      />
+
       {/* 건물 소품 */}
       <BuildingDecor mat={mat} />
 
