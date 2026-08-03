@@ -1,6 +1,9 @@
 "use client";
 // Canvas는 SSR 하지 않는다(three는 브라우저 전용).
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useGameStore } from "@/store/gameStore";
 import ControlHint from "./ControlHint";
 import EmoteControls from "./EmoteControls";
 import EndingOverlay from "./EndingOverlay";
@@ -16,6 +19,19 @@ import WebGLGuard from "./WebGLGuard";
 const Scene = dynamic(() => import("@/game/Scene"), { ssr: false });
 
 export default function GameClient() {
+  const router = useRouter();
+  const myId = useGameStore((s) => s.myId);
+
+  // 새로고침·주소 직접 입력으로 들어오면 세션이 없다(스토어는 메모리에만 산다).
+  // 그 상태로는 서버가 아는 내가 없어 조작도 스냅샷도 성립하지 않으므로 로비로 돌려보낸다
+  // — 예전엔 아무 가드가 없어 빈 감옥만 덩그러니 떴다. 대기방(WaitingRoom)은 이미 같은 규칙이다.
+  useEffect(() => {
+    if (!myId) router.replace("/");
+  }, [myId, router]);
+
+  // 돌려보내는 동안 게임 화면을 한 프레임도 보이지 않는다(빈 씬이 깜빡이는 것도 막는다).
+  if (!myId) return null;
+
   // WebGL을 못 쓰면 Scene을 아예 띄우지 않는다 — 띄워봐야 검은 화면이라 원인을 알 수 없다.
   return (
     <WebGLGuard>
