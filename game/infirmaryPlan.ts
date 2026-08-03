@@ -5,7 +5,10 @@
 //    ⚠️ **2026-08-01에 침대 4 → 6, 혈액형 중복 허용으로 바꿨다.** 예전엔 O·A·B·AB가
 //    하나씩이고 답이 "번호 네 자리"였는데, 그건 복원한 배치가 아니라 그 **요약**이라
 //    답 공간이 1~4의 순열 = 24가지뿐이었다(스물세 번 찍으면 열렸다). 지금은 4⁶ = 4096이다.
-//    혈액 검사 키트는 두 침대 사이 "수혈 가능 여부"만 알려준다(혈액형은 안 알려준다). 2회 한정.
+//    혈액 검사 키트는 두 침대 사이 "수혈 가능 여부"만 알려준다(혈액형은 안 알려준다).
+//    ⚠️ **2026-08-03에 난이도를 낮췄다**(사용자 지시): 확정 단서 REVEALED_BEDS개("3번은 A형이다")를
+//    깔아 발판을 주고, 검사 키트를 BLOOD_CHARGES회로 늘렸다. **답 공간 4096은 그대로**라
+//    찍기 방지는 약해지지 않았다 — 줄어든 건 간접 추론 부담뿐이다.
 //
 // ② 표식(방 안, quiz-med): **감염 경로 추적**. 어제 하루의 접촉 기록(누가 몇 시에 누구와)과
 //    증상 발현 시각 셋이 있다. 감염은 접촉 즉시, 발현은 정확히 6시간 뒤, 발현 전에도 옮긴다.
@@ -62,6 +65,18 @@ export const GIVES: Record<BloodType, BloodType[]> = {
 
 /** 병동 침대 수. 1이 창가, 마지막이 문가. */
 export const BED_COUNT = 6;
+
+/**
+ * 혈액형을 그대로 알려 주는 **확정 단서** 수(난이도 조절 손잡이).
+ *
+ * 0이면 예전 난이도 — 여섯 칸을 전부 간접 추론(수혈 관계·인원수·비교·부정문)으로 세워야 해서
+ * 너무 어려웠다. 답 공간(4^6=4096)은 그대로라 이 값을 올려도 **찍기 방지는 약해지지 않는다**.
+ * 더 쉽게 하려면 3으로, 되돌리려면 0으로.
+ */
+export const REVEALED_BEDS = 2;
+
+/** 혈액 검사 키트 사용 횟수. ⚠️ 바꾸면 interactables.ts의 note-med2 문구도 같이 고칠 것. */
+export const BLOOD_CHARGES = 3;
 
 export interface BloodPlan {
   /** 침대 1~BED_COUNT → 혈액형. **중복이 있을 수 있다**(같은 형이 둘 이상 누워 있어도 된다). */
@@ -201,10 +216,22 @@ function buildBloodPlan(seed: string): BloodPlan {
     if (kinds >= 3 && maxDup <= 3) break;
   }
 
+  // ⓪ 발판이 되는 **확정 단서**를 먼저 깐다("3번 환자는 A형이다").
+  //
+  // 나머지 후보(수혈 관계·인원수·비교·부정문)는 전부 간접이라, 이게 없으면 여섯 칸을 통째로
+  // 간접 추론만으로 세워야 해서 너무 어려웠다. 답 공간(4^6=4096)은 건드리지 않으므로
+  // 찍기 방지는 그대로다 — 줄어드는 건 추론 부담뿐이다.
+  const revealIdx = shuffle(rand, Array.from({ length: BED_COUNT }, (_, i) => i))
+    .slice(0, REVEALED_BEDS);
+  const revealed: ClueDef[] = revealIdx.map((i) => ({
+    text: `${bedName(i + 1)} 환자는 ${beds[i]}형이다.`,
+    test: (b: Layout) => b[i] === beds[i],
+  }));
+
   // 유일해가 될 때까지 단서를 붙인다(해집합을 걸러 나가므로 후보 한 바퀴면 끝난다).
   const cands = clueCandidates(rand, beds);
-  let sols = LAYOUTS;
-  const chosen: ClueDef[] = [];
+  let sols = LAYOUTS.filter((l) => revealed.every((c) => c.test(l)));
+  const chosen: ClueDef[] = [...revealed];
   for (const c of cands) {
     if (sols.length === 1) break;
     const next = sols.filter((l) => c.test(l));
@@ -214,8 +241,10 @@ function buildBloodPlan(seed: string): BloodPlan {
   }
 
   // 군더더기 제거 — 빼도 여전히 유일하면 뺀다(순서를 뒤에서부터 훑어야 앞의 강한 줄이 남는다).
+  // ⚠️ 앞 REVEALED_BEDS줄(확정 단서)은 건드리지 않는다. 그게 없어도 유일해는 성립하지만,
+  //    빼 버리면 난이도를 낮추려고 넣은 발판이 그대로 사라진다.
   const kept = [...chosen];
-  for (let i = kept.length - 1; i >= 0; i--) {
+  for (let i = kept.length - 1; i >= REVEALED_BEDS; i--) {
     const without = kept.filter((_, k) => k !== i);
     if (LAYOUTS.filter((l) => without.every((c) => c.test(l))).length === 1) {
       kept.splice(i, 1);
@@ -227,7 +256,7 @@ function buildBloodPlan(seed: string): BloodPlan {
   return {
     beds: bedsRec,
     clues: shuffle(rand, kept).map((c) => c.text),
-    charges: 2,
+    charges: BLOOD_CHARGES,
     solutions: LAYOUTS.filter((l) => kept.every((c) => c.test(l))).length,
   };
 }
