@@ -15,6 +15,7 @@ import PhaseBanner from "./PhaseBanner";
 import Minimap from "./Minimap";
 import SoundToggle from "./SoundToggle";
 import StoryPanel from "./StoryPanel";
+import HelpPanel from "./HelpPanel";
 import { EMOTE_LIST } from "@/net/emotes";
 
 export default function HUD() {
@@ -70,8 +71,12 @@ export default function HUD() {
         </span>
       </div>
 
-      {/* 오늘 밤의 이야기 — 위 죄수번호 칸 바로 아래 책 아이콘. 눌러야 열린다(자동 자막을 대체). */}
-      <StoryPanel />
+      {/* 위 죄수번호 칸 바로 아래: 이야기(책·B)와 진행 방법(물음표·H). 눌러야 열린다.
+          ⚠️ 모달은 각 패널이 fixed로 띄운다 — 이 상자가 absolute라 inset-0을 쓰면 안에 갇힌다. */}
+      <div className="absolute left-4 top-[3.25rem] flex gap-2">
+        <StoryPanel />
+        <HelpPanel />
+      </div>
 
       {/* 진행 단계 + 남은 시간 (상단 중앙) */}
       <PhaseBanner />
@@ -100,7 +105,8 @@ export default function HUD() {
           <kbd className="font-mono">R</kbd> · 상호작용{" "}
           <kbd className="font-mono">E</kbd> · 지도{" "}
           <kbd className="font-mono">M</kbd> · 이야기{" "}
-          <kbd className="font-mono">B</kbd>
+          <kbd className="font-mono">B</kbd> · 도움말{" "}
+          <kbd className="font-mono">H</kbd>
         </div>
       </div>
 
