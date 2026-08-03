@@ -2,8 +2,12 @@
 // OBJ 소품 키트(원본 + tier1~3)를 맵에 배치. 방별 세트·감시탑·조명탑은 절차적 소품을 대신하고
 // (Map.tsx에서 해당 절차적 데코 제거), 간수 NPC·벽부착물·잡소품·탈출소품은 신규로 얹는다.
 //   ⚠️ 대량 배치라 위치·회전·스케일은 1차 근사값 — 화면 보고 튜닝 필요.
+import { useMemo } from "react";
 import { usePrisonAssets, AssetProp } from "./prisonAssets";
 import { CELLS, DOOR_META, TOWERS, getBuilding } from "./prisonLayout";
+import CellCalendar from "./CellCalendar";
+import { cafeteriaPlan } from "./cafeteriaPlan";
+import { useGameStore } from "@/store/gameStore";
 
 // 방 중심(prisonLayout BUILDINGS와 일치). 식당은 절차적 배치(Map.CafeteriaDecor)라 OBJ 세트를 안 쓴다.
 // (작업장은 통짜 세트를 빼고 개별 소품으로 배치해 방 중심 상수를 안 쓴다.)
@@ -41,6 +45,9 @@ const CAMERAS: { pos: [number, number, number]; target: [number, number] }[] = [
 export default function PrisonProps() {
   const a = usePrisonAssets();
   const faceCenter = (x: number, z: number) => Math.atan2(-x, -z);
+  // 오늘 요일(감방 달력용). 방 시드로 정해져 나레이션·식당 배식 순서표와 같은 값이다.
+  const roomId = useGameStore((s) => s.roomId);
+  const today = useMemo(() => cafeteriaPlan(roomId).today, [roomId]);
 
   return (
     <group>
@@ -73,6 +80,9 @@ export default function PrisonProps() {
         return (
           <group key={`fill-${c.id}`}>
             <AssetProp template={a.smallWindow} position={[x0 + 4, 0, backZ]} rotationY={faceIn} />
+            {/* 오늘 요일 달력(뒷벽, 창과 중앙 표식 낙인[x0+8] 사이). 스폰 감방에서 요일을 읽어
+                식당 문(daycode)에 쓴다 — 어느 감방에 스폰되든 보이게 네 감방 모두에 건다. */}
+            <CellCalendar day={today} position={[x0 + 6, 1.65, backZ]} rotationY={faceIn} />
             <AssetProp template={a.cellShelf} position={[x0 + 11, 0, backZ]} rotationY={faceIn} />
             <AssetProp template={a.mirrorTowel} position={[x0 + 13.2, 0, backZ]} rotationY={faceIn} />
             {/* 낙서는 동쪽 벽(문 쪽) — 서쪽 벽엔 이층침대가 붙어 있다 */}

@@ -3,7 +3,7 @@
 //
 // 예전엔 모든 쪽지가 똑같은 납작한 종이 박스였다 — 배식표든 모래 글씨든 감시탑 각인이든
 // 전부 같은 모양이라 정체성이 뭉개졌다. 여기서 id별로 성격에 맞는 메시로 분화한다.
-//   - 종이류(안내문·지시서·라벨·처방·젖은 쪽지): 세워 둔 종이/카드. 감옥 밤이 어두워
+//   - 종이류(안내문·지시서·라벨): 세워 둔 종이/카드. 감옥 밤이 어두워
 //     찾기 힘드니 발광(emissive/glow)을 읽는 면에 얹는다(자물쇠와 같은 유도 방식).
 //   - 환경물(각인 금속판·배식판·긁힌 벽·모래 글씨·감시탑 돌기둥): 바닥에 붙이거나 세운다.
 //
@@ -19,8 +19,6 @@ export type NoteKind =
   | "notice" // 벽에 핀으로 꽂은 안내문
   | "clipboard" // 클립보드에 끼운 지시서
   | "label" // 약장용 작은 라벨 카드
-  | "chart" // 괘선 그어진 기록지
-  | "wet" // 물에 젖어 축 늘어진 쪽지
   | "plate" // 각인된 금속판
   | "tray" // 뒷면에 낙서된 배식판
   | "scratch" // 긁힌 자국이 남은 벽 조각
@@ -31,9 +29,7 @@ export type NoteKind =
 // id → 비주얼 종류. 매핑 없으면 기본 안내문.
 const NOTE_KIND: Record<string, NoteKind> = {
   "note-laundry1": "notice", // 세탁 안내문
-  "note-laundry2": "wet", // 젖은 쪽지
   "note-med1": "label", // 약장 라벨
-  "note-med2": "chart", // 처방 기록
   "note-cafe-order": "poster", // 배식 순서표(벽에 세로로)
   "note-cafe-menu": "poster", // 오늘의 식단표(벽에 세로로)
   "note-cafe-tray": "tray", // 배식대 위 식판(금속 식판 비주얼)
@@ -122,50 +118,6 @@ function Label({ emissive, glow }: VisualProps): JSX.Element {
       <mesh position={[0, 0.012, 0.2]}>
         <boxGeometry args={[0.44, 0.021, 0.1]} />
         <meshStandardMaterial color="#14b8a6" roughness={0.7} />
-      </mesh>
-    </group>
-  );
-}
-
-// 처방 기록지: 괘선(가로줄) 몇 줄 그어진 종이.
-function Chart({ emissive, glow }: VisualProps): JSX.Element {
-  const lines = [-0.22, -0.07, 0.08, 0.23];
-  return (
-    <group rotation={[-0.15, 0, 0]}>
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[0.5, 0.02, 0.7]} />
-        <meshStandardMaterial
-          {...readMat("#f4f1e8", emissive, glow)}
-          metalness={0.05}
-          roughness={0.85}
-        />
-      </mesh>
-      {lines.map((z) => (
-        <mesh key={z} position={[0, 0.012, z]}>
-          <boxGeometry args={[0.4, 0.006, 0.012]} />
-          <meshStandardMaterial color="#94a3b8" roughness={0.9} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-// 젖은 쪽지: 물에 젖어 색이 죽고 축 늘어진(더 눕고 낮은) 종이 + 얼룩.
-function Wet({ emissive, glow }: VisualProps): JSX.Element {
-  return (
-    <group rotation={[-0.7, 0, 0]} position={[0, -0.15, 0]}>
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[0.48, 0.02, 0.66]} />
-        <meshStandardMaterial
-          {...readMat("#6b7a8f", emissive, glow * 0.7)}
-          metalness={0.1}
-          roughness={0.95}
-        />
-      </mesh>
-      {/* 번진 물얼룩 */}
-      <mesh position={[0.06, 0.012, -0.08]}>
-        <boxGeometry args={[0.22, 0.006, 0.24]} />
-        <meshStandardMaterial color="#455160" roughness={1} />
       </mesh>
     </group>
   );
@@ -386,8 +338,6 @@ const BUILDERS: Record<string, (p: VisualProps) => JSX.Element> = {
   notice: Notice,
   clipboard: Clipboard,
   label: Label,
-  chart: Chart,
-  wet: Wet,
   plate: Plate,
   tray: Tray,
   scratch: Scratch,

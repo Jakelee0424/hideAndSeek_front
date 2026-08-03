@@ -51,7 +51,7 @@ export const EMOTE_TTL_MS = 3000;
 
 // 채팅 토픽에 실어 나르는 토큰. 텍스트 입력창을 아예 없앴으므로 사람이 이 문자열을 채팅으로
 // 지어낼 길이 없고, 봇의 자연어가 이 접두사로 시작할 일도 사실상 없어 평문으로 충분하다.
-const WIRE_PREFIX = "emote:";
+const WIRE_PREFIX = "emote:";
 
 export function encodeEmote(id: EmoteId): string {
   return WIRE_PREFIX + id;

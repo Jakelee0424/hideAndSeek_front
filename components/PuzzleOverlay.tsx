@@ -15,7 +15,7 @@ import {
   type Puzzle,
 } from "@/game/interactables";
 import { sendDoor, sendSolve } from "@/net/stompClient";
-import { toolCode } from "@/game/toolCode";
+import { toolCode, jamoCount } from "@/game/toolCode";
 import { liarPuzzle } from "@/game/liarPuzzle";
 import { cafeteriaPlan } from "@/game/cafeteriaPlan";
 import {
@@ -872,6 +872,10 @@ function LiarLock({
 
 // ── 도구 이름→숫자 퀴즈(작업장 비밀번호) ──────────────────────────
 // 규칙을 보여줄 표(도구 3개 + 값) + 물음표 도구 + 숫자 휠 입력. 답은 toolCode가 방 코드로 정한다.
+// 3회 이상 틀리면 규칙(자모 개수 × k + c)을 짚어 준다 — 정답은 주지 않고,
+// 표의 도구 이름별 자모 개수를 보여줘 규칙을 스스로 역산하게 한다.
+const TOOLCODE_HINT_AFTER = 3;
+
 function ToolCodeLock({
   tc,
   error,
@@ -885,6 +889,14 @@ function ToolCodeLock({
   onFail: () => void;
   clearError: () => void;
 }) {
+  const [fails, setFails] = useState(0);
+  const showHint = fails >= TOOLCODE_HINT_AFTER;
+
+  function handleFail() {
+    setFails((n) => n + 1);
+    onFail();
+  }
+
   return (
     <>
       <div className="mb-4 space-y-1.5 rounded-lg border border-white/10 bg-black/30 p-3 font-mono text-base">
@@ -901,6 +913,33 @@ function ToolCodeLock({
           <span className="w-12 text-right text-amber-300">?</span>
         </div>
       </div>
+
+      {showHint && (
+        <div className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-100">
+          <p className="mb-2 font-semibold">💡 힌트 — 자모 개수를 세어 보라</p>
+          <p className="mb-2 text-[13px] leading-relaxed text-amber-100/90">
+            도구 이름의 <b>자모(초성·중성·종성) 개수</b>에 일정한 수를 곱한 뒤
+            더한 값이다. 아래 자모 개수로 두 도구의 값을 견주면 규칙이 나온다.
+          </p>
+          <div className="space-y-1 rounded-md bg-black/25 p-2 font-mono text-[13px]">
+            {tc.rows.map((r) => (
+              <div key={r.name} className="flex items-center justify-between">
+                <span className="text-amber-200">{r.name}</span>
+                <span className="text-amber-100/70">
+                  자모 {jamoCount(r.name)}개 → {r.value}
+                </span>
+              </div>
+            ))}
+            <div className="flex items-center justify-between border-t border-amber-500/20 pt-1">
+              <span className="text-amber-200">{tc.target}</span>
+              <span className="text-amber-100/70">
+                자모 {jamoCount(tc.target)}개 → ?
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <WheelLock
         length={tc.digits}
         mod={10}
@@ -908,7 +947,7 @@ function ToolCodeLock({
         check={(vals) => vals.join("") === tc.answer}
         error={error}
         onSolve={onSolve}
-        onFail={onFail}
+        onFail={handleFail}
         clearError={clearError}
       />
     </>

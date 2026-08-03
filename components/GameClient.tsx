@@ -2,7 +2,7 @@
 // Canvas는 SSR 하지 않는다(three는 브라우저 전용).
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useGameStore } from "@/store/gameStore";
 import ControlHint from "./ControlHint";
 import EmoteControls from "./EmoteControls";
@@ -18,13 +18,24 @@ import WebGLGuard from "./WebGLGuard";
 
 const Scene = dynamic(() => import("@/game/Scene"), { ssr: false });
 
-export default function GameClient() {
+export default function GameClient({ roomId }: { roomId: string }) {
   const router = useRouter();
   const myId = useGameStore((s) => s.myId);
 
-  // 새로고침·주소 직접 입력으로 들어오면 세션이 없다(스토어는 메모리에만 산다).
-  // 그 상태로는 서버가 아는 내가 없어 조작도 스냅샷도 성립하지 않으므로 로비로 돌려보낸다
-  // — 예전엔 아무 가드가 없어 빈 감옥만 덩그러니 떴다. 대기방(WaitingRoom)은 이미 같은 규칙이다.
+  // 새로고침으로 이 페이지에 바로 들어오면 스토어가 초기화돼 roomId가 "lobby"로 떨어지고,
+  // 요일 시드(cafeteriaPlan)가 전부 월요일이 된다(달력·나레이션·식당 daycode 공통).
+  // URL의 방 코드를 첫 렌더 전에 복원한다 — useState 초기화는 렌더당 한 번, 자식보다 먼저 돈다.
+  // 정상 이동(대기실→플레이)에선 이미 roomId가 같아 setState를 건너뛰므로 세션에 영향이 없다.
+  useState(() => {
+    if (roomId && useGameStore.getState().roomId !== roomId) {
+      useGameStore.setState({ roomId });
+    }
+  });
+
+  // 그래도 새로고침이면 **로비로 돌려보낸다**(사용자 지시). 방 코드는 위에서 되살릴 수 있지만
+  // 세션(myId)은 되살릴 수 없다 — 서버가 아는 내가 없어 조작도 스냅샷도 성립하지 않고,
+  // 예전엔 가드가 없어 빈 감옥만 덩그러니 떴다. 대기방(WaitingRoom)도 같은 규칙이다.
+  // ⚠️ 위 roomId 복원은 그래서 지금은 거의 타지 않는 경로다(지우진 않았다 — 시드 규약이 거기 적혀 있다).
   useEffect(() => {
     if (!myId) router.replace("/");
   }, [myId, router]);
