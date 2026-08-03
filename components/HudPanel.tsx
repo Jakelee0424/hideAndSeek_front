@@ -9,6 +9,7 @@
 // ⚠️ 단축키가 없으면 **사실상 못 연다**. 게임 중엔 포인터락이 걸려 커서가 없어 버튼을 클릭할
 //    수 없다(미니맵 M과 같은 이유로 키를 함께 준다). 코드로 비교해야 한글 자판에서도 먹는다.
 import { useInteraction } from "@/game/interactables";
+import { useGameStore } from "@/store/gameStore";
 import { useEffect, type ReactNode } from "react";
 
 interface Props {
@@ -28,14 +29,19 @@ export default function HudPanel({ id, hotkeyCode, hotkeyLabel, title, icon, chi
   const open = useInteraction((s) => s.open);
   const close = useInteraction((s) => s.close);
 
+  // 탈옥(PLAY) 중에만 쓴다. 색출·결말 화면은 그 자체가 전면 모달이라, 그 위에 겹쳐 봐야
+  // 가려서 안 보이거나 반대로 투표를 가린다.
+  const playing = useGameStore((s) => s.phase) === "PLAY";
+
   const showing = openId === id;
   // 다른 퍼즐이 열려 있는 동안에는 버튼을 숨긴다 — 그 위에 겹쳐 봐야 누를 수도 없다.
-  const hidden = openId !== null && !showing;
+  const hidden = !playing || (openId !== null && !showing);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== hotkeyCode) return;
       if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      if (useGameStore.getState().phase !== "PLAY") return;
       const cur = useInteraction.getState().openId;
       if (cur === id) close();
       else if (cur === null) open(id); // 퍼즐이 열려 있으면 가로채지 않는다
@@ -63,7 +69,7 @@ export default function HudPanel({ id, hotkeyCode, hotkeyLabel, title, icon, chi
 
       {/* ⚠️ fixed다 — 버튼을 감싼 부모가 absolute로 자리를 잡고 있어서, absolute inset-0으로
           두면 모달이 그 작은 상자 안에 갇힌다. */}
-      {showing && (
+      {showing && playing && (
         <div className="pointer-events-auto fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
           <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#12161f] p-6 text-slate-100 shadow-2xl">
             <div className="mb-4 flex items-baseline justify-between gap-3">

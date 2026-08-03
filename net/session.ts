@@ -122,6 +122,16 @@ export function joinRoom(
         if (snap.solvedIds) useInteraction.getState().syncSolved(snap.solvedIds);
         // 진행 단계도 전환 시·입장 시에만 실려 온다 → 있을 때만 반영. 이후 카운트다운은 클라 몫.
         if (snap.phase) {
+          // ⚠️ 탈옥이 끝나면 열려 있던 모달을 강제로 닫는다.
+          //
+          // 퍼즐 모달은 z-index가 drei <Html> 최댓값 위(≈1677만)다 — 3D 라벨이 모달을 뚫고
+          // 나오지 않게 하려고 그렇게 뒀는데, 그 바람에 투표(z-30)와 엔딩(z-40)까지 통째로
+          // 덮는다. 시간이 다 돼 서버가 VOTE로 넘어가도 화면엔 퍼즐만 남아 "투표로 안 넘어간다"가
+          // 된다(실제로 그렇게 보였다). 서버 시계는 클라 사정을 봐주지 않으므로 여기서 닫는다.
+          //
+          // 이야기·도움말 패널도 같은 openId를 쓰므로 함께 닫힌다.
+          // phase는 dirty 규약(전환 시·입장 시에만 실림)이라 매 tick 부르는 게 아니다.
+          if (snap.phase !== "PLAY") useInteraction.getState().close();
           useGameStore.getState().setPhase(snap.phase, snap.phaseRemainMs ?? 0);
         }
         // AI 지목 현황도 바뀔 때만 실려 온다.

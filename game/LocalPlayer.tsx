@@ -110,6 +110,10 @@ export default function LocalPlayer() {
       if (e.code !== "KeyE") return;
       const st = useInteraction.getState();
       if (st.openId) return;
+      // 탈옥(PLAY) 중에만 연다. 서버도 solve를 PLAY에서만 받으므로 색출 단계에서 열어 봐야
+      // 풀리지 않는데, 퍼즐 모달은 z-index가 3D 라벨 위(≈1677만)라 투표 화면을 통째로 덮는다
+      // — 열리기만 하고 못 푸는 채로 투표를 가리는 게 최악이다.
+      if (useGameStore.getState().phase !== "PLAY") return;
       // 철창 게이트: 근접 시 E로 여닫는다(퍼즐 열기가 아니라 문 토글). 서버가 확정하지만
       // 낙관적으로 즉시 반영해 러버밴딩을 없앤다 — 다음 스냅샷이 서버 값으로 되돌린다.
       if (st.nearId && GATE_IDS.has(st.nearId)) {
