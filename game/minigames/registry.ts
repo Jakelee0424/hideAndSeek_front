@@ -6,7 +6,6 @@
 // 배정은 방 코드로 시드를 고정한다 — 같은 방 사람들은 같은 감방에서 같은 게임을 본다.
 // (안 그러면 "나는 테트리스였는데?" 같은 대화가 어긋난다. 새 방에 들어가면 다시 섞인다.)
 import { breakoutDef } from "./breakout";
-import { flappyDef } from "./flappy";
 import { rhythmDef } from "./rhythm";
 import { shooterDef } from "./shooter";
 import { snakeDef } from "./snake";
@@ -20,7 +19,6 @@ export const POOL: MinigameDef[] = [
   shooterDef,
   snakeDef,
   breakoutDef,
-  flappyDef,
   rhythmDef,
   whackDef,
 ];
