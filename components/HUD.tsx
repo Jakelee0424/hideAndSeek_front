@@ -16,6 +16,7 @@ import Minimap from "./Minimap";
 import SoundToggle from "./SoundToggle";
 import StoryPanel from "./StoryPanel";
 import HelpPanel from "./HelpPanel";
+import Notice from "./Notice";
 import { EMOTE_LIST } from "@/net/emotes";
 
 export default function HUD() {
@@ -80,6 +81,9 @@ export default function HUD() {
 
       {/* 진행 단계 + 남은 시간 (상단 중앙) */}
       <PhaseBanner />
+
+      {/* 짧은 안내 토스트(PhaseBanner 아래). 지금은 "내 퍼즐을 남이 먼저 풀었다". */}
+      <Notice />
 
       {/* 맵 개요 미니맵 + 내 위치 (상단 우측, M키로 접기) */}
       <Minimap />

@@ -1,7 +1,8 @@
 // stompClient + gameStore + worldState 를 묶는 세션 오케스트레이션.
 // UI는 joinRoom / leaveRoom 만 호출한다.
 import { useGameStore } from "@/store/gameStore";
-import { ESCAPE_PIPE_ID, useInteraction } from "@/game/interactables";
+import { ESCAPE_PIPE_ID, findInteractable, useInteraction } from "@/game/interactables";
+import { useNotice } from "@/store/noticeStore";
 import { cellIdAt } from "@/game/prisonLayout";
 import { sfxDoor, sfxUnlock, sfxSiren } from "@/game/sfx";
 import { worldState } from "./worldState";
@@ -105,6 +106,19 @@ export function joinRoom(
             heardSolved.add(id);
             // 배수관(최종 탈출)은 클리어 화면이 따로 팡파르를 울린다 — 여기서 겹쳐 내지 않는다.
             if (id !== ESCAPE_PIPE_ID) sfxUnlock();
+
+            // 내가 지금 붙잡고 있던 퍼즐을 남이 먼저 풀었다면, 모달을 닫고 이유를 알려 준다.
+            // 그대로 두면 이미 열린 문의 자물쇠를 계속 풀고 있게 된다.
+            //
+            // ⚠️ "남이 풀었다" 판정을 따로 할 필요가 없다 — 내가 풀었으면 markSolved가 그 자리에서
+            //    openId를 null로 만든다(store). 그러니 여기서 openId가 아직 그 id라는 것 자체가
+            //    남이 먼저 끝냈다는 뜻이다.
+            const it = useInteraction.getState();
+            if (it.openId === id) {
+              it.close();
+              const label = findInteractable(id)?.label ?? "그 자물쇠";
+              useNotice.getState().show(`먼저 풀렸다 — ${label}`);
+            }
           }
         }
         if (snap.openDoors) {
