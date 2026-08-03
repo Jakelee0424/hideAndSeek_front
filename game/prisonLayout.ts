@@ -401,6 +401,21 @@ export const SLAB2: Rect[] = [
 ];
 
 /**
+ * 지붕 슬래브(별관 + 화장실) — 서버 Collision.ROOF_SLABS와 같은 값.
+ *
+ * ⚠️ SLAB2와 **따로** 둔다. 서버에서 SLAB2는 봇 길찾기 격자의 2층 레이어로도 쓰이는데,
+ * 지붕은 올라갈 길이 없어 격자에 넣으면 고립된 섬이 된다. 여기서 정하는 건 "밟으면 딛는 바닥"뿐이다.
+ *
+ * 지붕이 렌더(Map.AnnexRoof/ToiletRoof)에만 있고 여기 없으면, 지붕 위에 선 순간 딛을 바닥이
+ * 없어 **그대로 잠긴 방 안으로 떨어진다**. 지금은 2층에서 지붕으로 나갈 길이 없지만,
+ * 수감동 동벽이나 2층 막이를 건드리면 그 구멍이 열린다.
+ */
+export const ROOF_SLABS: Rect[] = [
+  ANNEX_ROOF, // 별관(식당·세탁실·작업장·의무실 + 별관 복도)
+  { x0: -6, z0: 20, x1: 6, z1: 28 }, // 화장실 — Map.ToiletRoof가 덮는 범위와 같다
+];
+
+/**
  * (x,z)에서 딛고 설 수 있는 바닥 높이(발바닥 기준). 지금 높이(feetY)에서 STEP_UP 이하로
  * 닿는 바닥 중 가장 높은 것 — 1층에서 2층 슬래브는 머리 위 천장일 뿐이므로 후보에서 빠진다.
  */
@@ -413,6 +428,15 @@ export function groundHeightAt(x: number, z: number, feetY: number): number {
     for (const r of SLAB2) {
       if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) {
         g = FLOOR2_Y;
+        break;
+      }
+    }
+  }
+  // 별관·화장실 지붕도 딛을 수 있는 바닥이다(2층과 같은 높이라 위 분기와 겹치지 않는다).
+  if (g === 0 && ANNEX_H <= feetY + STEP_UP) {
+    for (const r of ROOF_SLABS) {
+      if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) {
+        g = ANNEX_H;
         break;
       }
     }
