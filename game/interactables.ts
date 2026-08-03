@@ -129,7 +129,6 @@ export const INTERACTABLES: Interactable[] = [
   // 아래 쪽지 둘은 답이 아니라 **작동 방식**만 알려준다.
   { id: "note-pipe-map", type: "note", position: [27, 1.5, 19.6], label: "배관 노선도", board: "pipe-map" },
   { id: "note-laundry1", type: "note", position: [2, 0.6, 24.5], label: "세탁 안내문", hint: "배관 밸브는 노선도에서 관이 이어지는 쪽으로 돌려라. 넷을 다 맞춘 뒤에야 물이 흐른다 — 어느 밸브가 어긋났는지는 알려주지 않으니 노선도를 정확히 읽어라." },
-  { id: "note-laundry2", type: "note", position: [24, 0.6, -10], label: "젖은 쪽지", hint: "건조대 옷은 겉만 봐선 못 고른다. 일정표와 기호 네 가지가 **전부** 같은 것이 한 벌이 아니다 — 빠짐없이 골라야 하고, 나머지는 하나씩 어긋나 있다." },
   {
     id: "lock-laundry",
     type: "lockbox",
@@ -223,7 +222,6 @@ export const INTERACTABLES: Interactable[] = [
   // 배치·정답은 방 코드로 매판 랜덤(infirmaryPlan.bloodPlan). 옛 고정 코드 "451"은 폐기했다.
   // (쪽지 둘은 답이 아니라 규칙만 알려준다. 좌표는 그대로 — 서버 봇 POI와 짝이다.)
   { id: "note-med1", type: "note", position: [3, 0.6, 22], label: "약장 라벨", hint: "의무실 금고는 침대 여섯의 혈액형 차트를 통째로 받는다. 같은 혈액형이 여럿 누워 있을 수 있다고 적혀 있다." },
-  { id: "note-med2", type: "note", position: [-24, 0.6, -18], label: "처방 기록", hint: "혈액 검사 키트는 두 번밖에 못 쓴다. 수혈 가능 여부만 나오니 아껴 써라 — 벽의 단서만으로도 배치는 하나로 정해진다." },
   {
     id: "lock-med",
     type: "lockbox",

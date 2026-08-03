@@ -1,6 +1,8 @@
 "use client";
 // Canvas는 SSR 하지 않는다(three는 브라우저 전용).
 import dynamic from "next/dynamic";
+import { useState } from "react";
+import { useGameStore } from "@/store/gameStore";
 import ControlHint from "./ControlHint";
 import EmoteControls from "./EmoteControls";
 import EndingOverlay from "./EndingOverlay";
@@ -15,7 +17,17 @@ import WebGLGuard from "./WebGLGuard";
 
 const Scene = dynamic(() => import("@/game/Scene"), { ssr: false });
 
-export default function GameClient() {
+export default function GameClient({ roomId }: { roomId: string }) {
+  // 새로고침으로 이 페이지에 바로 들어오면 스토어가 초기화돼 roomId가 "lobby"로 떨어지고,
+  // 요일 시드(cafeteriaPlan)가 전부 월요일이 된다(달력·나레이션·식당 daycode 공통).
+  // URL의 방 코드를 첫 렌더 전에 복원한다 — useState 초기화는 렌더당 한 번, 자식보다 먼저 돈다.
+  // 정상 이동(대기실→플레이)에선 이미 roomId가 같아 setState를 건너뛰므로 세션에 영향이 없다.
+  useState(() => {
+    if (roomId && useGameStore.getState().roomId !== roomId) {
+      useGameStore.setState({ roomId });
+    }
+  });
+
   // WebGL을 못 쓰면 Scene을 아예 띄우지 않는다 — 띄워봐야 검은 화면이라 원인을 알 수 없다.
   return (
     <WebGLGuard>

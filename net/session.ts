@@ -72,6 +72,8 @@ export function joinRoom(
       // 자연어 채팅은 parseEmote가 null로 걸러 무시한다.
       onChat: (e) => {
         const id = parseEmote(e.text);
+        // [emote-debug] 수신 확인용 임시 로그 — 진단 끝나면 제거
+        console.log("[emote-debug] recv", { senderId: e.senderId, text: e.text, parsed: id });
         if (id) emotes.ingest(e.senderId, id, performance.now());
       },
       onSnapshot: (snap) => {

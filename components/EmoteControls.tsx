@@ -28,6 +28,8 @@ export default function EmoteControls() {
 
       e.preventDefault();
       if (gs.myId) emotes.ingest(gs.myId, id, performance.now()); // 즉시 로컬 피드백
+      // [emote-debug] 전송 조건 확인용 임시 로그 — 진단 끝나면 제거
+      console.log("[emote-debug] send", { id, status: gs.status, roomId: gs.roomId, myId: gs.myId });
       if (gs.status === "connected") sendEmote(gs.roomId, id);
     };
     window.addEventListener("keydown", onKey);
