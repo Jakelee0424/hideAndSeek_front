@@ -9,7 +9,6 @@ import EmoteControls from "./EmoteControls";
 import EndingOverlay from "./EndingOverlay";
 import EscapeOverlay from "./EscapeOverlay";
 import HUD from "./HUD";
-import OnboardingOverlay from "./OnboardingOverlay";
 import PatrolOverlay from "./PatrolOverlay";
 import PuzzleOverlay from "./PuzzleOverlay";
 import Vignette from "./Vignette";
@@ -53,9 +52,10 @@ export default function GameClient({ roomId }: { roomId: string }) {
         <HUD />
         {/* 퍼즐·투표보다 아래(z-10) — 그 화면들이 뜨면 어차피 스스로 숨는다. */}
         <ControlHint />
-        {/* 도입 내레이션·순찰 경고. 둘 다 조작을 막지 않으므로 퍼즐보다 아래에 둔다.
-            특히 순찰은 "멈추는 건 플레이어 몫"이라는 게 규칙이라 가려서도 안 된다. */}
-        <OnboardingOverlay />
+        {/* 순찰 경고. 조작을 막지 않으므로 퍼즐보다 아래에 둔다 — "멈추는 건 플레이어 몫"이
+            규칙이라 가려서도 안 된다.
+            ⚠️ 도입 내레이션(OnboardingOverlay)은 없앴다. 이제 이야기는 HUD의 책 아이콘으로
+            아무 때나 열어 보는 StoryPanel이다(자동 자막이 첫 1분을 덮던 것을 대체). */}
         <PatrolOverlay />
         <PuzzleOverlay />
         <EscapeOverlay />

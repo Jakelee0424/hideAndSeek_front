@@ -14,6 +14,7 @@ import {
 import PhaseBanner from "./PhaseBanner";
 import Minimap from "./Minimap";
 import SoundToggle from "./SoundToggle";
+import StoryPanel from "./StoryPanel";
 import { EMOTE_LIST } from "@/net/emotes";
 
 export default function HUD() {
@@ -69,6 +70,9 @@ export default function HUD() {
         </span>
       </div>
 
+      {/* 오늘 밤의 이야기 — 위 죄수번호 칸 바로 아래 책 아이콘. 눌러야 열린다(자동 자막을 대체). */}
+      <StoryPanel />
+
       {/* 진행 단계 + 남은 시간 (상단 중앙) */}
       <PhaseBanner />
 
@@ -95,7 +99,8 @@ export default function HUD() {
           이동 <kbd className="font-mono">W A S D</kbd> · 달리기{" "}
           <kbd className="font-mono">R</kbd> · 상호작용{" "}
           <kbd className="font-mono">E</kbd> · 지도{" "}
-          <kbd className="font-mono">M</kbd>
+          <kbd className="font-mono">M</kbd> · 이야기{" "}
+          <kbd className="font-mono">B</kbd>
         </div>
       </div>
 
