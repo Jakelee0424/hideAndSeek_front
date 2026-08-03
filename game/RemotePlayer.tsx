@@ -79,8 +79,6 @@ export default function RemotePlayer({
       seenEmoteAt.current = em.at;
       setEmote(em.emote);
       emoteUntil.current = now + EMOTE_TTL_MS;
-      // [emote-debug] 원격 말풍선 표시 확인용 임시 로그 — 진단 끝나면 제거
-      console.log("[emote-debug] remote show", { id, emote: em.emote });
     }
     if (emote && now >= emoteUntil.current) setEmote(null);
 
