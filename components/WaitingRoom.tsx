@@ -28,18 +28,14 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
   const readys = useGameStore((s) => s.readys);
   const phase = useGameStore((s) => s.phase);
 
-  // 3D 에셋을 여기서 미리 받는다. 대기방은 어차피 남을 기다리는 시간이고, 게임 화면에
-  // 들어가서 받으면 자물쇠가 폴백(절차적 모양)으로 떴다가 몇 초 뒤 진짜 프리팹으로
-  // 통째로 바뀌는 게 보인다. 미리 받아 두면 그 교체가 아예 안 일어난다.
-  // 동적 import라 대기방 번들에는 three가 안 들어간다(로드되면 바로 시작).
+  // 3D 에셋 미리 받기(로비에서 이미 시작했으면 두 번째부터는 공짜다 — 캐시가 받는다).
+  //
+  // ⚠️ 언마운트를 이유로 취소하면 안 된다. 예전엔 `alive` 가드를 뒀는데, 그러면 **TEST
+  //    방에서는 미리받기가 한 번도 안 걸렸다** — 테스트 방은 서버가 즉시 시작해 대기방이
+  //    수십 ms 만에 play로 넘어가므로, 동적 import가 끝나기도 전에 언마운트된다.
+  //    미리 받기는 화면과 무관한 캐시 채우기라 늦게 끝나도 손해가 없다.
   useEffect(() => {
-    let alive = true;
-    import("@/game/prisonAssets").then((m) => {
-      if (alive) m.preloadPrisonAssets();
-    });
-    return () => {
-      alive = false;
-    };
+    import("@/game/prisonAssets").then((m) => m.preloadPrisonAssets());
   }, []);
 
   // 닉네임 없이 직접/새로고침으로 들어온 경우 로비로 돌려보냄

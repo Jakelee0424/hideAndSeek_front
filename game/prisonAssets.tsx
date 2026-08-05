@@ -30,33 +30,24 @@ const OBJ_URLS = [
 ];
 
 /**
- * 에셋을 게임 화면에 들어가기 **전에** 미리 받아 둔다(대기방에서 부른다).
+ * 에셋 파일을 게임 화면에 들어가기 **전에** 브라우저 캐시로 당겨 둔다(대기방에서 부른다).
  *
  * 왜 — 자물쇠는 로드 전까지 절차적 폴백(Padlock)으로 그려지다가, OBJ가 다 오면 진짜
- * 프리팹으로 **통째로 교체**된다. 생김새가 아예 다르니 판이 시작되고 몇 초 뒤 자물쇠가
- * 갑자기 변하는 것으로 보인다(2026-08-05 신고). 대기방에서 미리 받아 두면 게임에
- * 들어설 땐 이미 캐시에 있어 폴백이 아예 안 뜬다.
+ * 프리팹으로 통째로 교체된다. 생김새가 아예 달라서 판이 시작되고 몇 초 뒤 자물쇠가
+ * 갑자기 변하는 것으로 보인다(2026-08-05 신고). 파일을 미리 받아 두면 게임 화면에서는
+ * 디스크 캐시에서 즉시 읽으므로 그 구간이 크게 짧아진다.
  *
- * useLoader와 **같은 캐시**를 채워야 의미가 있다 — suspend-react 키는 (Loader, url)이라
- * useLoader.preload로 넣으면 그대로 재사용된다(확장 콜백은 키에 안 들어간다).
- * MTL은 텍스트라 값싸고, 무거운 쪽은 OBJ 파싱이다.
+ * ⚠️ **R3F의 useLoader.preload를 쓰지 않는다.** 그건 게임 화면과 같은 suspend-react
+ *    캐시를 채우는데, 미리받기 쪽에서 한 번이라도 실패하면 그 실패가 캐시에 박혀
+ *    게임 화면의 useLoader가 계속 그 오류를 다시 던진다 — 에셋이 영영 안 뜨고 자물쇠는
+ *    폴백 그대로, 방 소품은 통째로 사라진다(2026-08-05 실제로 그렇게 의심되는 신고).
+ *    여기서는 fetch로 **HTTP 캐시만** 데운다. 실패해도 게임 화면 경로에 아무 영향이 없다.
  */
 export function preloadPrisonAssets(): void {
+  if (typeof fetch !== "function") return;
   for (const url of OBJ_URLS) {
-    const mtlUrl = url.replace(/\.obj$/, ".mtl");
-    useLoader.preload(MTLLoader, mtlUrl);
-    // OBJ는 재질이 붙어야 하므로 MTL을 따로 한 번 읽어 넘긴다(HTTP 캐시라 두 번째는 공짜).
-    new MTLLoader()
-      .loadAsync(mtlUrl)
-      .then((mtl) => {
-        mtl.preload();
-        useLoader.preload(OBJLoader, url, (loader) => {
-          (loader as OBJLoader).setMaterials(mtl);
-        });
-      })
-      .catch(() => {
-        // 미리 받기는 최적화일 뿐이다. 실패해도 게임 화면에서 정상 경로로 다시 받는다.
-      });
+    void fetch(url, { cache: "force-cache" }).catch(() => {});
+    void fetch(url.replace(/\.obj$/, ".mtl"), { cache: "force-cache" }).catch(() => {});
   }
 }
 
