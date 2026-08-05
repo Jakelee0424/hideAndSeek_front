@@ -390,6 +390,15 @@ interface InteractionStore {
   setNear: (id: string | null) => void;
   open: (id: string) => void;
   close: () => void;
+  /**
+   * 새 방(= 새 판)에 들어갈 때 전부 비운다.
+   *
+   * ⚠️ 이걸 안 부르면 이전 판의 solved가 그대로 남는다. syncSolved는 합집합이라 서버가
+   * 빈 목록을 보내도 아무것도 지우지 않고, 문은 전부 solved에서 파생되므로(감방문·별관문·
+   * 배수관 게이트 + openDoorsFromSolved의 충돌까지) 새 판이 "다 열린 교도소"로 시작한다.
+   * 새로고침하면 모듈 상태가 날아가 증상이 사라져 재현이 "새로고침 없이 재시작"으로만 잡혔다.
+   */
+  resetForNewRoom: () => void;
   markSolved: (id: string) => void;
   /** 재수감 함정: 특정 자물쇠를 다시 잠근다(감방문이 solved에서 파생 → 함께 닫힌다). */
   unmarkSolved: (id: string) => void;
@@ -412,6 +421,8 @@ export const useInteraction = create<InteractionStore>((set, get) => ({
   },
   open: (id) => set({ openId: id }),
   close: () => set({ openId: null }),
+  resetForNewRoom: () =>
+    set({ nearId: null, openId: null, solved: {}, serverDoors: {} }),
   markSolved: (id) =>
     set((s) => ({ solved: { ...s.solved, [id]: true }, openId: null })),
 
