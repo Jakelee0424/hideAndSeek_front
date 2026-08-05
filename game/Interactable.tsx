@@ -271,6 +271,17 @@ const LOCK_ASSET: Record<string, string> = {
   "escape-pipe": "lockDrain",
 };
 
+// ── 프리팹 대신 절차적 자물쇠를 쓰는 잠금 ───────────────────────────
+// 감방 자물쇠 넷은 OBJ 프리팹(콘솔 상자+문자 휠) 대신 직접 그린 자물쇠(Padlock)를 쓴다.
+// 사용자가 다섯 번에 걸쳐 "원본과 다르게 보인다"고 지적한 대상이 이 넷이고,
+// "맨 처음(=프리팹이 로드되기 전 폴백)만 정상적인 자물쇠"라고 확인해 줬다 —
+// 즉 자물쇠로 읽히는 쪽은 절차적 Padlock이다. 심사 때 화면에 보이는 게 우선이라 그쪽을 쓴다.
+//
+// ⚠️ 되돌리려면 이 집합을 비우면 된다(프리팹 경로는 그대로 살아 있다).
+//    별관·정문·배수관은 지적 대상이 아니었으므로 프리팹을 계속 쓴다 —
+//    거기서 자물쇠 모양이 퍼즐 방식(숫자 다이얼·콤비네이션)을 알려주는 몫을 한다.
+const PROCEDURAL_LOCKS = new Set(["lock-A", "lock-B", "lock-C", "lock-D"]);
+
 function LockProp({ id, emissive, glow }: { id: string; emissive: string; glow: number }) {
   const assets = usePrisonAssets();
   const template = assets[LOCK_ASSET[id] ?? ""];
@@ -370,6 +381,10 @@ export default function Interactable({ data }: { data: InteractableData }) {
             emissive={solved ? "#22c55e" : emissive}
             glow={solved ? 0.4 : Math.max(glow, 0.22)}
           />
+        ) : PROCEDURAL_LOCKS.has(data.id) ? (
+          // 감방 자물쇠 — 프리팹을 쓰지 않고 직접 그린 자물쇠로 간다(위 PROCEDURAL_LOCKS 참고).
+          // 회전도 필요 없다. 앞뒤가 거의 같아 어느 방향을 봐도 자물쇠로 읽힌다.
+          <Padlock color={color} emissive={emissive} glow={glow} />
         ) : (
           // 프리팹이 로드될 때까지는 절차적 자물쇠로 버틴다(맵 전체를 되돌리지 않게 자체 Suspense).
           // 해결되면 초록으로 은은히 빛난다 — 프리팹은 몸통 색을 못 바꾸니 발광으로 알린다.
