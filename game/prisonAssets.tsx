@@ -18,6 +18,48 @@ function useObj(url: string): THREE.Group {
   });
 }
 
+/** 이 씬이 쓰는 OBJ 전부(useObj 호출과 같은 목록이어야 한다 — 하나라도 빠지면 그것만 늦게 뜬다). */
+const OBJ_URLS = [
+  "/models/prison-escape-assets.obj",
+  "/models/prison-tier1.obj",
+  "/models/prison-tier2.obj",
+  "/models/prison-tier3.obj",
+  "/models/prison-rooms.obj",
+  "/models/prison-locks.obj",
+  "/models/prison-guard-robot.obj",
+];
+
+/**
+ * 에셋을 게임 화면에 들어가기 **전에** 미리 받아 둔다(대기방에서 부른다).
+ *
+ * 왜 — 자물쇠는 로드 전까지 절차적 폴백(Padlock)으로 그려지다가, OBJ가 다 오면 진짜
+ * 프리팹으로 **통째로 교체**된다. 생김새가 아예 다르니 판이 시작되고 몇 초 뒤 자물쇠가
+ * 갑자기 변하는 것으로 보인다(2026-08-05 신고). 대기방에서 미리 받아 두면 게임에
+ * 들어설 땐 이미 캐시에 있어 폴백이 아예 안 뜬다.
+ *
+ * useLoader와 **같은 캐시**를 채워야 의미가 있다 — suspend-react 키는 (Loader, url)이라
+ * useLoader.preload로 넣으면 그대로 재사용된다(확장 콜백은 키에 안 들어간다).
+ * MTL은 텍스트라 값싸고, 무거운 쪽은 OBJ 파싱이다.
+ */
+export function preloadPrisonAssets(): void {
+  for (const url of OBJ_URLS) {
+    const mtlUrl = url.replace(/\.obj$/, ".mtl");
+    useLoader.preload(MTLLoader, mtlUrl);
+    // OBJ는 재질이 붙어야 하므로 MTL을 따로 한 번 읽어 넘긴다(HTTP 캐시라 두 번째는 공짜).
+    new MTLLoader()
+      .loadAsync(mtlUrl)
+      .then((mtl) => {
+        mtl.preload();
+        useLoader.preload(OBJLoader, url, (loader) => {
+          (loader as OBJLoader).setMaterials(mtl);
+        });
+      })
+      .catch(() => {
+        // 미리 받기는 최적화일 뿐이다. 실패해도 게임 화면에서 정상 경로로 다시 받는다.
+      });
+  }
+}
+
 /**
  * 원본 에셋의 재질값 표(아티팩트 html + prison-kit.js에서 추출한 실제 값 65개).
  *
