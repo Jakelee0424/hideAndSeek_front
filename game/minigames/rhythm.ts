@@ -7,6 +7,8 @@ const TARGET = 24;
 const MAX_MISS = 6;
 
 const LANES = ["ArrowLeft", "ArrowDown", "ArrowUp", "ArrowRight"] as const;
+// 방향키와 같은 레인의 WASD 대체 키(←=A, ↓=S, ↑=W, →=D). 하네스가 e.code를 tapped에 담는다.
+const LANE_ALT = ["KeyA", "KeyS", "KeyW", "KeyD"] as const;
 const LANE_GLYPH = ["◀", "▼", "▲", "▶"];
 const LANE_COLOR = ["#f472b6", "#38bdf8", "#4ade80", "#fbbf24"];
 
@@ -87,7 +89,7 @@ export function createRhythm(): ArcadeGame {
 
       // 입력 판정: 그 레인에서 판정선에 가장 가까운 노트 하나
       for (let lane = 0; lane < LANES.length; lane++) {
-        if (!tapped.has(LANES[lane])) continue;
+        if (!tapped.has(LANES[lane]) && !tapped.has(LANE_ALT[lane])) continue;
         laneFlash[lane] = 0.12;
 
         let bestIdx = -1;
@@ -196,6 +198,6 @@ export const rhythmDef = {
   id: "rhythm",
   name: "배관 두드리기",
   goal: "박자 맞춰 24번 쳐라",
-  controls: "← ↓ ↑ → 노트가 선에 닿을 때 — 6번 놓치면 실패",
+  controls: "← ↓ ↑ → (또는 A S W D) 노트가 선에 닿을 때 — 6번 놓치면 실패",
   create: createRhythm,
 };

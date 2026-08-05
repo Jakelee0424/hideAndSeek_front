@@ -218,7 +218,9 @@ const DEFS: Def[] = [
   { key: "clock", src: "t1", prefixes: ["clock_"] },
   { key: "exitSign", src: "t1", prefixes: ["exit_"] },
   { key: "extinguisher", src: "t1", prefixes: ["extinguisher_"] },
-  { key: "locker", src: "t1", prefixes: ["wall_locker", "locker_", "wall_panel", "wall_skirt"] },
+  // wall_panel·wall_skirt(벽 배경 판·걸레받이)는 뺀다 — 감방처럼 벽에서 떨어뜨려 세우면
+  // 밋밋한 밝은 판때기가 소품 뒤로 튀어나와 "흰색 벽"처럼 보인다. 관물대 본체만 남긴다.
+  { key: "locker", src: "t1", prefixes: ["wall_locker", "locker_"] },
   { key: "cellPlate", src: "t1", prefixes: ["cell_number_plate", "plate_"] },
   // tier2
   { key: "laundry", src: "t2", prefixes: ["washer_", "folding_", "folded_towel", "cart_", "clothes_line", "line_post", "hanging_cloth", "laundry_pile", "rack_"] },

@@ -11,17 +11,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
-import { YARD } from "./prisonLayout";
+import { COURT } from "./prisonLayout";
 import { localPos } from "./localPos";
 import { sfxSwish, sfxThud } from "./sfx";
 
-/** 공이 놓여 있는 자리(운동장, 골대 앞). Map.tsx의 농구골대 위치에서 잡았다. */
-const REST: [number, number, number] = [YARD.cx + 5.8, 0.24, YARD.cz - 1.6];
+/** 공이 놓여 있는 자리(코트 위, 골대 앞). COURT 단일 소스에서 가져온다. */
+const REST: [number, number, number] = COURT.rest;
 /** 제자리와의 거리 비교용. 프레임 루프에서 매번 new 하지 않으려고 미리 만들어 둔다. */
 const REST_VEC = new THREE.Vector3(...REST);
 
-/** 림 중심과 반지름. Map.tsx의 골대 그룹(cx+7.5) 안 torus 위치에서 계산. */
-const RIM: [number, number, number] = [YARD.cx + 6.75, 2.7, YARD.cz];
+/** 림 중심과 반지름. COURT.rim(골대 그룹 안 torus 위치)에서 가져온다. */
+const RIM: [number, number, number] = COURT.rim;
 const RIM_R = 0.34;
 
 const BALL_R = 0.24;

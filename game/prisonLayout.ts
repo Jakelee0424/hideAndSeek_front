@@ -337,11 +337,95 @@ export function getBuilding(id: string): Building | undefined {
   return BUILDINGS.find((b) => b.id === id);
 }
 
-/** 연병장 정보(농구 이스터에그·구석 벤치가 참조). 골대는 (cx+7.5) 부근. */
+// ── 감방 내부 가구 배치(단일 소스: PrisonProps 렌더 + OBSTACLES 충돌이 함께 참조) ──
+// 문으로 들어와서 본 방향 기준(문쪽 z=zDoor, 반대편 뒷벽 z=zBack, din=문→뒷벽 방향):
+//   · 왼쪽(서벽) 세로 침대 — 머리는 문쪽, 발치는 뒷벽. 발치 뒷벽에 벽걸이 TV.
+//   · 가운데 뒷벽에 책상(벽 보고 앉음)+스툴, 책상 위 벽에 달력(퀴즈용). 옆에 관물대.
+//   · 오른쪽(동벽) 세로 가벽 안쪽에 변기·세면대(lavatory) 한 벌.
+// 감방 4개(문 남/북 2종)와 1·2층에 그대로 복제된다("1·2층 통일").
+// 가구 크기(half-extent)는 충돌 박스와 공유하므로 여기 상수로 고정한다.
+export const CELL_FURN_SIZE = {
+  bed: { hx: 1.51875, hz: 2.7 }, // 길이 5.4m : 폭 3.0375m = 16:9
+  desk: { hx: 1.3, hz: 0.45 }, // 폭 2.6m × 깊이 0.9m
+  locker: { hx: 0.45, hz: 0.25 },
+  partition: { hx: 0.12, hz: 1.8 },
+  // 변기·세면대는 동벽에 붙이고 90° 돌려서(가벽 안쪽) 세운다 — 회전 후 월드 footprint 기준 크기.
+  toilet: { hx: 0.35, hz: 0.3 },
+  sink: { hx: 0.25, hz: 0.28 },
+} as const;
+
+export interface CellFurniture {
+  doorS: boolean;
+  faceIn: number; // 뒷벽 부착물이 방 안(문쪽)을 보게 하는 rotationY
+  bed: { cx: number; cz: number; rotY: number };
+  tv: { cx: number; cz: number; rotY: number };
+  desk: { cx: number; cz: number; rotY: number };
+  stool: { cx: number; cz: number };
+  calendar: { cx: number; cz: number; rotY: number };
+  locker: { cx: number; cz: number; rotY: number };
+  partition: { cx: number; cz: number; hz: number; rotY: number };
+  toilet: { cx: number; cz: number; rotY: number };
+  sink: { cx: number; cz: number; rotY: number };
+  window: { cx: number; cz: number; rotY: number };
+  graffiti: { cx: number; cz: number; rotY: number };
+}
+
+/** 감방 하나의 가구 배치 좌표(중심·회전). ⚠️ 서버 Collision.buildObstacles의 감방 가구와 좌표를 맞춘다. */
+export function cellFurniture(b: Building): CellFurniture {
+  const { x0, z0, x1, z1 } = b.rect;
+  const doorS = b.openings?.[0]?.edge === "S";
+  const din = doorS ? 1 : -1;
+  const zBack = doorS ? z1 : z0;
+  const faceIn = doorS ? Math.PI : 0;
+  return {
+    doorS,
+    faceIn,
+    // 침대: 서벽 세로. 발치는 뒷벽, 머리는 문쪽. 길이 6m라 발치(zBack-0.2)에서 방 안쪽으로 길게 뻗는다.
+    // 머리 방향(-z 기본), 문이 북쪽인 방은 180° 돌려 머리를 문쪽으로.
+    // 침대 폭 3.04m(16:9)라 중심을 x0+1.8로 옮겨 서벽과 겹치지 않게 한다. 발치는 뒷벽에 붙인다.
+    bed: { cx: x0 + 1.8, cz: zBack - din * 2.9, rotY: doorS ? 0 : Math.PI },
+    // TV: 침대 발치 뒷벽, 침대와 같은 라인(같은 x). 방 안을 향한다.
+    // ⚠️ 벽 두께 0.4(안쪽 면이 zBack에서 0.2 안쪽) — 부착물은 오프셋 0.28로 빼야 벽에 안 파묻힌다.
+    tv: { cx: x0 + 1.8, cz: zBack - din * 0.28, rotY: faceIn },
+    // 책상+스툴: 뒷벽 가운데(큼직하게). 벽을 보고 앉는다.
+    desk: { cx: x0 + 5.0, cz: zBack - din * 0.5, rotY: faceIn },
+    stool: { cx: x0 + 5.0, cz: zBack - din * 1.6 },
+    // 달력(식당 문 요일 코드용): 책상 위 뒷벽. 벽 안쪽 면(오프셋 0.28)에 걸어 보이게 한다.
+    calendar: { cx: x0 + 5.0, cz: zBack - din * 0.28, rotY: faceIn },
+    // 관물대: 책상 동쪽에 바로 붙인다(책상 폭 2.6 → 동쪽 끝 x0+6.3, 관물대 반폭 0.45 → 중심 x0+6.75).
+    locker: { cx: x0 + 6.75, cz: zBack - din * 0.45, rotY: faceIn },
+    // 가벽: 동쪽에 세로(z축). 안쪽(동벽 쪽)에 변기·세면대를 벽에 붙여 세운다(rotY=+90° → 물탱크가 동벽 향함).
+    partition: { cx: x1 - 2.4, cz: zBack - din * 1.8, hz: 1.8, rotY: 0 },
+    toilet: { cx: x1 - 0.65, cz: zBack - din * 1.4, rotY: Math.PI / 2 },
+    sink: { cx: x1 - 0.45, cz: zBack - din * 0.5, rotY: Math.PI / 2 },
+    // 채광창: 뒷벽 빈 자리(관물대와 가벽 사이).
+    window: { cx: x0 + 10.2, cz: zBack - din * 0.14, rotY: faceIn },
+    // 낙서: 동벽 문쪽(가벽·변기가 없는 앞부분).
+    graffiti: { cx: x1 - 0.28, cz: doorS ? z0 + 2.6 : z1 - 2.6, rotY: -Math.PI / 2 },
+  };
+}
+
+/** 연병장 정보(구석 벤치가 참조). */
 export const YARD = {
   cx: 0,
   cz: -12,
   rect: getBuilding("yard")!.rect,
+};
+
+/**
+ * 남서 코너 벤치 앞의 농구 코트(실제 코트 규격 비율). 코트 바닥 라인·골대·농구공이 모두 참조한다.
+ * length=x 방향(서쪽 베이스라인 cx-13, 동쪽 cx+13), width=z 방향. 골대는 서쪽 베이스라인에 세워
+ * 코트 안쪽(+x)을 향한다(Map.ParadeDecor에서 rotationY=π). 림·공 좌표는 Basketball이 쓴다.
+ * ⚠️ 골대 기둥 충돌(OBSTACLES)·서버 Collision과 hoop 좌표를 맞춘다.
+ */
+export const COURT = {
+  cx: -35.5,
+  cz: -6, // 수감동(남벽 z6)과 ~2m 여유: 북쪽 끝 = cz + length/2 = 4
+  length: 20, // 긴 축(z 방향) — 90° 돌려 세로로 길게
+  width: 11, // 짧은 축(x 방향)
+  hoop: [-35.5, 0, -16.3] as [number, number, number], // 남쪽 베이스라인 밖. rotationY=π/2로 코트 안쪽(+z 북)을 향함
+  rim: [-35.5, 2.7, -15.55] as [number, number, number], // 림 중심(농구공 골인 판정)
+  rest: [-35.5, 0.24, -12.5] as [number, number, number], // 농구공 대기 위치(코트 위, 림 북쪽)
 };
 
 /** 정문(남벽 중앙, 파란 철문 — 닫힌 함정). Map의 정문 비주얼이 참조한다. gate-lock을 풀면 열린다. */
@@ -460,15 +544,29 @@ export interface ObstacleBox {
 const OB = (cx: number, cz: number, hx: number, hz: number, y0 = -1, y1 = 3): ObstacleBox =>
   ({ cx, cz, hx, hz, y0, y1 });
 
+// 2층 감방 가구 충돌 발높이 구간(2층 슬래브 FLOOR2_Y=4.5 위). 1층은 기본 (-1,3).
+const F2_Y0 = FLOOR2_Y - 1; // 3.5
+const F2_Y1 = FLOOR2_Y + 3.5; // 8
+
 export const OBSTACLES: ObstacleBox[] = [
-  // 감방 소품(Map.CellInterior와 같은 자리): 이층 침상(서벽) + 변기(문 반대편 구석)
+  // 감방 가구(PrisonProps.CellInterior와 같은 자리, cellFurniture 단일 소스): 침대·책상·관물대·가벽·변기.
+  // 1·2층 통일 — 각 감방의 두 층 모두 같은 자리에 실체를 둔다(2층은 발높이 구간만 다르다).
+  // ⚠️ 서버 Collision.buildObstacles의 감방 가구와 좌표를 맞춘다.
   ...BUILDINGS.filter((b) => b.kind === "cell").flatMap((b) => {
-    const z = (b.rect.z0 + b.rect.z1) / 2;
-    const doorS = b.openings?.[0]?.edge === "S";
-    return [
-      OB(b.rect.x0 + 1.4, z, 0.5, 1.55),
-      OB(b.rect.x1 - 1.3, doorS ? b.rect.z1 - 1.3 : b.rect.z0 + 1.3, 0.4, 0.4),
+    const f = cellFurniture(b);
+    const S = CELL_FURN_SIZE;
+    const boxes: [number, number, number, number][] = [
+      [f.bed.cx, f.bed.cz, S.bed.hx, S.bed.hz],
+      [f.desk.cx, f.desk.cz, S.desk.hx, S.desk.hz],
+      [f.locker.cx, f.locker.cz, S.locker.hx, S.locker.hz],
+      [f.partition.cx, f.partition.cz, S.partition.hx, f.partition.hz],
+      [f.toilet.cx, f.toilet.cz, S.toilet.hx, S.toilet.hz],
+      [f.sink.cx, f.sink.cz, S.sink.hx, S.sink.hz],
     ];
+    return boxes.flatMap(([cx, cz, hx, hz]) => [
+      OB(cx, cz, hx, hz), // 1층
+      OB(cx, cz, hx, hz, F2_Y0, F2_Y1), // 2층
+    ]);
   }),
   // 화장실: 변기·칸막이 열(북벽) + 세면대(서벽)
   OB(0, 26.8, 4.3, 0.55),
@@ -493,11 +591,11 @@ export const OBSTACLES: ObstacleBox[] = [
   OB(30, 8.3, 0.6, 1.3),
   OB(34.5, 8.3, 0.6, 1.3),
   OB(36.8, 10, 0.5, 1.5),
-  // 연병장(황량한 마당): 남서 구석의 벤치 셋 + 농구골대 기둥
+  // 연병장(황량한 마당): 남서 구석의 벤치 셋 + 농구골대 기둥(코트 서쪽 베이스라인, COURT.hoop)
   OB(-37, -29.2, 2, 0.35),
   OB(-31, -29.2, 2, 0.35),
   OB(-41.3, -25, 0.35, 2),
-  OB(7.5, -12, 0.15, 0.15),
+  OB(-35.5, -16.3, 0.15, 0.15),
   // 세탁실 뒤 배수관(북벽, 최종 탈출구): 헤드월+관 입구 구조물. 관통 방지용 실체.
   // 북쪽 2m 순찰로가 좁아, 벽에 바짝 붙여(z 29.5~30) 앞쪽 통행·상호작용 여백을 남긴다.
   // Map.DrainPipe 비주얼과 같은 자리. ⚠️ 서버 Collision.OBSTACLES와 같은 값.

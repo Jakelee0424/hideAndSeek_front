@@ -4,8 +4,10 @@
 //   ⚠️ 대량 배치라 위치·회전·스케일은 1차 근사값 — 화면 보고 튜닝 필요.
 import { useMemo } from "react";
 import { usePrisonAssets, AssetProp } from "./prisonAssets";
-import { CELLS, DOOR_META, TOWERS, getBuilding } from "./prisonLayout";
+import { CELLS, DOOR_META, TOWERS, getBuilding, cellFurniture, CELL_FURN_SIZE, FLOOR2_Y } from "./prisonLayout";
+import type { Building } from "./prisonLayout";
 import CellCalendar from "./CellCalendar";
+import { Bed, WallTV, Desk, Stool, Partition, Toilet, Sink } from "./CellFurniture";
 import { cafeteriaPlan } from "./cafeteriaPlan";
 import { useGameStore } from "@/store/gameStore";
 
@@ -31,16 +33,102 @@ const WORKBENCH_TOOLS: { bench: number; tool: "vise" | "hammer"; dx: number; dz:
 ];
 const WB_TOP = 0.9; // 작업대 상판 높이(추정 — 화면 보고 조정)
 
-// CCTV: (위치, 목표)
-const CAMERAS: { pos: [number, number, number]; target: [number, number] }[] = [
-  { pos: [-36, 0, 15], target: [-22, 17] },
-  { pos: [36, 0, 15], target: [22, 17] },
-  // 식당·작업장 CCTV는 제거(요청). 아래는 세탁실·의무실.
-  { pos: [36.5, 0, 27], target: [30, 24] },
-  { pos: [36.5, 0, 7], target: [30, 10] },
-  { pos: [-38, 0, -27], target: [0, -12] },
-  { pos: [38, 0, -27], target: [0, -12] },
+// CCTV(절차적 SecurityCam) 배치 — 정문 위 + 건물 내부·외부 곳곳. rotY는 카메라 정면(+z)이 감시 구역을 향하는 값
+// (벽은 정면 반대쪽 = 로컬 -z 쪽에 온다). 시각 전용이라 충돌·서버와 무관.
+const SECURITY_CAMS: { pos: [number, number, number]; rotY: number }[] = [
+  { pos: [0, 4.8, -29.5], rotY: 0 }, // 정문 위 상인방(연병장 내려다봄)
+  // ── 건물 내부 ──
+  { pos: [-35, 4.0, 19.7], rotY: Math.PI }, // 수감동 복도(북벽에서 남향)
+  { pos: [37.7, 4.0, 17], rotY: -Math.PI / 2 }, // 별관 복도(동벽에서 서향)
+  { pos: [4, 4.0, 14.4], rotY: 0 }, // 단지 출입구 안쪽(링크 남벽에서 북향)
+  { pos: [9, 4.0, 27.7], rotY: Math.PI }, // 식당(북벽)
+  { pos: [10, 4.0, 6.3], rotY: 0 }, // 작업장(남벽)
+  { pos: [34, 4.0, 6.3], rotY: 0 }, // 의무실(남벽)
+  { pos: [34, 4.0, 27.7], rotY: Math.PI }, // 세탁실(북벽)
+  // ── 건물 외부(연병장 담장) ──
+  { pos: [-41.6, 4.2, -22], rotY: Math.PI / 2 }, // 서벽에서 동향
+  { pos: [41.6, 4.2, -12], rotY: -Math.PI / 2 }, // 동벽에서 서향
+  { pos: [-22, 4.2, -29.6], rotY: 0 }, // 남벽(정문 서편)에서 북향
+  { pos: [22, 4.2, -29.6], rotY: 0 }, // 남벽(정문 동편)에서 북향
 ];
+
+// 절차적 CCTV(벽 브래킷 + 아래로 기울인 몸통 + 렌즈 + 녹화 LED). 로컬 +z가 정면, 몸통은 이미 아래를 향한다.
+function SecurityCam({ position, rotationY = 0 }: { position: [number, number, number]; rotationY?: number }) {
+  return (
+    <group position={position} rotation={[0, rotationY, 0]}>
+      {/* 벽 브래킷 판(로컬 -z, 벽 쪽) */}
+      <mesh position={[0, 0, -0.12]} castShadow>
+        <boxGeometry args={[0.28, 0.28, 0.06]} />
+        <meshStandardMaterial color="#3a3f45" roughness={0.6} metalness={0.4} flatShading />
+      </mesh>
+      {/* 브래킷 팔 */}
+      <mesh position={[0, -0.02, 0.03]} castShadow>
+        <boxGeometry args={[0.05, 0.05, 0.32]} />
+        <meshStandardMaterial color="#4c5158" roughness={0.55} metalness={0.4} flatShading />
+      </mesh>
+      {/* 카메라 몸통(아래로 0.55rad 기울임) */}
+      <group position={[0, -0.05, 0.22]} rotation={[0.55, 0, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.18, 0.16, 0.42]} />
+          <meshStandardMaterial color="#d7dade" roughness={0.5} metalness={0.2} flatShading />
+        </mesh>
+        {/* 렌즈 경통(앞쪽 +z) */}
+        <mesh position={[0, 0, 0.24]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[0.07, 0.07, 0.12, 16]} />
+          <meshStandardMaterial color="#111318" roughness={0.3} metalness={0.5} flatShading />
+        </mesh>
+        {/* 렌즈 유리(은은한 발광) */}
+        <mesh position={[0, 0, 0.3]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.05, 0.05, 0.02, 16]} />
+          <meshStandardMaterial color="#1b3a5a" emissive="#16324f" emissiveIntensity={0.4} roughness={0.2} />
+        </mesh>
+        {/* 붉은 녹화 LED */}
+        <mesh position={[0.06, 0.09, 0.12]}>
+          <sphereGeometry args={[0.016, 8, 8]} />
+          <meshStandardMaterial color="#ff2a2a" emissive="#ff2a2a" emissiveIntensity={0.9} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+// 감방 내부 한 층. 배치 좌표는 prisonLayout.cellFurniture(단일 소스)를 따르고, y로 층을 얹는다.
+// 1·2층에 그대로 복제되어 두 층 공간이 통일된다.
+function CellInterior({
+  b,
+  y,
+  a,
+  day,
+}: {
+  b: Building;
+  y: number;
+  a: ReturnType<typeof usePrisonAssets>;
+  day: number;
+}) {
+  const f = cellFurniture(b);
+  return (
+    <group>
+      {/* 왼쪽(서벽) 세로 침대 — 발치는 뒷벽, 머리는 문쪽. 길이는 충돌 박스(≈방 깊이 3/4)와 맞춘다 */}
+      <Bed position={[f.bed.cx, y, f.bed.cz]} rotationY={f.bed.rotY} length={CELL_FURN_SIZE.bed.hz * 2} width={CELL_FURN_SIZE.bed.hx * 2} />
+      {/* 침대 발치 뒷벽에 벽걸이 TV */}
+      <WallTV position={[f.tv.cx, y + 1.6, f.tv.cz]} rotationY={f.tv.rotY} />
+      {/* 뒷벽 가운데: 책상(벽 보고 앉음, 큼직하게)+스툴, 위에 달력, 바로 옆에 관물대 */}
+      <Desk position={[f.desk.cx, y, f.desk.cz]} rotationY={f.desk.rotY} width={CELL_FURN_SIZE.desk.hx * 2} depth={CELL_FURN_SIZE.desk.hz * 2} />
+      <Stool position={[f.stool.cx, y, f.stool.cz]} rotationY={f.faceIn} />
+      <CellCalendar day={day} position={[f.calendar.cx, y + 1.62, f.calendar.cz]} rotationY={f.calendar.rotY} />
+      {/* 관물대: 세로로 키운다(폭·깊이 1.2, 높이 1.8). 바닥 원점 기준이라 위로 늘어난다. */}
+      <group position={[f.locker.cx, y, f.locker.cz]} rotation={[0, f.locker.rotY, 0]} scale={[1.2, 1.8, 1.2]}>
+        <AssetProp template={a.locker} position={[0, 0, 0]} />
+      </group>
+      {/* 오른쪽(동벽) 세로 가벽 안쪽에 변기 + 세면대(절차적 제작, 동벽에 붙여 세움) */}
+      <Partition position={[f.partition.cx, y, f.partition.cz]} rotationY={f.partition.rotY} length={f.partition.hz * 2} />
+      <Toilet position={[f.toilet.cx, y, f.toilet.cz]} rotationY={f.toilet.rotY} />
+      <Sink position={[f.sink.cx, y, f.sink.cz]} rotationY={f.sink.rotY} />
+      {/* 낙서(동벽 문쪽). 채광창(파란 하늘창+십자 창틀)은 요청으로 제거. */}
+      <AssetProp template={a.wallGraffiti} position={[f.graffiti.cx, y, f.graffiti.cz]} rotationY={f.graffiti.rotY} />
+    </group>
+  );
+}
 
 export default function PrisonProps() {
   const a = usePrisonAssets();
@@ -51,42 +139,15 @@ export default function PrisonProps() {
 
   return (
     <group>
-      {/* 감방별 이층 침대 + 세면변기 + 번호판 */}
+      {/* 감방 내부(1·2층 통일): 침대·TV·책상·달력·관물대·가벽+변기·창·낙서.
+          배치는 prisonLayout.cellFurniture 단일 소스, 두 층에 같은 세트를 복제한다.
+          달력은 스폰 감방에서 오늘 요일을 읽어 식당 문(daycode)에 쓴다 — 네 감방 모두에 건다. */}
       {CELLS.map((c) => {
         const b = getBuilding(c.id)!;
-        const z = (b.rect.z0 + b.rect.z1) / 2;
-        const wx = b.rect.x0 + 1.4;
-        const doorS = b.openings?.[0]?.edge === "S";
-        const tx = b.rect.x1 - 1.3;
-        const tz = doorS ? b.rect.z1 - 1.3 : b.rect.z0 + 1.3;
         return (
           <group key={c.id}>
-            <AssetProp template={a.bunk} position={[wx, 0, z]} />
-            <AssetProp template={a.lavatory} position={[tx, 0, tz]} />
-          </group>
-        );
-      })}
-
-      {/* 감방 안 채우기(방 채우기 세트): 뒷벽에 창·선반·거울, 옆벽에 낙서.
-          뒷벽 x 배치는 이미 자리 잡은 것들을 피한다 —
-          x0+1.4 이층침대(옆벽), x0+8(=중앙) 표식 낙인(Map.tsx), x1-1.3 세면변기. */}
-      {CELLS.map((c) => {
-        const b = getBuilding(c.id)!;
-        const doorS = b.openings?.[0]?.edge === "S";
-        const backZ = doorS ? b.rect.z1 - 0.28 : b.rect.z0 + 0.28; // 뒷벽 안쪽 면
-        const faceIn = doorS ? Math.PI : 0; // 뒷벽 물건이 방 안을 보게
-        const frontZ = doorS ? b.rect.z0 + 2.6 : b.rect.z1 - 2.6; // 문 쪽
-        const x0 = b.rect.x0;
-        return (
-          <group key={`fill-${c.id}`}>
-            <AssetProp template={a.smallWindow} position={[x0 + 4, 0, backZ]} rotationY={faceIn} />
-            {/* 오늘 요일 달력(뒷벽, 창과 중앙 표식 낙인[x0+8] 사이). 스폰 감방에서 요일을 읽어
-                식당 문(daycode)에 쓴다 — 어느 감방에 스폰되든 보이게 네 감방 모두에 건다. */}
-            <CellCalendar day={today} position={[x0 + 6, 1.65, backZ]} rotationY={faceIn} />
-            <AssetProp template={a.cellShelf} position={[x0 + 11, 0, backZ]} rotationY={faceIn} />
-            <AssetProp template={a.mirrorTowel} position={[x0 + 13.2, 0, backZ]} rotationY={faceIn} />
-            {/* 낙서는 동쪽 벽(문 쪽) — 서쪽 벽엔 이층침대가 붙어 있다 */}
-            <AssetProp template={a.wallGraffiti} position={[b.rect.x1 - 0.28, 0, frontZ]} rotationY={-Math.PI / 2} />
+            <CellInterior b={b} y={0} a={a} day={today} />
+            <CellInterior b={b} y={FLOOR2_Y} a={a} day={today} />
           </group>
         );
       })}
@@ -144,9 +205,8 @@ export default function PrisonProps() {
       {/* 식당은 Map.CafeteriaDecor가 절차적으로 채운다(냉장고·긴 배식대·식탁 6). OBJ 세트·캔틴 식탁은 뺐다. */}
       {/* 연결 복도 남벽(출입구 x=0은 비운다) */}
       <AssetProp template={a.fountain} position={[-4, 0, 14.4]} />
-      {/* 연병장: 정문 앞을 좁히는 철망 두 짝 */}
-      <AssetProp template={a.razorFence} position={[-6.5, 0, -26]} />
-      <AssetProp template={a.razorFence} position={[6.5, 0, -26]} />
+      {/* 연병장은 코너 벤치 + 중앙 농구 골대(Map.ParadeDecor)만 남기고 비운다(요청).
+          철망·조명탑·운동기구·초소·드럼·팔레트·자루·배수구·밧줄·연병장 EXIT 표지 제거. */}
 
       {/* 감방 번호판: 문 옆 벽(복도 쪽), 높이 1.6 */}
       {DOOR_META.filter((d) => d.id.startsWith("cell-")).map((d) => {
@@ -162,9 +222,9 @@ export default function PrisonProps() {
         );
       })}
 
-      {/* CCTV */}
-      {CAMERAS.map((cam, i) => (
-        <AssetProp key={i} template={a.camera} position={cam.pos} rotationY={faceCenter(cam.pos[0] - cam.target[0], cam.pos[2] - cam.target[1])} />
+      {/* CCTV: 정문 위 + 건물 내부·외부 곳곳(같은 SecurityCam 형태). 모두 아래를 내려다본다. */}
+      {SECURITY_CAMS.map((c, i) => (
+        <SecurityCam key={i} position={c.pos} rotationY={c.rotY} />
       ))}
 
       {/* 방 세트(절차적 데코 대체). 식당은 제외 — Map.CafeteriaDecor가 대신 그린다.
@@ -172,18 +232,15 @@ export default function PrisonProps() {
       <AssetProp template={a.laundry} position={[LAUNDRY[0], 0, LAUNDRY[1]]} />
       <AssetProp template={a.infirmary} position={[INFIRMARY[0], 0, INFIRMARY[1]]} />
 
-      {/* 감시탑 4기(모서리, 안쪽을 향해) */}
+      {/* 감시탑 4기(모서리, 안쪽을 향해). 세로로 크게 높여(Y 1.7배) 담장 위로 우뚝 서 감시하는 느낌을 준다.
+          바닥이 원점이라 다리는 땅에 붙은 채 위로 자란다. XZ는 그대로라 다리 충돌 박스와 어긋나지 않는다. */}
       {TOWERS.map((t, i) => (
-        <AssetProp key={i} template={a.watchtower} position={[t[0], 0, t[1]]} rotationY={faceCenter(t[0], t[1])} />
+        <group key={i} position={[t[0], 0, t[1]]} rotation={[0, faceCenter(t[0], t[1]), 0]} scale={[1, 1.7, 1]}>
+          <AssetProp template={a.watchtower} position={[0, 0, 0]} />
+        </group>
       ))}
 
-      {/* 연병장 기물 */}
-      <AssetProp template={a.floodTower} position={[-38, 0, -25]} rotationY={Math.PI / 2} />
-      <AssetProp template={a.floodTower} position={[38, 0, -25]} rotationY={-Math.PI / 2} />
-      <AssetProp template={a.floodTower} position={[0, 0, -28]} />
-      <AssetProp template={a.weightBench} position={[-16, 0, -22]} />
-      <AssetProp template={a.pullup} position={[-8, 0, -22]} />
-      <AssetProp template={a.guardBooth} position={[14, 0, -24]} rotationY={Math.PI} />
+      {/* 연병장 기물(조명탑·역기벤치·철봉·초소)은 요청으로 제거 — 마당을 비운다. */}
 
       {/* ⚠️ 장식용 간수 NPC 2명(연병장 [-14,0,-24] · 복도 [0,0,17])을 2026-07-29에 뺐다.
           순찰 간수(PatrolGuards)와 **같은 모델**이라 화면에서 구분이 안 되는데, 이쪽은
@@ -196,7 +253,7 @@ export default function PrisonProps() {
       {/* 벽 부착물 */}
       <AssetProp template={a.clock} position={[-22, 2.4, 19.7]} rotationY={Math.PI} />
       <AssetProp template={a.clock} position={[22, 2.4, 19.7]} rotationY={Math.PI} />
-      <AssetProp template={a.exitSign} position={[0, 3.1, -28]} />
+      {/* 연병장 정문 EXIT 표지는 제거(요청). 실내 출입구 표지만 남긴다. */}
       <AssetProp template={a.exitSign} position={[0, 2.7, 14.2]} />
       <AssetProp template={a.extinguisher} position={[-6.2, 0, 15]} rotationY={Math.PI / 2} />
       <AssetProp template={a.extinguisher} position={[6.2, 0, 15]} rotationY={-Math.PI / 2} />
@@ -205,18 +262,13 @@ export default function PrisonProps() {
       <AssetProp template={a.locker} position={[-37, 0, 18]} rotationY={Math.PI / 2} />
 
       {/* 잡소품 (식당 안 쓰레기통은 뺐다 — 식당은 정리된 배치. 작업장 쓰레기통은 위 작업장 블록으로 옮겼다.) */}
-      <AssetProp template={a.drum} position={[-30, 0, -9]} />
-      <AssetProp template={a.drum} position={[-27, 0, -9]} />
-      <AssetProp template={a.pallet} position={[-24, 0, -6]} />
-      <AssetProp template={a.sack} position={[-24, 0.4, -6]} />
+      {/* 연병장 잡소품(드럼 2·팔레트·자루)은 요청으로 제거. */}
       <AssetProp template={a.bucketMop} position={[2, 0, 22]} />
       <AssetProp template={a.ladder3} position={[36, 0, 16.5]} rotationY={-Math.PI / 2} />
 
-      {/* 탈출 관련 소품 */}
-      <AssetProp template={a.drain} position={[-18, 0.02, -14]} />
       {/* 환풍구: 입구(화장실 남벽) 왼편 벽 — 예전엔 문 위 정중앙(x=0)이었다. */}
       <AssetProp template={a.vent} position={[-4.5, 2.5, 19.8]} rotationY={Math.PI} />
-      <AssetProp template={a.rope} position={[4, 0, -27]} />
+      {/* 연병장 배수구·밧줄은 요청으로 제거. */}
     </group>
   );
 }

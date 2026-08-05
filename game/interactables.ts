@@ -259,12 +259,14 @@ export const INTERACTABLES: Interactable[] = [
   // 가장 눈에 띄는 출구라 다들 여기부터 노린다. 힌트를 모아 코드를 맞춰 정문을 여는 순간,
   // 바로 그게 함정이다 — 서버가 무작위 2명을 재수감한다. 진짜 출구는 세탁실 뒤 배수관.
   // (서버 Room.GATE_LOCK_ID = "gate-lock". solve가 곧 함정 발동 신호다.)
-  { id: "gate-note1", type: "note", position: [-9, 0.6, -27], label: "서쪽 감시탑 각인", hint: "정문 코드 앞 두 자리 — 서쪽 감시탑 기둥에 '19'가 새겨져 있다." },
-  { id: "gate-note2", type: "note", position: [9, 0.6, -27], label: "동쪽 감시탑 각인", hint: "정문 코드 뒤 두 자리 — 동쪽 감시탑 기둥에 '84'가 새겨져 있다." },
+  // 남서 코너 벤치 앞 공간에 둔다(바로 옆 남서 감시탑이 '서쪽 감시탑'). ⚠️ 서버 Interactables POI와 좌표 일치.
+  { id: "gate-note1", type: "note", position: [-34, 0.6, -27], label: "서쪽 감시탑 각인", hint: "정문 코드 앞 두 자리 — 서쪽 감시탑 기둥에 '19'가 새겨져 있다." },
+  // 남동 쪽 구석(바로 옆 남동 감시탑이 '동쪽 감시탑'). ⚠️ 서버 Interactables POI와 좌표 일치.
+  { id: "gate-note2", type: "note", position: [39, 0.6, -28.5], label: "동쪽 감시탑 각인", hint: "정문 코드 뒤 두 자리 — 동쪽 감시탑 기둥에 '84'가 새겨져 있다." },
   {
     id: "gate-lock",
     type: "lockbox",
-    position: [0, 0.6, -26], // 파란 정문 앞
+    position: [0, 0.6, -28.8], // 파란 정문에 바짝(문 개구부 바로 앞)
     label: "정문 잠금장치",
     hint: "네 자리. 감시탑 두 곳에 새겨진 수를 모아라.",
     puzzle: { kind: "dial", code: "1984" },

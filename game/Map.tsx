@@ -8,6 +8,7 @@ import { Suspense, useMemo, useRef } from "react";
 import * as THREE from "three";
 import Basketball from "./Basketball";
 import PrisonProps from "./PrisonProps";
+import { Toilet } from "./CellFurniture";
 import Interactable from "./Interactable";
 import { INTERACTABLES, isCellDoorOpen, isDrainGateOpen, useInteraction } from "./interactables";
 import { SYMBOLS, escapePlan } from "./escapePlan";
@@ -19,6 +20,7 @@ import {
   BUILDINGS,
   CELLBLOCK_GATE,
   CELL_BLOCK_H,
+  COURT,
   DOOR_META,
   DOOR_W,
   ENTRANCE_GATE,
@@ -33,7 +35,6 @@ import {
   WALL_BOXES,
   WALL_H,
   WALL_T,
-  YARD,
   getBuilding,
   type Building,
   type DoorMeta,
@@ -527,10 +528,9 @@ function ToiletDecor({ b, mat }: { b: Building; mat: ReturnType<typeof useMateri
   const tz = b.rect.z1 - 1.2;
   return (
     <group>
+      {/* 변기 3개: 감방 화장실과 같은 모양(절차적 Toilet). 물탱크가 북벽(+z) 쪽을 향하게 rotationY=0. */}
       {[-3.5, 0, 3.5].map((tx, i) => (
-        <mesh key={i} position={[tx, 0.3, tz]} material={mat.porcelain} castShadow>
-          <cylinderGeometry args={[0.28, 0.32, 0.6, 16]} />
-        </mesh>
+        <Toilet key={i} position={[tx, 0, tz]} rotationY={0} />
       ))}
       {[-1.75, 1.75].map((dx, i) => (
         <mesh key={i} position={[dx, 0.8, tz]} material={mat.table} castShadow>
@@ -571,12 +571,233 @@ function YardBench({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   );
 }
 
-function ParadeDecor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
-  const { cx: px, cz: pz } = YARD;
+// 실제 농구 코트 라인을 캔버스에 그린다(아웃도어 블루 바닥 + 흰 라인 + 페인트존).
+// 좌표는 미터(코트 중앙 원점, x=길이 ±13, z=폭 ±7)로 잡고 픽셀로 변환한다.
+function makeCourtTexture(): THREE.CanvasTexture {
+  const PX = 60; // px/m
+  const CW = Math.round(COURT.length * PX);
+  const CH = Math.round(COURT.width * PX);
+  const c = document.createElement("canvas");
+  c.width = CW;
+  c.height = CH;
+  const g = c.getContext("2d")!;
+  const M = PX;
+  const toX = (mx: number) => CW / 2 + mx * M;
+  const toY = (mz: number) => CH / 2 + mz * M;
+  const halfL = COURT.length / 2;
+  const halfW = COURT.width / 2;
+  // 규격(28×15) 대비 축소 코트라 라인·존을 코트 크기에 맞춰 비율 스케일한다(작아도 3점 코너가 코트 안).
+  const s = Math.min(COURT.length / 28, COURT.width / 15);
+  const line = (x0: number, z0: number, x1: number, z1: number) => {
+    g.beginPath();
+    g.moveTo(toX(x0), toY(z0));
+    g.lineTo(toX(x1), toY(z1));
+    g.stroke();
+  };
+  const rect = (mx: number, mz: number, w: number, h: number) =>
+    g.strokeRect(toX(mx), toY(mz), w * M, h * M);
+  const circle = (mx: number, mz: number, r: number) => {
+    g.beginPath();
+    g.arc(toX(mx), toY(mz), r * M, 0, Math.PI * 2);
+    g.stroke();
+  };
+
+  // 바닥(아웃도어 블루)
+  g.fillStyle = "#1c6ea4";
+  g.fillRect(0, 0, CW, CH);
+  g.strokeStyle = "#f2f4f5";
+  g.lineWidth = 0.06 * M;
+  g.lineJoin = "round";
+
+  const m = 0.15; // 라인 안쪽 여백
+  rect(-halfL + m, -halfW + m, 2 * (halfL - m), 2 * (halfW - m)); // 외곽선
+  line(0, -halfW + m, 0, halfW - m); // 센터 라인
+  circle(0, 0, 1.8 * s); // 센터 서클
+
+  for (const dir of [-1, 1]) {
+    const baseX = dir * (halfL - m);
+    const keyLen = 5.8 * s;
+    const keyHW = 2.45 * s;
+    const innerX = baseX - dir * keyLen;
+    // 페인트존(키) 채움 + 외곽
+    g.fillStyle = "#17527a";
+    g.fillRect(toX(Math.min(baseX, innerX)), toY(-keyHW), keyLen * M, 2 * keyHW * M);
+    rect(Math.min(baseX, innerX), -keyHW, keyLen, 2 * keyHW);
+    circle(innerX, 0, 1.8 * s); // 자유투 서클
+
+    // 3점 라인: 림(baseX - dir*1.575) 중심 반지름 6.75, 코너는 직선 + 아크 (모두 s배 축소)
+    const hoopX = baseX - dir * 1.575 * s;
+    const R = 6.75 * s;
+    const cz = 6.6 * s;
+    const dx = Math.sqrt(R * R - cz * cz);
+    const interior = -dir;
+    const meetX = hoopX + interior * dx;
+    line(baseX, -cz, meetX, -cz);
+    line(baseX, cz, meetX, cz);
+    const a = Math.atan2(cz, dx);
+    g.beginPath();
+    if (dir === -1) g.arc(toX(hoopX), toY(0), R * M, -a, a);
+    else g.arc(toX(hoopX), toY(0), R * M, Math.PI - a, Math.PI + a);
+    g.stroke();
+
+    // 백보드/림 표시 라인
+    line(baseX - interior * 1.2 * s, -0.9 * s, baseX - interior * 1.2 * s, 0.9 * s);
+  }
+
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+// 농구 코트 바닥(캔버스 텍스처를 얹은 평면). 모래 바닥 위(y=0.02)에 깐다.
+function BasketballCourt() {
+  const tex = useMemo(() => (typeof document !== "undefined" ? makeCourtTexture() : null), []);
+  if (!tex) return null;
+  // 긴 축(length)을 z 방향으로 세우려고 그룹을 90° 요(yaw)한다. 코트는 z로 length, x로 width.
+  return (
+    <group position={[COURT.cx, 0.02, COURT.cz]} rotation={[0, Math.PI / 2, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[COURT.length, COURT.width]} />
+        <meshStandardMaterial map={tex} roughness={0.9} metalness={0} />
+      </mesh>
+    </group>
+  );
+}
+
+// 러닝 트랙(스타디움형 오벌) 텍스처: 트랙 노면 밴드 + 흰 레인 라인. 밴드 밖은 투명(모래가 비친다).
+// 좌표는 트랙 중심 원점, 미터→픽셀. OX=바깥 x반경, OZ=바깥 z반경, SH=직선 구간 반길이, BAND=트랙 폭.
+const TRACK = { cx: 6, cz: -12, ox: 34, oz: 15, sh: 19, band: 4 };
+function makeTrackTexture(): THREE.CanvasTexture {
+  const PX = 20;
+  const CW = Math.round(TRACK.ox * 2 * PX);
+  const CH = Math.round(TRACK.oz * 2 * PX);
+  const c = document.createElement("canvas");
+  c.width = CW;
+  c.height = CH;
+  const g = c.getContext("2d")!;
+  const ccx = CW / 2;
+  const ccy = CH / 2;
+  // 스타디움 경로(직선 2 + 반원 2). sh=직선 반길이(px), r=반원 반지름(px).
+  const stad = (sh: number, r: number) => {
+    g.beginPath();
+    g.moveTo(ccx - sh, ccy - r);
+    g.lineTo(ccx + sh, ccy - r);
+    g.arc(ccx + sh, ccy, r, -Math.PI / 2, Math.PI / 2, false);
+    g.lineTo(ccx - sh, ccy + r);
+    g.arc(ccx - sh, ccy, r, Math.PI / 2, (3 * Math.PI) / 2, false);
+    g.closePath();
+  };
+  g.clearRect(0, 0, CW, CH);
+  // 트랙 노면(붉은 우레탄)
+  g.fillStyle = "#b5522f";
+  stad(TRACK.sh * PX, TRACK.oz * PX);
+  g.fill();
+  // 안쪽(인필드)은 투명 — 모래 바닥이 비친다
+  g.globalCompositeOperation = "destination-out";
+  stad(TRACK.sh * PX, (TRACK.oz - TRACK.band) * PX);
+  g.fill();
+  g.globalCompositeOperation = "source-over";
+  // 레인 라인(흰색): 안쪽~바깥 5줄(4레인)
+  g.strokeStyle = "#f0f0f0";
+  g.lineWidth = 0.1 * PX;
+  for (let k = 0; k <= TRACK.band; k++) {
+    stad(TRACK.sh * PX, (TRACK.oz - TRACK.band + k) * PX);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+// 러닝 트랙 바닥(연병장 동편, 농구 코트를 피해 배치). 밴드 밖은 투명이라 모래가 그대로 보인다.
+function RunningTrack() {
+  const tex = useMemo(() => (typeof document !== "undefined" ? makeTrackTexture() : null), []);
+  if (!tex) return null;
+  return (
+    <mesh position={[TRACK.cx, 0.02, TRACK.cz]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <planeGeometry args={[TRACK.ox * 2, TRACK.oz * 2]} />
+      <meshStandardMaterial map={tex} transparent roughness={0.95} metalness={0} />
+    </mesh>
+  );
+}
+
+// 연병장 담장 밑 잡초(크기·간격 제각각). 시드 PRNG로 위치·크기·블레이드를 한 번만 정해 고정한다
+// (Math.random이면 리렌더마다 흔들리고 SSR과도 어긋난다). 정문 개구부·농구코트 구간은 건너뛴다.
+type WeedBlade = { dx: number; dz: number; h: number; tx: number; tz: number; ry: number; c: string };
+type WeedClump = { x: number; z: number; sc: number; blades: WeedBlade[] };
+function YardWeeds() {
+  const clumps = useMemo<WeedClump[]>(() => {
+    let s = 0x9e3779b9 >>> 0;
+    const rng = () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
+    const GREENS = ["#3f5e25", "#4a6b2a", "#5c7d33", "#6b8e3a", "#557a2e"];
+    const out: WeedClump[] = [];
+    const addRun = (from: number, to: number, fixed: number, axis: "x" | "z") => {
+      let p = from;
+      for (;;) {
+        p += 2.2 + rng() * 3.2; // 제각각 간격
+        if (p > to) break;
+        const off = (rng() - 0.5) * 0.6; // 벽에서 살짝 안쪽 지터
+        const x = axis === "x" ? p : fixed + off;
+        const z = axis === "x" ? fixed + off : p;
+        const sc = 0.5 + rng() * 1.0; // 제각각 크기
+        const n = 4 + Math.floor(rng() * 4);
+        const blades: WeedBlade[] = [];
+        for (let i = 0; i < n; i++) {
+          blades.push({
+            dx: (rng() - 0.5) * 0.35,
+            dz: (rng() - 0.5) * 0.35,
+            h: 0.3 + rng() * 0.7,
+            tx: (rng() - 0.5) * 0.5,
+            tz: (rng() - 0.5) * 0.5,
+            ry: rng() * Math.PI,
+            c: GREENS[Math.floor(rng() * GREENS.length)],
+          });
+        }
+        out.push({ x, z, sc, blades });
+      }
+    };
+    // 남벽(z-30, 안쪽 z-29.4) — 정문 개구부(x-6..6) 건너뜀
+    addRun(-40, -7, -29.4, "x");
+    addRun(7, 40, -29.4, "x");
+    // 서벽(x-42, 안쪽 x-41.4) — 농구코트(z-16..4) 건너뜀
+    addRun(-29, -17, -41.4, "z");
+    // 동벽(x42, 안쪽 x41.4)
+    addRun(-29, 4.5, 41.4, "z");
+    return out;
+  }, []);
   return (
     <group>
-      {/* 농구골대(동편) — Basketball의 RIM(cx+6.75)과 맞춘 위치 */}
-      <group position={[px + 7.5, 0, pz]}>
+      {clumps.map((c, i) => (
+        <group key={i} position={[c.x, 0, c.z]} scale={c.sc}>
+          {c.blades.map((b, j) => (
+            <mesh key={j} position={[b.dx, b.h / 2, b.dz]} rotation={[b.tx, b.ry, b.tz]} castShadow>
+              <coneGeometry args={[0.03, b.h, 5]} />
+              <meshStandardMaterial color={b.c} roughness={0.9} flatShading />
+            </mesh>
+          ))}
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function ParadeDecor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  return (
+    <group>
+      {/* 담장 밑 잡초(제각각) */}
+      <YardWeeds />
+      {/* 연병장 동편 러닝 트랙(코트를 피한 오벌) */}
+      <RunningTrack />
+      {/* 남서 코너 벤치 앞 농구 코트(바닥 라인) */}
+      <BasketballCourt />
+      {/* 농구골대 — 코트 남쪽 베이스라인(COURT.hoop). rotationY=π/2로 코트 안쪽(+z 북)을 향한다.
+          Basketball의 RIM(COURT.rim = 그룹 z+0.75)과 맞는다. */}
+      <group position={COURT.hoop} rotation={[0, Math.PI / 2, 0]}>
         <mesh position={[0, 1.5, 0]} material={mat.steel} castShadow>
           <cylinderGeometry args={[0.1, 0.1, 3, 12]} />
         </mesh>
@@ -1257,34 +1478,7 @@ function Floodlights({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   );
 }
 
-// 연병장 바닥 페인트: 안전선(노랑 사각 테두리) + 센터/자유투 서클 + 코트 라인. 걸어 지나가는 데칼.
-function YardMarkings({ mat }: { mat: ReturnType<typeof useMaterials> }) {
-  const line = (cxp: number, czp: number, w: number, d: number) => (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[cxp, 0, czp]} material={mat.paintY}>
-      <planeGeometry args={[w, d]} />
-    </mesh>
-  );
-  return (
-    <group position={[0, 0.02, 0]}>
-      {/* 노랑 안전선(담장 안쪽 사각 테두리) */}
-      {line(0, -29, 78, 0.25)}
-      {line(0, 5, 78, 0.25)}
-      {line(-39, -12, 0.25, 34)}
-      {line(39, -12, 0.25, 34)}
-      {/* 센터 서클 + 하프라인 */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -12]} material={mat.paint}>
-        <ringGeometry args={[2.4, 2.62, 44]} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -12]} material={mat.paint}>
-        <planeGeometry args={[70, 0.2]} />
-      </mesh>
-      {/* 자유투 서클(농구골대 앞) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[3.5, 0, -12]} material={mat.paint}>
-        <ringGeometry args={[1.7, 1.88, 40]} />
-      </mesh>
-    </group>
-  );
-}
+// (옛 연병장 바닥 페인트 YardMarkings는 제거 — 실제 농구 코트 BasketballCourt가 대체한다.)
 
 // 천장 부착형 조명(짧은 갓 + 발광 돔). ceilingY는 천장 밑면 — 거기에 바짝 붙인다.
 function CeilingLamp({ x, z, ceilingY, mat }: { x: number; z: number; ceilingY: number; mat: ReturnType<typeof useMaterials> }) {
@@ -1357,7 +1551,7 @@ function Decor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
     <group>
       <RazorWire />
       {/* 조명탑은 OBJ light_tower(PrisonProps)로 대체 */}
-      <YardMarkings mat={mat} />
+      {/* 옛 연병장 바닥 페인트(YardMarkings: 노랑 안전선·센터라인·서클)는 제거 — 실제 농구 코트가 대체. */}
       <CorridorLamps mat={mat} />
       <Backdrop mat={mat} />
     </group>
