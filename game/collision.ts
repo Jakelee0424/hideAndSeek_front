@@ -49,6 +49,50 @@ function pushOut(x: number, z: number, b: Box, r: number): [number, number] {
 }
 
 /**
+ * 벽을 등지는 방향(yaw). 벽에 붙는 물건(자물쇠 프리팹)을 어느 쪽으로 돌릴지 정한다.
+ *
+ * 왜 필요한가 — 자물쇠 프리팹은 앞면(게임기 화면·문자 휠·숫자 다이얼·판독창)이 로컬 +Z를
+ * 본다. 그런데 Interactable은 위치만 주고 회전을 안 줘서 **모든 자물쇠가 월드 +Z 한 방향**을
+ * 봤다. 벽 방향이 다른 자물쇠는 뒷면이 플레이어를 향해, 밋밋한 상자만 보인다.
+ *
+ * 규칙: 16방향으로 조금씩 나아가며 처음 막히는 거리를 재고, **가장 빨리 막히는 방향(=벽)의
+ * 반대**를 본다. 구석이면 자연히 방 안쪽을 본다. 좌표를 손으로 넣지 않아도 되고, 맵이
+ * 바뀌어도 따라간다.
+ *
+ * ⚠️ 문은 **닫힌 것으로 친다**(openDoors 없음). 자물쇠는 제 문 바로 옆에 붙어 있으므로,
+ *    열린 문을 통과로 보면 문 쪽이 트인 방향이 돼 자물쇠가 문 밖을 보고 돌아선다.
+ */
+export function wallAwayYaw(x: number, z: number, feetY = 0): number {
+  const DIRS = 16;
+  const STEP = 0.25;
+  const MAX = 2.5;
+  let worst = Infinity; // 가장 짧은 여유(=가장 가까운 벽)
+  let worstYaw = 0;
+  for (let i = 0; i < DIRS; i++) {
+    const a = (i * 2 * Math.PI) / DIRS;
+    const dx = Math.sin(a);
+    const dz = Math.cos(a);
+    let clear = MAX;
+    for (let d = STEP; d <= MAX; d += STEP) {
+      const px = x + dx * d;
+      const pz = z + dz * d;
+      const [rx, rz] = resolveCollision(px, pz, feetY, {});
+      if (Math.abs(rx - px) > 0.02 || Math.abs(rz - pz) > 0.02) {
+        clear = d;
+        break;
+      }
+    }
+    if (clear < worst) {
+      worst = clear;
+      worstYaw = a;
+    }
+  }
+  // 사방이 트여 있으면(마당 한복판 등) 원래대로 둔다 — 등질 벽이 없다.
+  if (worst >= MAX) return 0;
+  return worstYaw + Math.PI;
+}
+
+/**
  * (x,z)를 외곽 경계 + 벽 + 소품 밖으로 밀어낸 위치를 반환. feetY는 발바닥 높이(층 판정).
  * 감방문은 openDoors[id]가 true면(열림) 충돌에서 제외 → 통과.
  */

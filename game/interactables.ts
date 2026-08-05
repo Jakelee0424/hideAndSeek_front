@@ -49,6 +49,9 @@ export interface Interactable {
   hint?: string;
   /** lockbox 전용: 자물쇠 퍼즐. */
   puzzle?: Puzzle;
+  /** lockbox 전용: 프리팹이 바라볼 방향(rad). 없으면 벽을 등지도록 자동 계산한다.
+   *  자동 계산이 어색한 자물쇠만 여기 값을 박아 덮어쓴다. */
+  yaw?: number;
   /** lockbox 전용: 풀면 열리는 감방문 id(예: "cell-A"). */
   opensDoor?: string;
   /** note 전용: 표 형태로 읽는 게시물(내용은 방 코드로 생성). 있으면 힌트 대신 표를 띄운다. */

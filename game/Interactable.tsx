@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { useInteraction, type Interactable as InteractableData } from "./interactables";
 import { usePrisonAssets } from "./prisonAssets";
 import NoteVisual from "./noteVisuals";
+import { wallAwayYaw } from "./collision";
 
 // 근접 시 발광색
 const NEAR_EMISSIVE = "#fde68a";
@@ -301,6 +302,12 @@ export default function Interactable({ data }: { data: InteractableData }) {
   const near = nearId === data.id;
 
   const isLock = data.type === "lockbox";
+  // 프리팹 자물쇠가 바라볼 방향. 데이터에 yaw가 있으면 그걸 쓰고, 없으면 벽을 등지도록
+  // 자동 계산한다(collision.wallAwayYaw). 위치는 모듈 상수라 한 번만 계산된다.
+  const lockYaw = useMemo(
+    () => data.yaw ?? wallAwayYaw(data.position[0], data.position[2]),
+    [data.yaw, data.position],
+  );
   // 자물쇠: 잠김=황동색, 해결=초록. 힌트(note): 종이색.
   const color = solved ? "#22c55e" : isLock ? "#b8860b" : "#e5e7eb";
   const promptH = isLock ? 1.5 : 1.0;
@@ -338,13 +345,20 @@ export default function Interactable({ data }: { data: InteractableData }) {
         ) : (
           // 프리팹이 로드될 때까지는 절차적 자물쇠로 버틴다(맵 전체를 되돌리지 않게 자체 Suspense).
           // 해결되면 초록으로 은은히 빛난다 — 프리팹은 몸통 색을 못 바꾸니 발광으로 알린다.
-          <Suspense fallback={<Padlock color={color} emissive={emissive} glow={glow} />}>
-            <LockProp
-              id={data.id}
-              emissive={solved ? "#22c55e" : emissive}
-              glow={solved ? 0.4 : Math.max(glow, 0.22)}
-            />
-          </Suspense>
+          //
+          // ⚠️ 회전이 필요하다. 프리팹은 앞면(게임기 화면·문자 휠·숫자 다이얼·판독창)이 로컬
+          //    +Z를 보는데, 여기서 위치만 주면 **모든 자물쇠가 월드 +Z 한 방향**을 봐서 벽
+          //    방향이 다른 자물쇠는 뒷면이 플레이어를 향한다(밋밋한 상자만 보인다).
+          //    예전 절차적 자물쇠는 앞뒤가 거의 같아 티가 안 났고, 프리팹으로 바꾼 뒤 드러났다.
+          <group rotation={[0, lockYaw, 0]}>
+            <Suspense fallback={<Padlock color={color} emissive={emissive} glow={glow} />}>
+              <LockProp
+                id={data.id}
+                emissive={solved ? "#22c55e" : emissive}
+                glow={solved ? 0.4 : Math.max(glow, 0.22)}
+              />
+            </Suspense>
+          </group>
         )
       ) : (
         // 힌트 물체 — id별로 성격에 맞는 비주얼(안내문·각인·모래 글씨·배식판 등)
