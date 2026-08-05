@@ -269,14 +269,28 @@ function LockProp({ id, emissive, glow }: { id: string; emissive: string; glow: 
     o.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (!mesh.isMesh) return;
+      const dup = (m: THREE.Material) => {
+        const c = m.clone() as THREE.MeshStandardMaterial;
+        // 원본이 스스로 빛나던 재질인지 여기서 기억해 둔다(아래 하이라이트가 건너뛴다).
+        c.userData.selfLit = !!c.emissive && (c.emissive.r > 0 || c.emissive.g > 0 || c.emissive.b > 0);
+        return c;
+      };
       mesh.material = Array.isArray(mesh.material)
-        ? mesh.material.map((m) => m.clone())
-        : mesh.material.clone();
+        ? mesh.material.map(dup)
+        : dup(mesh.material);
     });
     return o;
   }, [template]);
 
-  // 발광만 갈아 끼운다(색은 프리팹 그대로 둔다 — 통째로 초록칠하면 변형이 무의미해진다).
+  // 근접·해결 하이라이트를 발광으로 얹는다(색은 프리팹 그대로 둔다 — 통째로 초록칠하면
+  // 변형이 무의미해진다).
+  //
+  // ⚠️ **원본이 스스로 빛나던 재질은 건드리지 않는다.** 예전엔 프리팹의 재질을 가리지 않고
+  //    전부 덮어썼는데, 자물쇠 키트 31개 재질 중 원본이 빛내는 건 8개뿐이다 —
+  //    콘솔 화면 4개(#0a2a15) + 색 버튼 4개(제 색). 그 여덟을 호박색으로 덮어 버리니
+  //    되살려 둔 화면 초록·버튼 발광이 런타임에 그대로 지워졌고(그래서 재질 복원 커밋이
+  //    화면에 나타나지 않았다), 나머지 23개까지 통째로 빛나 원본과 다른 물건이 됐다.
+  //    어둠 속 유도용 은은한 발광은 원본이 안 빛내던 재질에만 얹으면 그대로 성립한다.
   useEffect(() => {
     if (!obj) return;
     const color = new THREE.Color(emissive);
@@ -285,7 +299,7 @@ function LockProp({ id, emissive, glow }: { id: string; emissive: string; glow: 
       if (!mesh.isMesh) return;
       const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const m of list as THREE.MeshStandardMaterial[]) {
-        if (!m.emissive) continue;
+        if (!m.emissive || m.userData.selfLit) continue;
         m.emissive.copy(color);
         m.emissiveIntensity = glow;
       }
