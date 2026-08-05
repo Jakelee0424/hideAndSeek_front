@@ -27,8 +27,10 @@ function ViewCone({ range, fovDeg }: { range: number; fovDeg: number }) {
     const fov = THREE.MathUtils.degToRad(fovDeg);
     // 원점(간수 발밑)에서 시작하는 부채꼴. thetaStart를 -fov/2로 잡고 +x→+z 보정.
     const g = new THREE.CircleGeometry(range, 40, -fov / 2, fov);
-    g.rotateX(-Math.PI / 2); // 바닥에 눕힌다
-    g.rotateY(Math.PI / 2); // 부채꼴 중심을 +z(정면)으로
+    g.rotateX(-Math.PI / 2); // 바닥에 눕힌다(중심축은 여전히 +x)
+    // 부채꼴 중심을 +z(정면)으로. ⚠️ 부호를 뒤집으면 등 뒤로 깔린다 —
+    // makeRotationY(θ)는 x축을 (cosθ, 0, -sinθ)로 보내므로 +π/2면 -z(뒤)다.
+    g.rotateY(-Math.PI / 2);
     return g;
   }, [range, fovDeg]);
 
