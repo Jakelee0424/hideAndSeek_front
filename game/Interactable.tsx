@@ -277,10 +277,24 @@ const LOCK_ASSET: Record<string, string> = {
 // "맨 처음(=프리팹이 로드되기 전 폴백)만 정상적인 자물쇠"라고 확인해 줬다 —
 // 즉 자물쇠로 읽히는 쪽은 절차적 Padlock이다. 심사 때 화면에 보이는 게 우선이라 그쪽을 쓴다.
 //
-// ⚠️ 되돌리려면 이 집합을 비우면 된다(프리팹 경로는 그대로 살아 있다).
-//    별관·정문·배수관은 지적 대상이 아니었으므로 프리팹을 계속 쓴다 —
-//    거기서 자물쇠 모양이 퍼즐 방식(숫자 다이얼·콤비네이션)을 알려주는 몫을 한다.
-const PROCEDURAL_LOCKS = new Set(["lock-A", "lock-B", "lock-C", "lock-D"]);
+// 별관 진입 자물쇠(식당·의무실·작업장)도 같은 이유로 뒤따라 옮겼다. 이 셋은 원래
+// **넷 다 같은 `lockNumber` 프리팹**을 공유해 서로 구분되지도 않았으므로, 절차적 자물쇠로
+// 바꿔도 잃는 정보가 없다. 냉장고(`lock-fridge`)는 식당 **안**에 있고 같은 프리팹을 쓰던
+// 물건이라 함께 옮겼다 — 혼자 남으면 같은 방에서 저것만 달라 보인다.
+//
+// ⚠️ 되돌리려면 이 집합에서 빼면 된다(프리팹 경로는 그대로 살아 있다).
+//    정문(`gate-lock`)·배수관(`escape-pipe`)은 **프리팹 유지** — 크고 번듯한 콤비네이션과
+//    녹슨 콤비네이션이라는 생김새 자체가 "여기가 최종 관문"이라는 신호 노릇을 한다.
+const PROCEDURAL_LOCKS = new Set([
+  "lock-A",
+  "lock-B",
+  "lock-C",
+  "lock-D",
+  "lock-cafe",
+  "lock-fridge",
+  "lock-med",
+  "lock-work",
+]);
 
 function LockProp({ id, emissive, glow }: { id: string; emissive: string; glow: number }) {
   const assets = usePrisonAssets();
