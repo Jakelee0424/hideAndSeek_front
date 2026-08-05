@@ -51,6 +51,16 @@ const JUMP_SPEED = 6; // 점프 초기 수직 속도(m/s). 최고 높이 = v²/2
 const GRAVITY = 18; // m/s². 9.8은 게임에선 너무 붕 뜬다
 // 카메라~캐릭터 거리는 이제 휠로 조절한다 → useMouseLook의 dist(기본 DIST_DEFAULT)가 상한이고,
 // 여기 CAM_* 상수들은 그 상한 안에서 가림 보정이 얼마나 당길지를 정한다.
+// ── 서버 권위 복귀(desync 가드) ────────────────────────────────────
+// 내 위치는 예측으로 굴리고 서버엔 "의도"만 보낸다. 예전엔 서버 좌표를 **첫 스냅샷 때 한 번만**
+// 받아쓰고 그 뒤로는 영영 안 봤는데, 권위 서버 게임에서 이건 구멍이다 — 한 번 어긋나면
+// 되돌아올 경로가 없어 **그 판 내내** 서버와 다른 자리에 서 있게 된다.
+// (증상: 판을 다시 시작했는데 지난 판 끝 위치인 연병장에 서 있다.)
+//
+// 그래서 매 프레임 서버 좌표와 비교해 너무 벌어졌으면 되돌린다. 임계값은 정상 예측 오차보다
+// 확실히 커야 한다 — 달리기 10.8 m/s에 서버 input-timeout 0.5s가 겹치면 5.4m까지는 정상 범위다.
+const DESYNC_SNAP_M = 8; // 이보다 벌어지면 서버 자리로 되돌린다
+const DESYNC_HOLD_MS = 400; // 그 상태가 이만큼 이어져야 — 한 프레임 튐에는 반응하지 않는다
 const CAM_LOOK_H = 1.4; // 시선 높이(캐릭터 머리 부근)
 const CAM_MARGIN = 0.25; // 가림 보정 시 벽 앞 여유(near plane이 벽을 뚫고 보이지 않게)
 const CAM_MIN = 0.4; // 카메라 최소 거리(등 뒤가 바로 벽이면 준1인칭까지 당긴다)
@@ -91,6 +101,7 @@ export default function LocalPlayer() {
   const emoteUntil = useRef(0); // 이 시각까지 말풍선 유지
   const [emote, setEmote] = useState<EmoteId | null>(null); // 내 머리 위 감정표현
   const spawned = useRef(false); // 첫 서버 스냅샷 때 배정된 감방 위치로 스냅
+  const desyncSince = useRef(0); // 서버와 벌어지기 시작한 시각(초, clock 기준). 0이면 정상
   // 프론트 단독 실행 시 초기 위치: 랜덤 감방 안. 서버 연결 시 첫 스냅샷이 덮어쓴다.
   const initPos = useMemo(() => {
     const [x, z] = randomCellSpawn();
@@ -103,6 +114,15 @@ export default function LocalPlayer() {
     const cell = cellIdAt(initPos[0], initPos[2]);
     if (cell) useGameStore.getState().setMyCell(cell);
   }, [initPos]);
+
+  // 판이 시작되면 서버가 세운 자리로 **다시** 스냅한다. desync 가드는 크게 벌어진 것만 잡으므로
+  // 그 아래로 어긋난 채 새 판을 시작하는 경우(이 화면이 지난 판에서 그대로 살아 있을 때)를 여기서 막는다.
+  // phase는 dirty 규약이라 전환되는 순간에만 실려 온다 — 이 effect도 그때만 탄다.
+  const phase = useGameStore((s) => s.phase);
+  useEffect(() => {
+    if (phase === "PLAY") spawned.current = false;
+  }, [phase]);
+
   const [anim, setAnim] = useState<AnimState>("idle");
 
   // E키: 근접 오브젝트 상호작용(자물쇠/힌트 열기). 자물쇠를 풀면 그 방 감방문이 열린다.
@@ -147,19 +167,42 @@ export default function LocalPlayer() {
     const g = ref.current;
     if (!g) return;
 
-    // 서버가 배정한 감방으로 최초 1회 스냅(예측은 그 뒤 이어받는다).
-    if (!spawned.current) {
+    // 서버 권위 반영. 첫 스냅샷에서 배정 감방으로 스냅하고(예측은 그 뒤 이어받는다),
+    // 그 뒤로도 너무 벌어지면 되돌린다 — 예전엔 첫 1회뿐이라 한 번 어긋나면 영영 어긋났다.
+    {
       const myId = useGameStore.getState().myId;
+      // 최신 표본으로 본다(보간 지연을 빼면 내 예측이 늘 그만큼 앞서 보여 오차가 부풀려진다).
       const t = myId ? worldState.sample(myId, performance.now()) : null;
       if (t) {
-        g.position.x = t.x;
-        g.position.y = t.y;
-        g.position.z = t.z;
-        g.rotation.y = t.rotationY;
-        spawned.current = true;
-        // 서버가 배정한 감방으로 내 감방 기록을 확정한다(로컬 스폰 추정을 덮는다).
-        const cell = cellIdAt(t.x, t.z);
-        if (cell) useGameStore.getState().setMyCell(cell);
+        let snap = false;
+        if (!spawned.current) {
+          spawned.current = true;
+          snap = true;
+        } else {
+          const dx = g.position.x - t.x;
+          const dz = g.position.z - t.z;
+          if (dx * dx + dz * dz > DESYNC_SNAP_M * DESYNC_SNAP_M) {
+            // 벌어진 상태가 이어질 때만 되돌린다. 보정 경로가 없어 한 번 벌어지면
+            // 저절로 붙지 않으므로, 이 유예는 순간적인 튐만 걸러 내고 진짜 어긋남은 통과시킨다.
+            if (desyncSince.current === 0) desyncSince.current = state.clock.elapsedTime;
+            else if ((state.clock.elapsedTime - desyncSince.current) * 1000 >= DESYNC_HOLD_MS) snap = true;
+          } else {
+            desyncSince.current = 0;
+          }
+        }
+        if (snap) {
+          desyncSince.current = 0;
+          g.position.x = t.x;
+          g.position.y = t.y;
+          g.position.z = t.z;
+          g.rotation.y = t.rotationY;
+          vy.current = 0;
+          kx.current = 0;
+          kz.current = 0;
+          // 서버가 배정한 감방으로 내 감방 기록을 확정한다(로컬 스폰 추정을 덮는다).
+          const cell = cellIdAt(t.x, t.z);
+          if (cell) useGameStore.getState().setMyCell(cell);
+        }
       }
     }
 
