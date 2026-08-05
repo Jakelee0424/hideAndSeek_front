@@ -34,7 +34,13 @@ function useObj(url: string): THREE.Group {
  */
 const ASSET_MAT: Record<
   string,
-  { metalness: number; emissive?: string; emissiveIntensity?: number }
+  {
+    metalness: number;
+    emissive?: string;
+    emissiveIntensity?: number;
+    /** 원본이 발광색으로 **제 색(Kd)** 을 쓴 재질(색 버튼처럼 색마다 다른 경우). */
+    emissiveSelf?: boolean;
+  }
 > = {
   basin_hollow: { metalness: 0.35 },
   basket: { metalness: 0 },
@@ -44,8 +50,11 @@ const ASSET_MAT: Record<
   cab_inner: { metalness: 0.2 },
   cap: { metalness: 0.1 },
   chainlink_mesh: { metalness: 0.4 },
+  // 색 순서판 버튼: 원본은 제 색으로 은은히 빛난다(mk(...,{e: c, ei: 0.25})).
+  color_btn: { metalness: 0.1, emissiveSelf: true, emissiveIntensity: 0.25 },
   concrete: { metalness: 0 },
   concreteD: { metalness: 0 },
+  console_body: { metalness: 0.1 },
   console_screen: { metalness: 0, emissive: "#0a2a15", emissiveIntensity: 0.5 },
   curtain: { metalness: 0 },
   curtain_hem: { metalness: 0 },
@@ -83,6 +92,13 @@ const ASSET_MAT: Record<
   rubber: { metalness: 0.1 },
   rust: { metalness: 0.2 },
   rustSteel: { metalness: 0.3 },
+  // 콤비네이션 자물쇠(정문·배수관)의 숫자 휠과 판독창. 이름에 metal 계열 낱말이 없어
+  // 이름 추측 폴백이 metalness 0.1(정문·배수관 휠)·0(판독창 — glass로 분류)을 주고 있었다.
+  // 원본은 휠 0.35, 판독창 0.4다 — 금속감이 죽어 플라스틱처럼 보이던 원인.
+  front_gate_lock_wheel: { metalness: 0.35 },
+  front_gate_lock_window: { metalness: 0.4 },
+  drain_lock_wheel: { metalness: 0.35 },
+  drain_lock_window: { metalness: 0.4 },
   searchlight_glow: { metalness: 0, emissive: "#ffe487", emissiveIntensity: 1 },
   skin: { metalness: 0 },
   sky_beyond: { metalness: 0, emissive: "#4a6b88", emissiveIntensity: 0.25 },
@@ -251,6 +267,54 @@ const BACKDROP_WALL = /__(shelf_wall|mt_wall|window_wall|graffiti_wall)$/;
 // (자물쇠마다 이 훅을 부르는데, 캐시가 없으면 자물쇠 수만큼 되풀이된다).
 const prefabCache = new WeakMap<THREE.Group, Record<string, THREE.Group>>();
 
+// ── 멀티머티리얼 메시가 OBJ 왕복에서 잃어버린 면 재질 ─────────────────────────
+// OBJExporter는 재질 **배열**을 가진 메시를 첫 재질 하나로 납작하게 내보낸다. 그래서
+// 원본이 면마다 다른 재질을 준 둘이 통째로 엉뚱한 재질이 됐다(MTL에 이름은 남았는데
+// 그 이름을 쓰는 면이 OBJ에 하나도 없다 — 실측으로 확인).
+//   · number_dial  : [steelD, 숫자판, steelD] → 전부 steelD = 숫자 없는 민무늬 원판
+//   · console_screen: [black×4, 화면, black]  → 전부 black = 꺼진 검은 화면
+// 메시 이름(`<프리팹>__<부품>`)은 살아 있고 UV도 실려 있으므로, 부품 이름으로 원본
+// 재질을 다시 만들어 씌운다. 값은 prison-locks.html 원본 그대로다.
+// ⚠️ 한 메시에 통째로 씌우므로 원본이 다른 재질을 줬던 면(원판 옆면·화면 뒷면)까지
+//    같은 재질이 된다. 둘 다 정면에서 안 보이는 얇은 면이라 감수한다.
+const LOST_FACE_MAT: Record<string, () => THREE.MeshStandardMaterial> = {
+  number_dial: () =>
+    new THREE.MeshStandardMaterial({
+      map: assetTexture("number_dial_face")?.map ?? null,
+      roughness: 0.4,
+      metalness: 0.3,
+      flatShading: true,
+      name: "number_dial_face",
+    }),
+  console_screen: () =>
+    new THREE.MeshStandardMaterial({
+      map: assetTexture("console_screen")?.map ?? null,
+      emissive: new THREE.Color("#0a2a15"),
+      emissiveIntensity: 0.5,
+      roughness: 0.3,
+      metalness: 0,
+      flatShading: true,
+      name: "console_screen",
+    }),
+};
+
+// 부품 이름별로 한 번만 만들어 공유한다(감방 자물쇠 넷이 같은 화면을 쓴다).
+const lostCache = new Map<string, THREE.MeshStandardMaterial>();
+function lostFaceMaterial(meshName: string): THREE.MeshStandardMaterial | null {
+  const part = /__([a-z_]+)$/.exec(meshName)?.[1];
+  const make = part ? LOST_FACE_MAT[part] : undefined;
+  if (!make) return null;
+  // 캔버스가 없는 환경(SSR)에서는 맵 없는 재질이 만들어진다 — 그걸 캐시에 굳히면
+  // 브라우저로 넘어와서도 영영 백지로 남는다. 그럴 땐 아예 손대지 않는다.
+  if (typeof document === "undefined") return null;
+  let hit = lostCache.get(part!);
+  if (!hit) {
+    hit = make();
+    lostCache.set(part!, hit);
+  }
+  return hit;
+}
+
 export function usePrisonAssets(): Record<string, THREE.Group> {
   const kit = useObj("/models/prison-escape-assets.obj");
   const t1 = useObj("/models/prison-tier1.obj");
@@ -300,7 +364,11 @@ export function usePrisonAssets(): Record<string, THREE.Group> {
         std.opacity = p.glass ? Math.min(opacity, 0.5) : opacity;
       }
       // 발광: 팔레트에 원본 색·세기가 있으면 그대로, 없으면 이름 판정으로 본색을 얹는다.
-      if (kit?.emissive) {
+      if (kit?.emissiveSelf) {
+        // 색마다 발광색이 다른 재질(색 순서판 버튼) — 원본은 제 Kd를 그대로 발광색으로 쓴다.
+        std.emissive = color.clone();
+        std.emissiveIntensity = kit.emissiveIntensity ?? 0.25;
+      } else if (kit?.emissive) {
         std.emissive = new THREE.Color(kit.emissive);
         std.emissiveIntensity = kit.emissiveIntensity ?? 0.8;
       } else if (p.emissive) {
@@ -315,6 +383,16 @@ export function usePrisonAssets(): Record<string, THREE.Group> {
         std.map = restored.map;
         if (restored.transparent) std.transparent = true;
         if (restored.doubleSide) std.side = THREE.DoubleSide;
+        // 콤비네이션 자물쇠는 휠 넷이 같은 숫자띠를 쓰되 각자 다른 숫자를 앞에 둔다
+        // (원본 comboLock: `wm.map.offset.x = i * 0.1`). 공유 텍스처를 그대로 밀면 네 휠이
+        // 함께 돌아가므로 이 재질만 복제해서 민다 — 캔버스(이미지)는 복제본끼리 공유한다.
+        const wheel = /_wheel_(\d+)$/.exec(name);
+        if (wheel) {
+          const m = restored.map.clone();
+          m.needsUpdate = true;
+          m.offset.x = Number(wheel[1]) * 0.1;
+          std.map = m;
+        }
       }
       cache.set(name, std);
       return std;
@@ -330,6 +408,8 @@ export function usePrisonAssets(): Record<string, THREE.Group> {
         if (!def.prefixes.some((p) => o.name === p || o.name.startsWith(p))) return;
         const m = mesh.clone();
         m.material = Array.isArray(mesh.material) ? mesh.material.map(toStd) : toStd(mesh.material);
+        const lost = lostFaceMaterial(o.name);
+        if (lost) m.material = lost;
         m.castShadow = true;
         m.receiveShadow = true;
         g.add(m);

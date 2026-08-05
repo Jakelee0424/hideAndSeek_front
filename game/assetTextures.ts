@@ -213,6 +213,71 @@ const pegboard: Draw = (x, w, h) => {
   x.fill(); // 없어진 렌치
 };
 
+// ── prison-locks.html ────────────────────────────────────────────
+// 자물쇠는 **글자·숫자가 전부 텍스처에 있다.** 맵이 빠지면 문자 휠도 숫자 다이얼도
+// 콤비네이션 휠도 전부 민무늬 원통이 된다 — 원본과 가장 크게 벌어지던 지점이다.
+
+// 원본 dialTex(chars, bg, fg). 1024×128 띠에 글자를 균등 분할해 찍고 칸 경계를 긋는다.
+// 원통을 감싸므로 map.offset.x로 어느 글자가 앞에 오는지 정해진다(콤비네이션 휠 넷이
+// 각자 다른 숫자를 보이는 원리 — 적용은 prisonAssets의 toStd가 한다).
+const dial =
+  (chars: string, bg: string, fg: string): Draw =>
+  (x, w, h) => {
+    x.fillStyle = bg;
+    x.fillRect(0, 0, w, h);
+    x.fillStyle = fg;
+    x.font = "bold 78px Arial";
+    x.textAlign = "center";
+    x.textBaseline = "middle";
+    const n = chars.length;
+    for (let i = 0; i < n; i++) x.fillText(chars[i], ((i + 0.5) * w) / n, h / 2);
+    x.strokeStyle = "rgba(0,0,0,0.3)";
+    x.lineWidth = 2;
+    for (let i = 0; i < n; i++) {
+      x.beginPath();
+      x.moveTo((i * w) / n, 0);
+      x.lineTo((i * w) / n, h);
+      x.stroke();
+    }
+  };
+
+// 의무실·식당·작업장 자물쇠의 회전식 숫자판(원판을 정면에서 본다).
+const numberDial: Draw = (x, w, h) => {
+  x.fillStyle = "#c2ccd6";
+  x.fillRect(0, 0, w, h);
+  x.strokeStyle = "#2a2d33";
+  x.lineWidth = 4;
+  x.beginPath();
+  x.arc(w / 2, h / 2, w / 2 - 20, 0, 7);
+  x.stroke();
+  x.fillStyle = "#2a2d33";
+  x.font = "bold 44px Arial";
+  x.textAlign = "center";
+  x.textBaseline = "middle";
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * 7 - Math.PI / 2;
+    const r = w / 2 - 58;
+    x.fillText(String(i), w / 2 + Math.cos(a) * r, h / 2 + Math.sin(a) * r);
+  }
+  x.fillStyle = "#d24545"; // 기준 표시(빨간 삼각)
+  x.beginPath();
+  x.moveTo(w / 2, 40);
+  x.lineTo(w / 2 - 14, 70);
+  x.lineTo(w / 2 + 14, 70);
+  x.fill();
+};
+
+// 감방 자물쇠에 박힌 압수된 휴대용 게임기 화면(초록 줄). 원본도 매 로드마다 줄 길이가
+// 무작위다 — 한 번 구워 재사용하므로 판마다 같은 화면이 나온다.
+const consoleScreen: Draw = (x, w, h) => {
+  x.fillStyle = "#0d1b12";
+  x.fillRect(0, 0, w, h);
+  x.fillStyle = "#3fae5a";
+  for (let i = 0; i < 6; i++) x.fillRect(30, 30 + i * 24, 40 + Math.random() * 160, 10);
+  x.fillStyle = "#57e07a";
+  x.fillRect(30, 30, 60, 10);
+};
+
 const TEXTURES: Record<string, TexDef> = {
   graffiti_decal: { w: 680, h: 500, draw: graffiti, transparent: true },
   mirror_smudge: { w: 256, h: 360, draw: mirrorSmudge, transparent: true },
@@ -226,6 +291,14 @@ const TEXTURES: Record<string, TexDef> = {
   },
   warning_sign_face: { w: 300, h: 220, draw: warningSign },
   pegboard_face: { w: 600, h: 400, draw: pegboard },
+
+  // 자물쇠(prison-locks). 이름은 MTL 재질명과 같아야 한다 — `_0`~`_3` 꼬리는 baseName이 떼어
+  // 여기 키와 맞춘다(콤비네이션 휠 넷이 한 정의를 공유하고 offset으로 갈린다).
+  letter_wheel_face: { w: 1024, h: 128, draw: dial("ABCDEFGH", "#2a2d33", "#e7ebef") },
+  front_gate_lock_wheel: { w: 1024, h: 128, draw: dial("0123456789", "#2a2d33", "#f2f5f8") },
+  drain_lock_wheel: { w: 1024, h: 128, draw: dial("0123456789", "#4a4038", "#c9b99a") }, // 녹슨 배수관용 색
+  number_dial_face: { w: 512, h: 512, draw: numberDial },
+  console_screen: { w: 256, h: 200, draw: consoleScreen },
 };
 
 // 재질 이름은 여러 프리팹에서 되풀이된다(감방 4개가 같은 낙서를 쓴다) — 한 번만 그린다.
