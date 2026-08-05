@@ -28,8 +28,8 @@ export type NoteKind =
 
 // id → 비주얼 종류. 매핑 없으면 기본 안내문.
 const NOTE_KIND: Record<string, NoteKind> = {
-  "note-laundry1": "notice", // 세탁 안내문
-  "note-med1": "label", // 약장 라벨
+  // (note-laundry1·note-med1은 2026-08-05 제거 — 화장실에 있던 규칙 전용 쪽지였다.
+  //  "notice"·"label" 비주얼은 다른 쪽지가 쓸 수 있게 남겨 둔다.)
   "note-cafe-order": "poster", // 배식 순서표(벽에 세로로)
   "note-cafe-menu": "poster", // 오늘의 식단표(벽에 세로로)
   "note-cafe-tray": "tray", // 배식대 위 식판(금속 식판 비주얼)

@@ -126,9 +126,10 @@ export const INTERACTABLES: Interactable[] = [
   // ⚠️ 노선도는 **밸브와 따로 떨어진 벽 게시물**이다(2026-07-31 사용자 지시. 처음엔 밸브 창
   //    안에 같이 그렸다). 둘의 거리는 3.2m로 사거리(2.2m) 밖이라 한 자리에서 둘 다 열 수 없다
   //    — 도면을 외우거나 둘이 나눠 맡아야 한다. 더 멀리 두면 네 방향을 외우느라 왕복만 는다.
-  // 아래 쪽지 둘은 답이 아니라 **작동 방식**만 알려준다.
+  // (규칙만 적힌 화장실 쪽지 note-laundry1은 2026-08-05 사용자 지시로 제거. 같은 말이 아래
+  //  lock-laundry의 hint에 이미 있고, 설명하는 자물쇠에서 25m 넘게 떨어진 화장실에 있어
+  //  "세탁 안내문인데 세탁기가 없는 방"이 됐다. 서버 봇 POI에서도 함께 뺐다.)
   { id: "note-pipe-map", type: "note", position: [27, 1.5, 19.6], label: "배관 노선도", board: "pipe-map" },
-  { id: "note-laundry1", type: "note", position: [2, 0.6, 24.5], label: "세탁 안내문", hint: "배관 밸브는 노선도에서 관이 이어지는 쪽으로 돌려라. 넷을 다 맞춘 뒤에야 물이 흐른다 — 어느 밸브가 어긋났는지는 알려주지 않으니 노선도를 정확히 읽어라." },
   {
     id: "lock-laundry",
     type: "lockbox",
@@ -221,8 +222,8 @@ export const INTERACTABLES: Interactable[] = [
   // 혈액 검사 키트는 두 침대 사이 "수혈 가능 여부"만 알려준다(횟수는 infirmaryPlan.BLOOD_CHARGES).
   // ⚠️ 난이도 손잡이는 infirmaryPlan.REVEALED_BEDS — 혈액형을 그대로 알려 주는 확정 단서 수다.
   // 배치·정답은 방 코드로 매판 랜덤(infirmaryPlan.bloodPlan). 옛 고정 코드 "451"은 폐기했다.
-  // (쪽지 둘은 답이 아니라 규칙만 알려준다. 좌표는 그대로 — 서버 봇 POI와 짝이다.)
-  { id: "note-med1", type: "note", position: [3, 0.6, 22], label: "약장 라벨", hint: "의무실 금고는 침대 여섯의 혈액형 차트를 통째로 받는다. 같은 혈액형이 여럿 누워 있을 수 있다고 적혀 있다." },
+  // (규칙만 적힌 화장실 쪽지 note-med1은 2026-08-05 사용자 지시로 제거 — 같은 말이 아래
+  //  lock-med의 hint에 있고, 정작 화장실엔 약장이 없어 라벨만 떠 있었다. 서버 POI도 동일.)
   {
     id: "lock-med",
     type: "lockbox",
