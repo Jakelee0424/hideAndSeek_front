@@ -16,6 +16,20 @@ const NEAR_EMISSIVE = "#fde68a";
 const IDLE_EMISSIVE = "#ffcf6a";
 const IDLE_I = 0.3;
 
+// ── 프리팹 자물쇠 전용 발광 세기 ────────────────────────────────────
+// 절차적으로 그린 물건(쪽지·도구함·밸브 등)은 위 IDLE_I를 그대로 쓴다. 하지만 OBJ 프리팹
+// 자물쇠는 원본 키트의 재질이 그대로 보여야 하는 물건이라 덧칠을 최소로 둔다 —
+// 예전엔 평상시 0.3·근접 0.6을 **모든 재질**에 씌워 자물쇠가 통째로 노랗게 물들었다
+// (사용자가 네 번 지적한 "원본과 다르게 보인다"의 직접 원인).
+// 자물쇠는 다가가서 들여다보는 물건이라 근접값이 화면을 지배한다.
+// 근접 신호는 [E] 라벨이 이미 하고 있으므로 발광까지 겹칠 필요가 없다.
+//
+// ⚠️ 여기가 손잡이다. 너무 어두워 못 찾겠다면 PREFAB_IDLE_I를 올리고,
+//    아직도 노랗다면 세 값을 다 0으로 두면 원본 그대로가 된다. (옛 값: 0.3 / 0.6 / 0.4)
+const PREFAB_IDLE_I = 0.05; // 평상시 — 어둠 속에서 윤곽만 겨우 잡히는 정도
+const PREFAB_NEAR_I = 0.18; // 근접 — 옅게만
+const PREFAB_SOLVED_I = 0.35; // 해결 — 초록(프리팹은 몸통 색을 못 바꿔 발광으로 알린다)
+
 // ── 자물쇠(padlock): 몸통 + U자 고리 + 열쇠구멍 ──────────────────
 function Padlock({ color, emissive, glow }: { color: string; emissive: string; glow: number }) {
   const emissiveIntensity = glow;
@@ -368,8 +382,8 @@ export default function Interactable({ data }: { data: InteractableData }) {
             <Suspense fallback={<Padlock color={color} emissive={emissive} glow={glow} />}>
               <LockProp
                 id={data.id}
-                emissive={solved ? "#22c55e" : emissive}
-                glow={solved ? 0.4 : Math.max(glow, 0.22)}
+                emissive={solved ? "#22c55e" : NEAR_EMISSIVE}
+                glow={solved ? PREFAB_SOLVED_I : near ? PREFAB_NEAR_I : PREFAB_IDLE_I}
               />
             </Suspense>
           </group>
