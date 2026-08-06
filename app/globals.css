@@ -24,3 +24,122 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 로비 타이틀 = 고장나기 직전의 낡은 네온 간판. 어둑하게 빛나다 불규칙하게 파바박 꺼지고,
+   가끔 접점이 튀듯 하얀 스파크가 번쩍인다. --neon = 관 색, --neon-core = 글자 코어 색.
+   스팬마다 색·animation-delay를 달리 줘 각자 따로 논다. */
+.neon {
+  color: var(--neon-core, #fff);
+  text-shadow:
+    0 0 4px #fff,
+    0 0 10px #fff,
+    0 0 20px var(--neon, #38bdf8),
+    0 0 42px var(--neon, #38bdf8),
+    0 0 70px var(--neon, #38bdf8);
+  /* 스타일은 그대로 두고 전체 밝기만 낮춘다(글로우·코어·스파크 모두 은은하게). */
+  filter: brightness(0.62);
+  animation: neonFlicker 5s linear infinite;
+}
+@keyframes neonFlicker {
+  /* 켜짐(ON) — 대부분의 시간 */
+  0%,
+  7.6%,
+  8.9%,
+  40%,
+  40.9%,
+  41.8%,
+  71.6%,
+  73.1%,
+  100% {
+    opacity: 1;
+    text-shadow:
+      0 0 4px #fff,
+      0 0 10px #fff,
+      0 0 20px var(--neon, #38bdf8),
+      0 0 42px var(--neon, #38bdf8),
+      0 0 70px var(--neon, #38bdf8);
+  }
+  /* 순간 꺼짐(OFF) — 거의 사라진다. 스파크 앞뒤를 감싸 확 튀어 보이게 한다. */
+  7.9%,
+  8.5%,
+  40.5%,
+  41.3%,
+  71.9%,
+  72.7% {
+    opacity: 0.18;
+    text-shadow: 0 0 3px var(--neon, #38bdf8);
+  }
+  /* 스파크(SPARK) — 접점이 튀듯 새하얗게 번쩍(어둠 사이에서 터진다) */
+  8.1%,
+  72.2% {
+    opacity: 1;
+    text-shadow:
+      0 0 2px #fff,
+      0 0 6px #fff,
+      0 0 14px #fff,
+      0 0 26px #fff,
+      0 0 50px #fff,
+      0 0 90px var(--neon, #38bdf8);
+  }
+}
+/* 모션 최소화 설정이면 깜빡임은 끄고 은은한 글로우만 유지한다. */
+@media (prefers-reduced-motion: reduce) {
+  .neon {
+    animation: none;
+  }
+}
+
+/* 접점에서 튀는 스파크 입자. 네온의 SPARK 순간(≈8%·72%)에 맞춰 짧게 번쩍 튀어나간다. */
+.spark {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow:
+    0 0 6px 1px rgba(255, 210, 122, 0.9),
+    0 0 3px #fff;
+  opacity: 0;
+  animation: sparkFly 5s linear infinite;
+}
+@keyframes sparkFly {
+  0%,
+  7.6% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+  8.1% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  11.5% {
+    opacity: 0;
+    transform: translate(var(--sx, 12px), var(--sy, -14px)) scale(0.2);
+  }
+  71.8% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+  72.2% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  75.5% {
+    opacity: 0;
+    transform: translate(var(--sx2, -10px), var(--sy2, 12px)) scale(0.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spark {
+    animation: none;
+  }
+}
+
+/* 가장자리를 어둑하게 눌러 감옥 같은 저조도 분위기를 만든다. */
+.jail-vignette {
+  background: radial-gradient(120% 90% at 50% 38%, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, 0.62) 100%);
+}

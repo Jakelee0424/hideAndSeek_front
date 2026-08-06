@@ -15,7 +15,7 @@ import HudPanel from "./HudPanel";
 /** 상호작용 오브젝트가 아닌 예약 id. */
 export const STORY_ID = "story";
 
-interface Line {
+export interface Line {
   text: string;
   boldLen?: number; // 줄 앞 몇 글자를 볼드 강조
   final?: boolean; // 마지막 한 방(호박색)
@@ -24,7 +24,8 @@ interface Line {
 // ⚠️ 텍스트는 정본 나레이션이다 — 손대지 말 것(엔딩이 "자정"·"가면을 쓴 자"라는 말을 여기에 기댄다).
 // ⚠️ 탈출구의 생김새(정문/배수관)는 말하지 않는다 — 맵이 바뀌면 여기부터 어긋난다.
 // day: 오늘 요일(식당 배식 순서표 퍼즐용). 방 시드로 정해져 방마다 다르다.
-function buildLines(day: string): Line[] {
+// ⚠️ 대기방(WaitingRoom)의 나레이션 스크롤도 이 함수를 그대로 쓴다 — 정본은 하나여야 한다.
+export function buildLines(day: string): Line[] {
   return [
     { text: "소등. 복도의 불이 하나씩 꺼진다.", boldLen: 3 },
     { text: "자정까지 시간이 있다. 감방을 나가라 — 자물쇠엔 압수된 게임기가 박혀 있다." },

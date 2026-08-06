@@ -1,11 +1,15 @@
 "use client";
 // 대기방: 입장한 플레이어 목록 + 준비 토글 + (방장) 게임 시작.
 // 백엔드 연결 전에도 본인은 목록에 표시된다(store에 시드됨).
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/store/gameStore";
 import { joinRoom, leaveRoom } from "@/net/session";
 import { sendReady, sendStart } from "@/net/stompClient";
+import { buildLines } from "./StoryPanel";
+import { cafeteriaPlan, DAYS } from "@/game/cafeteriaPlan";
+import LobbyMap from "./LobbyMap";
+import NarrationScroll from "./NarrationScroll";
 
 const STATUS_LABEL: Record<string, string> = {
   idle: "연결 끊김",
@@ -67,6 +71,9 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
   const memberIds = rosterOrder.length ? rosterOrder : playerIds;
   const allReady = memberIds.length > 0 && memberIds.every((id) => readys[id]);
 
+  // 오른편 나레이션. 정본은 StoryPanel.buildLines 하나 — 요일은 방 시드로 정해진다.
+  const narration = useMemo(() => buildLines(DAYS[cafeteriaPlan(roomId).today]), [roomId]);
+
   // 시작은 서버가 확정한다. 여기서 화면을 옮기지 않는다 — 누른 사람만 넘어가면 나머지는
   // 대기방에 남는다(예전 동작). 아래 useEffect가 단계 전환을 보고 전원을 함께 옮긴다.
   function start() {
@@ -88,8 +95,12 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
   if (!myNick) return null;
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-[#0b0f17] p-6 text-slate-100">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-8 shadow-xl backdrop-blur">
+    <main className="min-h-dvh bg-[#0b0f17] p-4 text-slate-100 sm:p-6">
+      {/* 화면을 좌우 절반으로: 왼쪽 절반 중앙에 대기방 카드, 오른쪽 절반 중앙에 미니맵 카드. */}
+      <div className="grid min-h-[calc(100dvh-2rem)] w-full grid-cols-1 gap-6 lg:grid-cols-2 sm:min-h-[calc(100dvh-3rem)]">
+        {/* 왼쪽 절반: 준비/시작 등 대기방 카드 — 이 영역의 오른쪽 끝(가운데 경계)에 붙인다 */}
+        <div className="flex items-center justify-center lg:justify-end">
+        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-8 shadow-xl backdrop-blur">
         <div className="mb-6 flex items-center justify-between">
           <div>
             <p className="text-xs text-slate-400">방 코드</p>
@@ -172,6 +183,16 @@ export default function WaitingRoom({ roomId }: { roomId: string }) {
         >
           나가기
         </button>
+        </div>
+        </div>
+
+        {/* 오른쪽 절반: 미니맵 + 정문·배수관 물음표 + 나레이션 (영역 중앙, 배경 없음) */}
+        <div className="flex items-center justify-center">
+          <div className="flex w-full max-w-3xl flex-col gap-4">
+            <LobbyMap />
+            <NarrationScroll lines={narration} />
+          </div>
+        </div>
       </div>
     </main>
   );

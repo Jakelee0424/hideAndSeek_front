@@ -3,7 +3,7 @@
 //
 // 대기열은 이 화면에 오기 전(QueueBoundary)에 이미 통과했다. 여기서는 그때 배정받은
 // playerId/token을 그대로 써야 한다 — 새 id를 만들면 잡아둔 슬롯과 어긋나 입장이 거부된다.
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { joinRoom } from "@/net/session";
 import SoundToggle from "./SoundToggle";
@@ -26,6 +26,15 @@ function randomCode() {
 function randomPrisonerNick() {
   return `죄수 ${1000 + Math.floor(Math.random() * 9000)}`;
 }
+
+// 간판 접점에서 튀는 스파크 입자들(콜론 부근). 방향(--sx/--sy)·딜레이를 조금씩 달리 줘 흩어진다.
+const SPARKS: CSSProperties[] = [
+  { left: "49%", top: "30%", "--sx": "16px", "--sy": "-18px", "--sx2": "-12px", "--sy2": "14px", animationDelay: "0s" } as CSSProperties,
+  { left: "51.5%", top: "36%", "--sx": "20px", "--sy": "12px", "--sx2": "14px", "--sy2": "-16px", animationDelay: "0.05s" } as CSSProperties,
+  { left: "47.5%", top: "38%", "--sx": "-16px", "--sy": "14px", "--sx2": "-18px", "--sy2": "-10px", animationDelay: "0.03s" } as CSSProperties,
+  { left: "52.5%", top: "29%", "--sx": "14px", "--sy": "-14px", "--sx2": "16px", "--sy2": "12px", animationDelay: "0.09s" } as CSSProperties,
+  { left: "50%", top: "34%", "--sx": "-20px", "--sy": "-8px", "--sx2": "10px", "--sy2": "18px", animationDelay: "0.12s" } as CSSProperties,
+];
 
 export default function Lobby({
   playerId,
@@ -52,31 +61,51 @@ export default function Lobby({
   }
 
   return (
-    <main className="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-[#0b0f17] p-6 text-slate-100">
+    <main className="relative flex min-h-dvh flex-col items-center justify-center gap-8 overflow-hidden bg-[#080a10] p-6 text-slate-100">
+      {/* 어둑한 비네트 (내용 뒤에 깔린다) */}
+      <div className="jail-vignette pointer-events-none absolute inset-0 z-0" aria-hidden />
+
       {/* 배경음이 처음 흐르는 화면이라, 끄는 자리도 여기서부터 있어야 한다 */}
-      <SoundToggle className="absolute right-4 top-4" />
+      <SoundToggle className="absolute right-4 top-4 z-10" />
 
       {/*
         게임 제목. 이 화면에서 가장 큰 글자여야 한다 — 시연에서 심사위원이 처음 보는 글자다.
         ⚠️ flex-wrap이 필수다: 한 줄 고정으로 두면 좁은 화면에서 "Escape"가 잘린다.
            좁으면 ": Escape"가 아랫줄로 내려가고, sm 이상에서 한 줄로 붙는다.
       */}
-      <header className="text-center">
+      <header className="relative z-10 text-center">
         <h1 className="flex flex-wrap items-baseline justify-center gap-x-3 text-3xl font-black tracking-tight sm:text-5xl lg:text-6xl">
-          <span className="[text-shadow:0_0_30px_rgba(148,163,184,0.35)]">
+          {/* 네온 사인: 시야 밖으로 = 차가운 청록 관, Escape = 앰버 관. 깜빡임 타이밍을 어긋나게. */}
+          <span
+            className="neon"
+            style={
+              { "--neon": "#38bdf8", "--neon-core": "#eaf6ff", animationDelay: "0s" } as CSSProperties
+            }
+          >
             시야 밖으로
           </span>
           <span className="font-light text-slate-600">:</span>
-          <span className="text-amber-300 [text-shadow:0_0_30px_rgba(252,211,77,0.45)]">
+          <span
+            className="neon"
+            style={
+              { "--neon": "#f59e0b", "--neon-core": "#fff3cf", animationDelay: "2.3s" } as CSSProperties
+            }
+          >
             Escape
           </span>
         </h1>
+        {/* 접점에서 튀는 스파크 */}
+        <div className="pointer-events-none absolute inset-0" aria-hidden>
+          {SPARKS.map((s, i) => (
+            <span key={i} className="spark" style={s} />
+          ))}
+        </div>
         <p className="mt-3 text-sm text-slate-400">
           실시간 멀티플레이 3D 협동 방탈출
         </p>
       </header>
 
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-8 shadow-xl backdrop-blur">
+      <div className="relative z-10 w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-8 shadow-xl backdrop-blur">
         <label className="mb-1 block text-xs font-medium text-slate-400">
           수감 번호
         </label>
