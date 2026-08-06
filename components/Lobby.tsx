@@ -52,16 +52,31 @@ export default function Lobby({
   }
 
   return (
-    <main className="relative flex min-h-dvh items-center justify-center bg-[#0b0f17] p-6 text-slate-100">
+    <main className="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-[#0b0f17] p-6 text-slate-100">
       {/* 배경음이 처음 흐르는 화면이라, 끄는 자리도 여기서부터 있어야 한다 */}
       <SoundToggle className="absolute right-4 top-4" />
 
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-8 shadow-xl backdrop-blur">
-        <h1 className="mb-1 text-2xl font-bold tracking-tight">숨바꼭질</h1>
-        <p className="mb-6 text-sm text-slate-400">
-          실시간 멀티플레이 3D 술래잡기
+      {/*
+        게임 제목. 이 화면에서 가장 큰 글자여야 한다 — 시연에서 심사위원이 처음 보는 글자다.
+        ⚠️ flex-wrap이 필수다: 한 줄 고정으로 두면 좁은 화면에서 "Escape"가 잘린다.
+           좁으면 ": Escape"가 아랫줄로 내려가고, sm 이상에서 한 줄로 붙는다.
+      */}
+      <header className="text-center">
+        <h1 className="flex flex-wrap items-baseline justify-center gap-x-3 text-3xl font-black tracking-tight sm:text-5xl lg:text-6xl">
+          <span className="[text-shadow:0_0_30px_rgba(148,163,184,0.35)]">
+            시야 밖으로
+          </span>
+          <span className="font-light text-slate-600">:</span>
+          <span className="text-amber-300 [text-shadow:0_0_30px_rgba(252,211,77,0.45)]">
+            Escape
+          </span>
+        </h1>
+        <p className="mt-3 text-sm text-slate-400">
+          실시간 멀티플레이 3D 협동 방탈출
         </p>
+      </header>
 
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-8 shadow-xl backdrop-blur">
         <label className="mb-1 block text-xs font-medium text-slate-400">
           수감 번호
         </label>
