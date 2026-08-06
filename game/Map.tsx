@@ -264,41 +264,94 @@ function BarDoor({ meta, mat, h = WALL_H }: { meta: DoorMeta; mat: THREE.Materia
 }
 
 // ── 배수관 샛길 철창(표식 게이트): 동쪽 샛길(x38~42)을 가로막는 녹슨 창살 문. ──
-// 표식 4개를 다 얻으면(isDrainGateOpen) 경첩 회전으로 열린다. 좌표는 prisonLayout.DRAIN_GATE와 같다.
+// 표식 4개를 다 얻으면(isDrainGateOpen) 문짝이 열리는 게 아니라 **부서져** 창살 조각들이
+// 바닥에 흩뿌려지고, 문틀엔 부러진 경첩 그루터기만 남는다. 좌표는 prisonLayout.DRAIN_GATE와 같다.
+// 결정적(seed) 난수로 파편 배치를 useMemo에 한 번만 고정한다 — 프레임마다 흔들리지 않게.
 function DrainGate({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   const open = useInteraction((s) => isDrainGateOpen(s.solved));
-  const panel = useRef<THREE.Group>(null);
   const w = DRAIN_GATE.hx * 2; // 개구부 폭(4m)
-  const x0 = DRAIN_GATE.cx - DRAIN_GATE.hx; // 경첩(서쪽 끝, 건물 벽 쪽)
+  const x0 = DRAIN_GATE.cx - DRAIN_GATE.hx; // 서쪽 끝(건물 벽 쪽) = 로컬 원점
   const nBars = Math.max(3, Math.round(w / 0.55));
-  useFrame((_, dt) => {
-    if (!panel.current) return;
-    const target = open ? -1.7 : 0; // 닫힘 ↔ 열림(남쪽 안으로 스윙)
-    panel.current.rotation.y = THREE.MathUtils.damp(panel.current.rotation.y, target, 5, dt);
-  });
+  const barLen = WALL_H - 0.5; // 성한 창살 길이
+
+  // 부서진 파편: 창살은 2~3토막으로 쪼개져 바닥에 눕고, 가로 레일 조각도 몇 개 흩어진다.
+  const debris = useMemo(() => {
+    const rand = (n: number) => {
+      const s = Math.sin(n * 127.1 + 43.7) * 43758.5453;
+      return s - Math.floor(s); // 0~1 결정적 의사난수
+    };
+    const pieces: { pos: [number, number, number]; rotY: number; len: number; thick: number }[] = [];
+    let seed = 1;
+    // 창살 파편: 각 창살을 랜덤 길이의 토막들로 나눠 바닥에 눕힌다.
+    for (let b = 0; b < nBars; b++) {
+      const frags = 2 + Math.floor(rand(seed++) * 2); // 2~3토막
+      for (let f = 0; f < frags; f++) {
+        const len = barLen * (0.25 + rand(seed++) * 0.3);
+        const px = 0.25 + rand(seed++) * (w - 0.5); // 개구부 폭 안에 흩뿌림
+        const pz = (rand(seed++) - 0.5) * 2.4; // 문턱 남북으로 퍼짐
+        pieces.push({ pos: [px, BAR_W / 2 + 0.01, pz], rotY: rand(seed++) * Math.PI, len, thick: BAR_W });
+      }
+    }
+    // 가로 레일 파편 몇 개(조금 굵게).
+    for (let r = 0; r < 4; r++) {
+      const len = w * (0.28 + rand(seed++) * 0.35);
+      const px = 0.3 + rand(seed++) * (w - 0.6);
+      const pz = (rand(seed++) - 0.5) * 2.4;
+      pieces.push({ pos: [px, 0.06, pz], rotY: rand(seed++) * Math.PI, len, thick: 0.11 });
+    }
+    return pieces;
+  }, [nBars, w, barLen]);
+
   return (
     <group position={[x0, 0, DRAIN_GATE.cz]}>
-      {/* 문틀 기둥 2 */}
+      {/* 문틀 기둥 2(벽에 박힌 부분은 남는다) */}
       <mesh position={[0, WALL_H / 2, 0]} material={mat.rust}>
         <boxGeometry args={[0.18, WALL_H, 0.24]} />
       </mesh>
       <mesh position={[w, WALL_H / 2, 0]} material={mat.rust}>
         <boxGeometry args={[0.18, WALL_H, 0.24]} />
       </mesh>
-      {/* 창살 문짝(경첩=원점 기준 회전) */}
-      <group ref={panel}>
-        <mesh position={[w / 2, WALL_H - 0.3, 0]} material={mat.rust}>
-          <boxGeometry args={[w, 0.1, 0.1]} />
-        </mesh>
-        <mesh position={[w / 2, 0.25, 0]} material={mat.rust}>
-          <boxGeometry args={[w, 0.1, 0.1]} />
-        </mesh>
-        {Array.from({ length: nBars }, (_, i) => (
-          <mesh key={i} position={[((i + 0.5) / nBars) * w, (WALL_H - 0.3) / 2, 0]} material={mat.rust}>
-            <boxGeometry args={[BAR_W, WALL_H - 0.5, BAR_W]} />
+
+      {!open ? (
+        // ── 성한 철창 문짝(잠긴 상태) ──
+        <group>
+          <mesh position={[w / 2, WALL_H - 0.3, 0]} material={mat.rust}>
+            <boxGeometry args={[w, 0.1, 0.1]} />
           </mesh>
-        ))}
-      </group>
+          <mesh position={[w / 2, 0.25, 0]} material={mat.rust}>
+            <boxGeometry args={[w, 0.1, 0.1]} />
+          </mesh>
+          {Array.from({ length: nBars }, (_, i) => (
+            <mesh key={i} position={[((i + 0.5) / nBars) * w, (WALL_H - 0.3) / 2, 0]} material={mat.rust}>
+              <boxGeometry args={[BAR_W, barLen, BAR_W]} />
+            </mesh>
+          ))}
+        </group>
+      ) : (
+        // ── 부서진 문짝: 창살 파편이 바닥에 흩뿌려지고, 경첩엔 그루터기만 남는다 ──
+        <group>
+          {/* 문틀에 남은 부러진 경첩 그루터기(위·아래) */}
+          <mesh position={[0.12, WALL_H - 0.35, 0]} rotation={[0, 0, 0.5]} material={mat.rust} castShadow>
+            <boxGeometry args={[BAR_W, 0.6, BAR_W]} />
+          </mesh>
+          <mesh position={[0.1, 0.3, 0]} rotation={[0, 0, -0.35]} material={mat.rust} castShadow>
+            <boxGeometry args={[BAR_W, 0.5, BAR_W]} />
+          </mesh>
+          {/* 바닥에 눕힌 파편들(원래 세로 y축이던 막대를 z로 90° 눕혀 눕힌다) */}
+          {debris.map((p, i) => (
+            <mesh
+              key={i}
+              position={p.pos}
+              rotation={[0, p.rotY, Math.PI / 2]}
+              material={mat.rust}
+              castShadow
+              receiveShadow
+            >
+              <boxGeometry args={[p.thick, p.len, p.thick]} />
+            </mesh>
+          ))}
+        </group>
+      )}
     </group>
   );
 }

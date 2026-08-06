@@ -85,7 +85,9 @@ export function createBreakout(): ArcadeGame {
       if (state !== "playing") return;
       if (shake > 0) shake -= dt;
 
-      const dir = (held.has("ArrowRight") ? 1 : 0) - (held.has("ArrowLeft") ? 1 : 0);
+      const dir =
+        (held.has("ArrowRight") || held.has("KeyD") ? 1 : 0) -
+        (held.has("ArrowLeft") || held.has("KeyA") ? 1 : 0);
       paddleX += dir * PADDLE_SPEED * dt;
       if (paddleX < 0) paddleX = 0;
       else if (paddleX > ARCADE_W - PADDLE_W) paddleX = ARCADE_W - PADDLE_W;
@@ -224,6 +226,6 @@ export const breakoutDef = {
   id: "breakout",
   name: "벽돌깨기",
   goal: "벽돌 21개를 모두 부숴라",
-  controls: "← → 패들 이동 · Space 발사 (3번 놓치면 실패)",
+  controls: "← → (또는 A D) 패들 이동 · Space 발사 (3번 놓치면 실패)",
   create: createBreakout,
 };

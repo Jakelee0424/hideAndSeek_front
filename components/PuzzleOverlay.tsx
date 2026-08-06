@@ -34,6 +34,7 @@ import { bloodPlan, outbreakPlan } from "@/game/infirmaryPlan";
 import { BloodTypeLock, OutbreakQuiz } from "./InfirmaryPuzzles";
 import { symbolIcon } from "@/game/symbols";
 import { useGameStore } from "@/store/gameStore";
+import { useModalAutoFit } from "./useModalAutoFit";
 
 const COLORS: Record<ColorKey, { bg: string; ring: string; label: string }> = {
   red: { bg: "bg-red-500", ring: "ring-red-300", label: "빨강" },
@@ -63,15 +64,19 @@ export default function PuzzleOverlay() {
 
   useEffect(() => setError(false), [openId]);
 
-  if (!data) return null;
-
-  // 노선도·건조대·세탁 일정표는 그림과 표가 넓다 — 이 셋만 모달을 넓게 쓴다.
+  // 노선도·건조대·세탁 일정표는 그림과 표가 넓다 — 이 셋만 기본 폭을 넓게 쓴다.
   const wide =
-    data.puzzle?.kind === "carelabel" ||
-    data.puzzle?.kind === "bloodtype" ||
-    data.puzzle?.kind === "outbreak" ||
-    data.board === "laundry-plan" ||
-    data.board === "pipe-map"; // 노선도가 빠진 밸브 창은 좁아도 된다
+    data?.puzzle?.kind === "carelabel" ||
+    data?.puzzle?.kind === "bloodtype" ||
+    data?.puzzle?.kind === "outbreak" ||
+    data?.board === "laundry-plan" ||
+    data?.board === "pipe-map"; // 노선도가 빠진 밸브 창은 좁아도 된다
+
+  // 세로로 길어 스크롤이 생길 내용이면 세로 스크롤 대신 여러 열로 나눠 좌우로 넓힌다.
+  // baseWidth = 기본 max-width(wide=512 / 좁음=384) − 좌우 패딩(48).
+  const fit = useModalAutoFit({ baseWidth: wide ? 464 : 336, reserve: 150, padX: 48 }, [openId, wide]);
+
+  if (!data) return null;
 
   function solve() {
     const roomId = useGameStore.getState().roomId;
@@ -94,11 +99,12 @@ export default function PuzzleOverlay() {
       className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       style={{ zIndex: 16777300 }}
     >
-      {/* 미니게임은 세로로 길다 — 작은 화면에서 잘리지 않게 모달 안에서 스크롤시킨다. */}
+      {/* 세로로 길면 스크롤 대신 여러 열로 나눠 좌우로 넓힌다(useModalAutoFit). */}
       <div
         className={`max-h-[94vh] w-full overflow-y-auto rounded-2xl border border-white/10 bg-[#12161f] p-6 text-slate-100 shadow-2xl ${
           wide ? "max-w-lg" : "max-w-sm"
         }`}
+        style={fit.boxStyle}
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{data.label}</h2>
@@ -110,6 +116,7 @@ export default function PuzzleOverlay() {
           </button>
         </div>
 
+        <div ref={fit.contentRef} className="[&>*]:[break-inside:avoid]" style={fit.contentStyle}>
         {/* 힌트/안내 문구 */}
         {data.hint && (
           <div className="mb-5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
@@ -147,6 +154,7 @@ export default function PuzzleOverlay() {
             clearError={() => setError(false)}
           />
         )}
+        </div>
       </div>
     </div>
   );

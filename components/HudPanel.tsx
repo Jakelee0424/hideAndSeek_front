@@ -11,6 +11,7 @@
 import { useInteraction } from "@/game/interactables";
 import { useGameStore } from "@/store/gameStore";
 import { useEffect, type ReactNode } from "react";
+import { useModalAutoFit } from "./useModalAutoFit";
 
 interface Props {
   /** 상호작용 오브젝트가 아닌 예약 id(근접이 아니라 버튼·키로만 열린다). */
@@ -36,6 +37,10 @@ export default function HudPanel({ id, hotkeyCode, hotkeyLabel, title, icon, chi
   const showing = openId === id;
   // 다른 퍼즐이 열려 있는 동안에는 버튼을 숨긴다 — 그 위에 겹쳐 봐야 누를 수도 없다.
   const hidden = !playing || (openId !== null && !showing);
+
+  // 세로로 길어 스크롤이 생길 내용이면 여러 열로 나눠 모달을 좌우로 넓힌다.
+  // baseWidth = max-w-lg(512px) − 좌우 패딩(48). reserve = 헤더+닫기버튼+패딩+백드롭 여백.
+  const fit = useModalAutoFit({ baseWidth: 464, reserve: 200, padX: 48 }, [showing, id]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -71,7 +76,10 @@ export default function HudPanel({ id, hotkeyCode, hotkeyLabel, title, icon, chi
           두면 모달이 그 작은 상자 안에 갇힌다. */}
       {showing && playing && (
         <div className="pointer-events-auto fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#12161f] p-6 text-slate-100 shadow-2xl">
+          <div
+            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#12161f] p-6 text-slate-100 shadow-2xl"
+            style={fit.boxStyle}
+          >
             <div className="mb-4 flex items-baseline justify-between gap-3">
               <h2 className="flex items-center gap-2 text-lg font-bold">
                 <span className="text-amber-300">{icon}</span>
@@ -82,7 +90,9 @@ export default function HudPanel({ id, hotkeyCode, hotkeyLabel, title, icon, chi
               </span>
             </div>
 
-            {children}
+            <div ref={fit.contentRef} className="[&>*]:[break-inside:avoid]" style={fit.contentStyle}>
+              {children}
+            </div>
 
             <button
               onClick={close}
