@@ -43,7 +43,7 @@ const RULES: string[] = [
 
 const KEYS: { k: string; d: string }[] = [
   { k: "W A S D", d: "이동" },
-  { k: "R", d: "달리기" },
+  { k: "Shift", d: "달리기" },
   { k: "Space", d: "점프" },
   { k: "E", d: "상호작용" },
   { k: "M", d: "지도" },

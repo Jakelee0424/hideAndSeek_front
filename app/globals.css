@@ -30,14 +30,17 @@ body {
    스팬마다 색·animation-delay를 달리 줘 각자 따로 논다. */
 .neon {
   color: var(--neon-core, #fff);
+  /* 글로우는 한 단계 줄여(번짐 반경 축소) 글자 윤곽이 또렷하게 읽히게 한다. */
   text-shadow:
-    0 0 4px #fff,
-    0 0 10px #fff,
-    0 0 20px var(--neon, #38bdf8),
-    0 0 42px var(--neon, #38bdf8),
-    0 0 70px var(--neon, #38bdf8);
-  /* 스타일은 그대로 두고 전체 밝기만 낮춘다(글로우·코어·스파크 모두 은은하게). */
-  filter: brightness(0.62);
+    0 0 3px #fff,
+    0 0 8px rgba(255, 255, 255, 0.55),
+    0 0 16px var(--neon, #38bdf8),
+    0 0 32px var(--neon, #38bdf8);
+  /* 코어는 밝게 유지 — 배경 이미지 위에서도 잘 보여야 한다. */
+  filter: brightness(0.95);
+}
+/* 깜빡임은 이 클래스를 얹은 글자만. ("시야 밖으로"는 켜져 있고 "Escape"만 고장) */
+.neon-flicker {
   animation: neonFlicker 5s linear infinite;
 }
 @keyframes neonFlicker {
@@ -53,11 +56,10 @@ body {
   100% {
     opacity: 1;
     text-shadow:
-      0 0 4px #fff,
-      0 0 10px #fff,
-      0 0 20px var(--neon, #38bdf8),
-      0 0 42px var(--neon, #38bdf8),
-      0 0 70px var(--neon, #38bdf8);
+      0 0 3px #fff,
+      0 0 8px rgba(255, 255, 255, 0.55),
+      0 0 16px var(--neon, #38bdf8),
+      0 0 32px var(--neon, #38bdf8);
   }
   /* 순간 꺼짐(OFF) — 거의 사라진다. 스파크 앞뒤를 감싸 확 튀어 보이게 한다. */
   7.9%,
@@ -84,7 +86,7 @@ body {
 }
 /* 모션 최소화 설정이면 깜빡임은 끄고 은은한 글로우만 유지한다. */
 @media (prefers-reduced-motion: reduce) {
-  .neon {
+  .neon-flicker {
     animation: none;
   }
 }
@@ -142,4 +144,20 @@ body {
 /* 가장자리를 어둑하게 눌러 감옥 같은 저조도 분위기를 만든다. */
 .jail-vignette {
   background: radial-gradient(120% 90% at 50% 38%, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, 0.62) 100%);
+}
+
+/* 대기방 브리핑: 낮은 모니터에서는 화면 전체를 균등 축소(zoom)해 스크롤 없이 담는다.
+   zoom은 레이아웃 크기 자체를 줄이므로 height를 역수로 키워 아래 빈틈을 메운다.
+   (zoom 미지원 브라우저는 왼쪽 컬럼의 얇은 내부 스크롤이 최후 안전장치) */
+@media (min-width: 1024px) and (max-height: 900px) {
+  .briefing-scale {
+    zoom: 0.82;
+    height: calc(100% / 0.82);
+  }
+}
+@media (min-width: 1024px) and (max-height: 740px) {
+  .briefing-scale {
+    zoom: 0.68;
+    height: calc(100% / 0.68);
+  }
 }

@@ -106,7 +106,7 @@ export default function HUD() {
         </div>
         <div className="rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-300 backdrop-blur">
           이동 <kbd className="font-mono">W A S D</kbd> · 달리기{" "}
-          <kbd className="font-mono">R</kbd> · 상호작용{" "}
+          <kbd className="font-mono">Shift</kbd> · 상호작용{" "}
           <kbd className="font-mono">E</kbd> · 지도{" "}
           <kbd className="font-mono">M</kbd> · 이야기{" "}
           <kbd className="font-mono">B</kbd> · 도움말{" "}

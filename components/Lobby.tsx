@@ -6,6 +6,7 @@
 import { useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { joinRoom } from "@/net/session";
+import LobbyBackdrop from "./LobbyBackdrop";
 import SoundToggle from "./SoundToggle";
 
 function randomCode() {
@@ -27,13 +28,24 @@ function randomPrisonerNick() {
   return `죄수 ${1000 + Math.floor(Math.random() * 9000)}`;
 }
 
-// 간판 접점에서 튀는 스파크 입자들(콜론 부근). 방향(--sx/--sy)·딜레이를 조금씩 달리 줘 흩어진다.
+// 간판에서 튀는 스파크 입자들. 고장난 쪽(Escape)과 그 접점(콜론) 주변에 몰려 있다.
+// 방향(--sx/--sy)·딜레이를 조금씩 달리 줘 흩어진다. 타이밍은 Escape의 깜빡임
+// 스파크 순간(≈8%·72%)과 물려 있으니 딜레이는 0.15s 안쪽으로만 흔든다.
 const SPARKS: CSSProperties[] = [
+  // 콜론(접점) 부근
   { left: "49%", top: "30%", "--sx": "16px", "--sy": "-18px", "--sx2": "-12px", "--sy2": "14px", animationDelay: "0s" } as CSSProperties,
   { left: "51.5%", top: "36%", "--sx": "20px", "--sy": "12px", "--sx2": "14px", "--sy2": "-16px", animationDelay: "0.05s" } as CSSProperties,
   { left: "47.5%", top: "38%", "--sx": "-16px", "--sy": "14px", "--sx2": "-18px", "--sy2": "-10px", animationDelay: "0.03s" } as CSSProperties,
   { left: "52.5%", top: "29%", "--sx": "14px", "--sy": "-14px", "--sx2": "16px", "--sy2": "12px", animationDelay: "0.09s" } as CSSProperties,
   { left: "50%", top: "34%", "--sx": "-20px", "--sy": "-8px", "--sx2": "10px", "--sy2": "18px", animationDelay: "0.12s" } as CSSProperties,
+  // 고장난 Escape 글자 위 — 관을 따라 여기저기서 튄다
+  { left: "56%", top: "26%", "--sx": "18px", "--sy": "-20px", "--sx2": "-14px", "--sy2": "-12px", animationDelay: "0.02s" } as CSSProperties,
+  { left: "59.5%", top: "40%", "--sx": "-14px", "--sy": "18px", "--sx2": "16px", "--sy2": "14px", animationDelay: "0.08s" } as CSSProperties,
+  { left: "63%", top: "24%", "--sx": "12px", "--sy": "-22px", "--sx2": "20px", "--sy2": "-8px", animationDelay: "0.11s" } as CSSProperties,
+  { left: "66.5%", top: "42%", "--sx": "22px", "--sy": "10px", "--sx2": "-10px", "--sy2": "20px", animationDelay: "0.04s" } as CSSProperties,
+  { left: "70%", top: "28%", "--sx": "-18px", "--sy": "-14px", "--sx2": "14px", "--sy2": "-18px", animationDelay: "0.14s" } as CSSProperties,
+  { left: "73.5%", top: "35%", "--sx": "24px", "--sy": "-10px", "--sx2": "18px", "--sy2": "16px", animationDelay: "0.06s" } as CSSProperties,
+  { left: "75.5%", top: "31%", "--sx": "16px", "--sy": "20px", "--sx2": "22px", "--sy2": "-6px", animationDelay: "0.1s" } as CSSProperties,
 ];
 
 export default function Lobby({
@@ -62,7 +74,9 @@ export default function Lobby({
 
   return (
     <main className="relative flex min-h-dvh flex-col items-center justify-center gap-8 overflow-hidden bg-[#080a10] p-6 text-slate-100">
-      {/* 어둑한 비네트 (내용 뒤에 깔린다) */}
+      {/* 배경 이미지: 감방 벽 구멍으로 달아나는 죄수(public/lobby-bg.png) */}
+      <LobbyBackdrop />
+      {/* 어둑한 비네트 (배경 그림 위, 내용 뒤에 깔린다) */}
       <div className="jail-vignette pointer-events-none absolute inset-0 z-0" aria-hidden />
 
       {/* 배경음이 처음 흐르는 화면이라, 끄는 자리도 여기서부터 있어야 한다 */}
@@ -75,21 +89,17 @@ export default function Lobby({
       */}
       <header className="relative z-10 text-center">
         <h1 className="flex flex-wrap items-baseline justify-center gap-x-3 text-3xl font-black tracking-tight sm:text-5xl lg:text-6xl">
-          {/* 네온 사인: 시야 밖으로 = 차가운 청록 관, Escape = 앰버 관. 깜빡임 타이밍을 어긋나게. */}
+          {/* 네온 사인: 시야 밖으로 = 차가운 청록 관(멀쩡히 켜짐), Escape = 앰버 관(고장나서 깜빡임). */}
           <span
             className="neon"
-            style={
-              { "--neon": "#38bdf8", "--neon-core": "#eaf6ff", animationDelay: "0s" } as CSSProperties
-            }
+            style={{ "--neon": "#38bdf8", "--neon-core": "#eaf6ff" } as CSSProperties}
           >
             시야 밖으로
           </span>
           <span className="font-light text-slate-600">:</span>
           <span
-            className="neon"
-            style={
-              { "--neon": "#f59e0b", "--neon-core": "#fff3cf", animationDelay: "2.3s" } as CSSProperties
-            }
+            className="neon neon-flicker"
+            style={{ "--neon": "#f59e0b", "--neon-core": "#fff3cf" } as CSSProperties}
           >
             Escape
           </span>

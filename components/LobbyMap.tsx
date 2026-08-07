@@ -67,15 +67,19 @@ export default function LobbyMap() {
 
   // 바깥은 overflow를 자르지 않는다(가장자리의 물음표 마커가 잘리지 않게). 도면만 안쪽
   // 박스에서 rounded로 클립한다. 마커는 이 바깥 컨테이너 기준으로 얹혀 경계 밖으로 나가도 보인다.
+  //
+  // 크기: 모바일(세로 스크롤)은 폭 기준, lg(대기방이 화면 높이에 잠김)에서는 부모가 주는
+  // 높이에 맞춰 줄어든다(h-full + w-auto + aspect-ratio). 마커 %는 컨테이너가 캔버스를
+  // 딱 감싸는(w-fit) 한 그대로 맞는다.
   return (
-    <div className="relative w-full">
-      <div className="w-full overflow-hidden rounded-xl border border-white/10 bg-black/40">
+    <div className="relative mx-auto w-full lg:h-full lg:w-fit lg:max-w-full">
+      <div className="w-full overflow-hidden rounded-xl border border-white/10 bg-black/40 lg:h-full lg:w-fit">
         {/* 폭은 그대로, 높이만 늘린다: 실제 맵 종횡비(84:60)보다 세로로 긴 박스에 그려 넣는다. */}
         <canvas
           ref={ref}
           width={W}
           height={H}
-          className="block w-full"
+          className="block w-full lg:h-full lg:w-auto lg:max-w-full"
           style={{ aspectRatio: "84 / 72" }}
         />
       </div>
