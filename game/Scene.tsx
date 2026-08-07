@@ -5,6 +5,7 @@ import * as THREE from "three";
 import GameMap from "./Map";
 import LocalPlayer from "./LocalPlayer";
 import RemotePlayers from "./RemotePlayers";
+import StampCallouts from "./StampCallouts";
 import PatrolLight from "./PatrolLight";
 import PatrolGuards from "./PatrolGuards";
 import SceneEnvironment from "./SceneEnvironment";
@@ -87,6 +88,9 @@ export default function Scene() {
         <LocalPlayer />
         <RemotePlayers />
       </Suspense>
+
+      {/* 표식 발견 말풍선 — 풀린 표식 퀴즈 아이템 머리 위에 몇 초간 깜빡인다 */}
+      <StampCallouts />
     </Canvas>
   );
 }
