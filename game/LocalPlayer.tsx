@@ -61,6 +61,15 @@ const GRAVITY = 18; // m/s². 9.8은 게임에선 너무 붕 뜬다
 // 확실히 커야 한다 — 달리기 10.8 m/s에 서버 input-timeout 0.5s가 겹치면 5.4m까지는 정상 범위다.
 const DESYNC_SNAP_M = 8; // 이보다 벌어지면 서버 자리로 되돌린다
 const DESYNC_HOLD_MS = 400; // 그 상태가 이만큼 이어져야 — 한 프레임 튐에는 반응하지 않는다
+// ⚠️ 스냅샷이 낡았으면(히치·일시 정체) desync 판정을 쉰다. sample()은 스냅샷이 끊겨도
+//    마지막 표본으로 고정해 돌려주므로, 신선도를 안 보면 "과거의 서버 좌표"와 비교하게 되고
+//    달리는 중엔 0.7초 정체만으로 8m가 벌어져 **직전 방으로 롤백**하는 사고가 났다(2026-08-07).
+const DESYNC_FRESH_MS = 300; // 최신 표본이 이보다 오래됐으면 비교 자체가 무의미
+// 하드 스냅(8m) 전 구간의 부드러운 복귀: 지속적으로 이만큼 벌어져 있으면 서버 쪽으로 서서히
+// 끌어붙인다. 예전엔 복귀 경로가 스냅뿐이라, 한 번 5m쯤 어긋나면(히치 한 번) 그대로 유지되다
+// 다음 히치에 8m를 넘겨 순간이동했다 — 그 사이를 눈에 안 띄게 메운다.
+const DESYNC_PULL_M = 3; // 이보다 벌어져 있으면 끌어붙이기 시작
+const DESYNC_PULL_TAU = 1.2; // 감쇠 시간상수(s). 클수록 은근하게 붙는다
 const CAM_LOOK_H = 1.4; // 시선 높이(캐릭터 머리 부근)
 const CAM_MARGIN = 0.25; // 가림 보정 시 벽 앞 여유(near plane이 벽을 뚫고 보이지 않게)
 const CAM_MIN = 0.4; // 카메라 최소 거리(등 뒤가 바로 벽이면 준1인칭까지 당긴다)
@@ -172,22 +181,37 @@ export default function LocalPlayer() {
     {
       const myId = useGameStore.getState().myId;
       // 최신 표본으로 본다(보간 지연을 빼면 내 예측이 늘 그만큼 앞서 보여 오차가 부풀려진다).
-      const t = myId ? worldState.sample(myId, performance.now()) : null;
+      const nowMs = performance.now();
+      const t = myId ? worldState.sample(myId, nowMs) : null;
+      // 신선도: 표본이 낡았으면(스냅샷 정체) 과거 좌표와 비교하는 꼴이라 판정을 쉰다.
+      const fresh =
+        myId != null &&
+        (worldState.latestSampleAt(myId) ?? -Infinity) >= nowMs - DESYNC_FRESH_MS;
       if (t) {
         let snap = false;
         if (!spawned.current) {
           spawned.current = true;
           snap = true;
+        } else if (!fresh) {
+          desyncSince.current = 0; // 낡은 표본으로 잰 격차는 증거가 아니다
         } else {
           const dx = g.position.x - t.x;
           const dz = g.position.z - t.z;
-          if (dx * dx + dz * dz > DESYNC_SNAP_M * DESYNC_SNAP_M) {
-            // 벌어진 상태가 이어질 때만 되돌린다. 보정 경로가 없어 한 번 벌어지면
-            // 저절로 붙지 않으므로, 이 유예는 순간적인 튐만 걸러 내고 진짜 어긋남은 통과시킨다.
+          const d2 = dx * dx + dz * dz;
+          if (d2 > DESYNC_SNAP_M * DESYNC_SNAP_M) {
+            // 벌어진 상태가 이어질 때만 되돌린다. 이 유예는 순간적인 튐만 걸러 내고
+            // 진짜 어긋남은 통과시킨다.
             if (desyncSince.current === 0) desyncSince.current = state.clock.elapsedTime;
             else if ((state.clock.elapsedTime - desyncSince.current) * 1000 >= DESYNC_HOLD_MS) snap = true;
           } else {
             desyncSince.current = 0;
+            // 중간 구간(3~8m): 하드 스냅 대신 서버 쪽으로 은근히 끌어붙여 격차를 메운다.
+            // 히치 한 번으로 생긴 지속 오프셋이 다음 히치에 8m를 넘겨 순간이동하는 것을 막는다.
+            if (d2 > DESYNC_PULL_M * DESYNC_PULL_M) {
+              const pull = 1 - Math.exp(-dt / DESYNC_PULL_TAU);
+              g.position.x -= dx * pull;
+              g.position.z -= dz * pull;
+            }
           }
         }
         if (snap) {

@@ -19,6 +19,7 @@ import {
   ANNEX_ROOF,
   BUILDINGS,
   CELLBLOCK_GATE,
+  CELLBLOCK_ROOF,
   CELL_BLOCK_H,
   COURT,
   DOOR_META,
@@ -1560,6 +1561,12 @@ function CorridorLamps({ mat }: { mat: ReturnType<typeof useMaterials> }) {
           <CeilingLamp key={`w${x}-${lz}`} x={x} z={lz} ceilingY={FLOOR2_Y - 0.08} mat={mat} />
         )),
       )}
+      {/* 수감동 2층: 지붕(CellBlockRoof, y=CELL_BLOCK_H)이 하늘을 덮었으니 그 밑에 같은 줄로 붙인다. */}
+      {[-32, -20, -10].flatMap((x) =>
+        [15, 19].map((lz) => (
+          <CeilingLamp key={`w2-${x}-${lz}`} x={x} z={lz} ceilingY={CELL_BLOCK_H} mat={mat} />
+        )),
+      )}
       {/* 별관: 지붕(y=ANNEX_H) 천장에 바짝 붙인다. 복도 중앙(z=17). */}
       {[9, 21, 33].map((x) => (
         <CeilingLamp key={`e${x}`} x={x} z={17} ceilingY={ANNEX_H} mat={mat} />
@@ -1694,6 +1701,14 @@ function AnnexRoof({ mat }: { mat: ReturnType<typeof useMaterials> }) {
   );
 }
 
+// ── 수감동 지붕: 감방 두 열+복도(x −38~−6 · z 6~28)를 벽 꼭대기(CELL_BLOCK_H)에서 덮는다. ──
+// 수감동 둘레벽은 전부 h=CELL_BLOCK_H까지 올라가 있고, 동쪽 개구부(복도 연결) 위는
+// 2층 복도 동측 막이가 WALL_H~CELL_BLOCK_H를 이미 채우므로 별관처럼 상인방을 덧댈 필요가 없다.
+// 밟는 바닥이 아니다(오를 길이 없음) — prisonLayout.CELLBLOCK_ROOF 주석 참고.
+function CellBlockRoof({ mat }: { mat: ReturnType<typeof useMaterials> }) {
+  return <FlatRoof rect={CELLBLOCK_ROOF} y={CELL_BLOCK_H} mat={mat} />;
+}
+
 // ── 화장실 지붕: 화장실(x −6~6 · z 20~28)을 별관과 같은 높이(ANNEX_H)에서 덮는다. ──
 // 벽을 ANNEX_H로 올렸으므로 남쪽 출입 개구부(x0, z20) 위 WALL_H~ANNEX_H를 상인방으로 채운다.
 function ToiletRoof({ mat }: { mat: ReturnType<typeof useMaterials> }) {
@@ -1779,6 +1794,7 @@ function BuildingDecor({ mat }: { mat: ReturnType<typeof useMaterials> }) {
       <CafeteriaDecor b={getBuilding("cafeteria")!} mat={mat} />
       <AnnexRoof mat={mat} />
       <ToiletRoof mat={mat} />
+      <CellBlockRoof mat={mat} />
       <CellBlockGate mat={mat} />
       <EntranceGate mat={mat} />
       <MainGate mat={mat} />

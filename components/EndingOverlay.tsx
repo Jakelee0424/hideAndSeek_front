@@ -6,7 +6,7 @@
 //
 // 연출은 단계(beat)로 진행한다 — 타이머 하나로 0→1→2…를 올리고, 각 조각은 자기 beat에
 // 도달했을 때만 렌더한다. 애니메이션마다 타이머를 두면 순서가 어긋나기 쉽다.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { resolveEnding, type EndingKey } from "@/game/endings";
 import { ESCAPE_PIPE_ID, useInteraction } from "@/game/interactables";
@@ -38,16 +38,24 @@ function EndingScene({ aiId, escaped }: { aiId: string; escaped: boolean }) {
   const votes = useGameStore((s) => s.votes);
   const router = useRouter();
 
-  // 득표 집계 → 최다 득표자가 진짜 AI였는가.
+  // 득표 집계 → 최다 득표자가 진짜 AI였는가. (표 그래프는 늦게 온 스냅샷도 반영)
   const tally: Record<string, number> = {};
   for (const target of Object.values(votes)) {
     tally[target] = (tally[target] ?? 0) + 1;
   }
   const ranked = Object.entries(tally).sort((a, b) => b[1] - a[1]);
-  const top = ranked[0];
-  const caught = !!top && top[0] === aiId;
 
-  const ending = resolveEnding(escaped, caught);
+  // ⚠️ 결말(어느 엔딩인가)은 마운트 순간 한 번만 확정한다 — useState 초기값으로 고정.
+  //    매 렌더마다 다시 고르면, ENDED 직후 뒤늦게 닿는 스냅샷(득표 재적용·solved 동기화)이
+  //    ending을 갈아치우고 → 내레이션 줄 수(revealBeat)가 바뀌고 → 아래 타이머 effect가
+  //    재실행돼 beat를 0부터 다시 예약한다. 그게 "엔딩 연출이 두 번 재생되는" 사고였다.
+  //    투표는 ENDED 전에 이미 닫혀 서버가 결말과 함께 최종 득표를 실어 보내므로,
+  //    마운트 시점 데이터로 확정해도 결과는 같다.
+  const [ending] = useState(() => {
+    const top = ranked[0];
+    const caught = !!top && top[0] === aiId;
+    return resolveEnding(escaped, caught);
+  });
 
   const [beat, setBeat] = useState(0);
   // BEATS의 마지막(2400ms)이 곧 첫 내레이션이다. 그래서 i번째 줄은 beat = BEATS.length + i,
@@ -60,20 +68,29 @@ function EndingScene({ aiId, escaped }: { aiId: string; escaped: boolean }) {
     for (let i = 1; i <= revealBeat; i++) {
       const at =
         i <= BEATS.length ? BEATS[i - 1] : BEATS[2] + (i - BEATS.length) * LINE_GAP;
-      timers.push(setTimeout(() => setBeat(i), at));
+      // 혹시 effect가 다시 돌아도 연출이 뒤로 감기지 않게, beat는 앞으로만 간다.
+      timers.push(setTimeout(() => setBeat((b) => Math.max(b, i)), at));
     }
     return () => timers.forEach(clearTimeout);
   }, [revealBeat]);
 
-  // 결말별 소리. 정체 공개음은 마지막 beat에서 따로 울린다.
+  // 결말별 소리 — 마운트당 한 번만. ref 가드가 없으면 dev(StrictMode)에서 effect가
+  // 두 번 돌아 종·사이렌이 겹쳐 두 번 울린다(정체 공개음도 마찬가지).
+  const playedIntro = useRef(false);
   useEffect(() => {
+    if (playedIntro.current) return;
+    playedIntro.current = true;
     if (ending.key === "perfect") sfxDawn();
     else if (ending.key === "recaptured") sfxSiren();
     else sfxBell();
   }, [ending.key]);
 
+  const playedReveal = useRef(false);
   useEffect(() => {
-    if (beat >= revealBeat) sfxReveal();
+    if (beat >= revealBeat && !playedReveal.current) {
+      playedReveal.current = true;
+      sfxReveal();
+    }
   }, [beat, revealBeat]);
 
   const lineBeat = (i: number) => BEATS.length + i;

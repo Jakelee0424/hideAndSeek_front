@@ -1,7 +1,12 @@
 // stompClient + gameStore + worldState 를 묶는 세션 오케스트레이션.
 // UI는 joinRoom / leaveRoom 만 호출한다.
 import { useGameStore } from "@/store/gameStore";
-import { ESCAPE_PIPE_ID, findInteractable, useInteraction } from "@/game/interactables";
+import {
+  ESCAPE_PIPE_ID,
+  STAMP_QUIZ_ROOM,
+  findInteractable,
+  useInteraction,
+} from "@/game/interactables";
 import { useNotice } from "@/store/noticeStore";
 import { cellIdAt } from "@/game/prisonLayout";
 import { sfxDoor, sfxUnlock, sfxSiren } from "@/game/sfx";
@@ -110,6 +115,15 @@ export function joinRoom(
             heardSolved.add(id);
             // 배수관(최종 탈출)은 클리어 화면이 따로 팡파르를 울린다 — 여기서 겹쳐 내지 않는다.
             if (id !== ESCAPE_PIPE_ID) sfxUnlock();
+
+            // 별관 표식 퀴즈가 풀리면 방 전원에게 알린다 — 표식 4개가 모여야 배수관 샛길이
+            // 열리는 협동 목표라, 남이 푼 것도 진행 상황으로 공유돼야 한다. 스냅샷 기준이라
+            // 푼 사람 본인에게도 뜬다(벽에 표식이 나타나는 순간과 맞물린다).
+            const stampRoom = STAMP_QUIZ_ROOM[id];
+            if (stampRoom) {
+              // 표식은 협동 목표의 핵심 진행이라 화면 중앙에 크게 깜빡이는 강조로 띄운다.
+              useNotice.getState().show(`${stampRoom} 벽에 표식이 드러났다`, "stamp");
+            }
 
             // 내가 지금 붙잡고 있던 퍼즐을 남이 먼저 풀었다면, 모달을 닫고 이유를 알려 준다.
             // 그대로 두면 이미 열린 문의 자물쇠를 계속 풀고 있게 된다.

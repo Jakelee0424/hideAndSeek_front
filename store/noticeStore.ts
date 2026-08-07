@@ -5,17 +5,22 @@
 // 리렌더가 나면 안 되지만, 이건 화면에 글자를 띄우는 것이라 리렌더가 목적이다.
 import { create } from "zustand";
 
+/** 알림의 겉모습. default = 상단의 작은 토스트, stamp = 화면 중앙에 크게 깜빡이는 강조(표식 공지). */
+export type NoticeKind = "default" | "stamp";
+
 interface NoticeStore {
   text: string | null;
+  kind: NoticeKind;
   /** 같은 문구가 연달아 떠도 등장 애니메이션이 다시 돌게 하는 일련번호. */
   seq: number;
-  show: (text: string) => void;
+  show: (text: string, kind?: NoticeKind) => void;
   clear: () => void;
 }
 
 export const useNotice = create<NoticeStore>((set) => ({
   text: null,
+  kind: "default",
   seq: 0,
-  show: (text) => set((s) => ({ text, seq: s.seq + 1 })),
+  show: (text, kind = "default") => set((s) => ({ text, kind, seq: s.seq + 1 })),
   clear: () => set({ text: null }),
 }));

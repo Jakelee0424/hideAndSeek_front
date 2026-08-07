@@ -9,6 +9,7 @@
 import {
   ANNEX_H,
   ANNEX_ROOF,
+  CELLBLOCK_ROOF,
   CELL_BLOCK_H,
   FLOOR2_Y,
   SLAB2,
@@ -53,6 +54,15 @@ const OCCLUDERS: AABB[] = [
   { x0: ANNEX_ROOF.x0, x1: ANNEX_ROOF.x1, y0: ANNEX_H, y1: ANNEX_H + 0.3, z0: ANNEX_ROOF.z0, z1: ANNEX_ROOF.z1 },
   // 화장실 지붕 슬래브(Map의 ToiletRoof, y=ANNEX_H). 화장실 rect(x −6~6 · z 20~28).
   { x0: -6, x1: 6, y0: ANNEX_H, y1: ANNEX_H + 0.3, z0: 20, z1: 28 },
+  // 수감동 지붕 슬래브(Map의 CellBlockRoof, y=CELL_BLOCK_H) — 2층에서 위를 볼 때 카메라를 지붕 밑으로 당긴다.
+  {
+    x0: CELLBLOCK_ROOF.x0,
+    x1: CELLBLOCK_ROOF.x1,
+    y0: CELL_BLOCK_H,
+    y1: CELL_BLOCK_H + 0.3,
+    z0: CELLBLOCK_ROOF.z0,
+    z1: CELLBLOCK_ROOF.z1,
+  },
 ];
 
 /**

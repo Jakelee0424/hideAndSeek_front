@@ -247,6 +247,12 @@ export const WALL_BOXES: WallBox[] = BUILDINGS.flatMap(buildingWalls);
 // (수감동 2층 슬래브 SLAB2와 같은 방식) 안에 있을 때 카메라가 지붕 밑으로 내려가게 한다.
 export const ANNEX_ROOF: Rect = { x0: 6, z0: 6, x1: 38, z1: 28 };
 
+// 수감동 지붕 사각형: 감방 두 열+복도(x −38~−6 · z 6~28)를 벽 꼭대기(y=CELL_BLOCK_H)에서 통째로 덮는다.
+// Map.CellBlockRoof가 지붕 슬래브를, cameraOcclusion이 같은 자리에 차폐 슬래브를 얹는다.
+// ⚠️ ROOF_SLABS(밟는 바닥)에는 넣지 않는다 — 2층(4.5m)에서 지붕(9m)까지 오를 길이 없어
+//    닿을 수 없는 바닥이고, 서버 봇 격자에 넣으면 고립된 섬이 된다(아래 ROOF_SLABS 주석 참고).
+export const CELLBLOCK_ROOF: Rect = { x0: -38, z0: 6, x1: -6, z1: 28 };
+
 // 배수관 샛길 철창(표식 게이트): 동쪽 샛길(건물 동벽 x38 ~ 외벽 x42, 폭 4m)을 z=26에서 가로막는다.
 // 표식 4개를 다 얻으면 열린다(interactables.isDrainGateOpen로 openDoors에 반영). 문 취급이라
 // DOOR_BOXES에 넣어 열리면 충돌에서 빠진다. ⚠️ 서버 Collision.DOORS·Room과 좌표·id를 맞춘다.

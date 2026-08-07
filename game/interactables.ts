@@ -355,7 +355,15 @@ export function minigameFor(objectId: string, seed: string): MinigameDef | undef
 // **네 개가 다 구현됐다** — 이제 별관 네 방을 모두 풀어야 배수관으로 가는 길이 열린다.
 // ⚠️ 게이트 박스 좌표는 prisonLayout.DRAIN_GATE / 서버 Collision·Room과 맞춘다.
 export const DRAIN_GATE_ID = "gate-drain";
-export const STAMP_QUIZ_IDS = ["quiz-work", "lock-fridge", "quiz-med", "quiz-laundry"];
+/** 표식 퀴즈 id → 그 표식이 드러나는 방 이름. 전체 공지("○○ 벽에 표식이 드러났다")가 쓴다.
+ *  ⚠️ Map.ROOM_STAMPS(어느 벽에 찍는가)와 같은 방·퀴즈 짝이어야 한다. */
+export const STAMP_QUIZ_ROOM: Record<string, string> = {
+  "quiz-work": "작업장",
+  "lock-fridge": "식당",
+  "quiz-med": "의무실",
+  "quiz-laundry": "세탁실",
+};
+export const STAMP_QUIZ_IDS = Object.keys(STAMP_QUIZ_ROOM);
 /** 표식 4개를 다 얻었는가(= 별관 4방 표식 퀴즈가 모두 solved). 그러면 배수관 샛길 철창이 열린다. */
 export function isDrainGateOpen(solved: Record<string, boolean>): boolean {
   return STAMP_QUIZ_IDS.every((id) => !!solved[id]);

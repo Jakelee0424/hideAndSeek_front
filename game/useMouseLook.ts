@@ -15,7 +15,7 @@ export interface Look {
   dist: number;
 }
 
-const SENS = 0.0025; // 마우스 감도(px → rad)
+const SENS = 0.0013; // 마우스 감도(px → rad). 0.0025에서 피드백 따라 단계적으로 낮춰 확정한 값.
 const PITCH_MIN = 0.08; // 거의 수평(아래에서 살짝 올려다봄)
 const PITCH_MAX = 1.3; // 위에서 내려다보는 한계(짐벌락 방지)
 

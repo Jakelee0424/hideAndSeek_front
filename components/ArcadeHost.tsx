@@ -35,19 +35,38 @@ export default function ArcadeHost({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<ArcadeGame | null>(null);
   const [run, setRun] = useState(0); // 재도전할 때마다 증가 → 새 판
+  const [started, setStarted] = useState(false); // 모달을 연 직후엔 대기 — Space로 시작
   const [status, setStatus] = useState<ArcadeStatus>("playing");
   const [progress, setProgress] = useState("");
 
   // onWin이 매 렌더 새 함수여도 루프를 다시 걸지 않도록 ref로 잡아 둔다.
+  // (렌더 중 ref 대입은 금지 규칙이라 effect에서 갱신한다.)
   const onWinRef = useRef(onWin);
-  onWinRef.current = onWin;
+  useEffect(() => {
+    onWinRef.current = onWin;
+  });
 
   const retry = useCallback(() => {
     setStatus("playing");
     setRun((r) => r + 1);
   }, []);
 
+  // 시작 전·게임오버 화면에서는 Space가 곧 시작/재도전 버튼이다.
+  // 모달이 열리자마자 판이 도는 게 아니라, 마음의 준비를 하고 Space로 연다.
   useEffect(() => {
+    if (started && status !== "lost") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      e.preventDefault(); // 페이지 스크롤 방지
+      if (!started) setStarted(true);
+      else retry();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [started, status, retry]);
+
+  useEffect(() => {
+    if (!started) return; // 아직 대기 화면 — Space로 시작하면 그때 판을 돈다
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -123,7 +142,7 @@ export default function ArcadeHost({
       window.removeEventListener("keyup", onUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [def, run]);
+  }, [def, run, started]);
 
   return (
     <div className="flex flex-col items-center">
@@ -152,7 +171,18 @@ export default function ArcadeHost({
           style={{ aspectRatio: `${ARCADE_W} / ${ARCADE_H}`, imageRendering: "pixelated" }}
         />
 
-        {status !== "playing" && (
+        {/* 시작 대기 화면 — Space를 눌러야 판이 돈다 */}
+        {!started && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/75 backdrop-blur-[2px]">
+            <p className="text-2xl font-black tracking-widest text-emerald-400">READY</p>
+            <p className="animate-pulse text-sm font-semibold text-slate-200">
+              <kbd className="rounded border border-white/25 bg-white/10 px-2 py-0.5 font-mono">Space</kbd>
+              {" "}눌러 시작
+            </p>
+          </div>
+        )}
+
+        {started && status !== "playing" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/75 backdrop-blur-[2px]">
             {status === "won" ? (
               <>
@@ -165,6 +195,10 @@ export default function ArcadeHost({
               <>
                 <p className="text-2xl font-black tracking-widest text-rose-400">
                   GAME OVER
+                </p>
+                <p className="animate-pulse text-sm font-semibold text-slate-200">
+                  <kbd className="rounded border border-white/25 bg-white/10 px-2 py-0.5 font-mono">Space</kbd>
+                  {" "}눌러 다시 도전
                 </p>
                 <button
                   onClick={retry}

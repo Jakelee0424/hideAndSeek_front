@@ -103,6 +103,16 @@ export const worldState = {
     return sampleBuffer(buffers.get(id), renderTime);
   },
 
+  /**
+   * id의 최신 표본 수신 시각(performance.now 기준). 버퍼가 없으면 null.
+   * 로컬 플레이어의 desync 가드가 "이 표본이 낡지 않았는가"를 판단하는 데 쓴다 —
+   * sample()은 스냅샷이 끊겨도 마지막 표본으로 고정해 돌려주므로, 신선도는 따로 봐야 한다.
+   */
+  latestSampleAt(id: string): number | null {
+    const buf = buffers.get(id);
+    return buf && buf.length > 0 ? buf[buf.length - 1].t : null;
+  },
+
   /** 버퍼에 있는 플레이어 id들(로컬 플레이어의 대인 충돌 예측이 순회한다). */
   ids(): IterableIterator<string> {
     return buffers.keys();
