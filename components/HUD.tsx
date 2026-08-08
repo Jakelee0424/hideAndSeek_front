@@ -85,7 +85,7 @@ export default function HUD() {
       {/* 짧은 안내 토스트(PhaseBanner 아래). 지금은 "내 퍼즐을 남이 먼저 풀었다". */}
       <Notice />
 
-      {/* 맵 개요 미니맵 + 내 위치 (상단 우측, M키로 접기) */}
+      {/* 맵 개요 미니맵 + 내 위치 (상단 우측, M키를 누르고 있으면 확대) */}
       <Minimap />
 
       {/* 좌하단 안내: 감정표현 단축키 박스를 조작 안내 박스 위에 쌓는다. */}
@@ -107,8 +107,8 @@ export default function HUD() {
         <div className="rounded-lg bg-black/40 px-3 py-2 text-xs text-slate-300 backdrop-blur">
           이동 <kbd className="font-mono">W A S D</kbd> · 달리기{" "}
           <kbd className="font-mono">Shift</kbd> · 상호작용{" "}
-          <kbd className="font-mono">E</kbd> · 지도{" "}
-          <kbd className="font-mono">M</kbd> · 이야기{" "}
+          <kbd className="font-mono">E</kbd> · 지도 확대{" "}
+          <kbd className="font-mono">M</kbd>(길게) · 이야기{" "}
           <kbd className="font-mono">B</kbd> · 도움말{" "}
           <kbd className="font-mono">H</kbd>
         </div>

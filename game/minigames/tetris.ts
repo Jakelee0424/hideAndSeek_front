@@ -173,8 +173,10 @@ export function createTetris(): ArcadeGame {
       if (state !== "playing") return;
       if (flash > 0) flash -= dt;
 
-      // 좌우: 처음 누르면 즉시 한 칸, 계속 누르면 DAS 뒤 빠르게 반복
-      const dir = (held.has("ArrowRight") ? 1 : 0) - (held.has("ArrowLeft") ? 1 : 0);
+      // 좌우: 처음 누르면 즉시 한 칸, 계속 누르면 DAS 뒤 빠르게 반복. 방향키·WASD 둘 다.
+      const right = held.has("ArrowRight") || held.has("KeyD");
+      const left = held.has("ArrowLeft") || held.has("KeyA");
+      const dir = (right ? 1 : 0) - (left ? 1 : 0);
       if (dir !== moveDir) {
         moveDir = dir;
         moveAcc = 0;
@@ -189,7 +191,7 @@ export function createTetris(): ArcadeGame {
         }
       }
 
-      if (tapped.has("ArrowUp") || tapped.has("KeyX")) rotate();
+      if (tapped.has("ArrowUp") || tapped.has("KeyX") || tapped.has("KeyW")) rotate();
 
       // 하드드롭: 바닥까지 내리고 바로 굳힌다
       if (tapped.has("Space")) {
@@ -201,7 +203,7 @@ export function createTetris(): ArcadeGame {
         return;
       }
 
-      const interval = held.has("ArrowDown")
+      const interval = held.has("ArrowDown") || held.has("KeyS")
         ? SOFT_DROP_MS
         : Math.max(FALL_MIN_MS, FALL_MS - lines * FALL_STEP_MS);
       fallAcc += dt * 1000;
@@ -298,6 +300,6 @@ export const tetrisDef = {
   id: "tetris",
   name: "테트리스",
   goal: "4줄을 지워라",
-  controls: "← → 이동 · ↑ 회전 · ↓ 빨리 · Space 즉시 낙하",
+  controls: "← → / A D 이동 · ↑ / W 회전 · ↓ / S 빨리 · Space 즉시 낙하",
   create: createTetris,
 };

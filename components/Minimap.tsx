@@ -15,52 +15,75 @@ import { FLOORS, WALL_BOXES, GATE, FLOOR2_Y } from "@/game/prisonLayout";
 // 맵 월드 경계(외벽 바깥 사각). perimeter rect와 동일.
 const X0 = -42, X1 = 42, Z0 = -30, Z1 = 30;
 const PAD = 5; // 캔버스 안쪽 여백(px) — 가장자리 벽이 잘리지 않게
-const CSS_W = 176; // 표시 폭(px). 높이는 맵 종횡비(84:60)로 파생
-const CSS_H = Math.round((CSS_W * (Z1 - Z0)) / (X1 - X0)); // ≈126
+// 표시 폭(px). 높이는 맵 종횡비(84:60)로 파생.
+// 평소엔 작게, M을 누르고 있는 동안엔 크게 그린다.
+const NORMAL_W = 176;
+const ENLARGED_W = 620;
+const aspectH = (w: number) => Math.round((w * (Z1 - Z0)) / (X1 - X0));
 
 export default function Minimap() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [visible, setVisible] = useState(true);
+  const [enlarged, setEnlarged] = useState(false);
   const [onFloor2, setOnFloor2] = useState(false);
 
-  // M키로 접기/펴기(시야를 가릴 때 끌 수 있게). 채팅 입력 중에는 무시.
+  // M을 누르고 있는 동안만 확대. 떼면 원래 크기. 채팅 입력 중에는 무시.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "KeyM") return;
-      if ((e.target as HTMLElement)?.tagName === "INPUT") return;
-      setVisible((v) => !v);
+    const isTyping = (el: EventTarget | null) => {
+      const tag = (el as HTMLElement)?.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA";
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const onDown = (e: KeyboardEvent) => {
+      if (e.code !== "KeyM" || e.repeat) return;
+      if (isTyping(e.target)) return;
+      setEnlarged(true);
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code !== "KeyM") return;
+      setEnlarged(false);
+    };
+    // 키를 누른 채 창이 포커스를 잃으면 keyup이 안 온다 → 확대가 굳는다. 포커스 잃으면 원복.
+    const reset = () => setEnlarged(false);
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", reset);
+    };
   }, []);
 
   useEffect(() => {
-    if (!visible) return;
+    const cssW = enlarged ? ENLARGED_W : NORMAL_W;
+    const cssH = aspectH(cssW);
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = CSS_W * dpr;
-    canvas.height = CSS_H * dpr;
+    canvas.width = cssW * dpr;
+    canvas.height = cssH * dpr;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
     // 월드(x,z) → 캔버스(px). z+ = 북 = 화면 위, 동(-x) = 화면 오른쪽.
     // three.js 좌표계에선 +Z를 위로 놓으면 +X가 서쪽이라, x축을 뒤집어야 실제 방위(동=오른쪽)와 맞는다.
-    const iw = CSS_W - 2 * PAD;
-    const ih = CSS_H - 2 * PAD;
+    const iw = cssW - 2 * PAD;
+    const ih = cssH - 2 * PAD;
     const sx = (x: number) => PAD + ((X1 - x) / (X1 - X0)) * iw;
     const sy = (z: number) => PAD + ((Z1 - z) / (Z1 - Z0)) * ih;
     const scaleX = iw / (X1 - X0);
     const scaleZ = ih / (Z1 - Z0);
+    // 확대 시 점·화살표도 함께 키워 잘 보이게.
+    const dot = enlarged ? 4.5 : 2.4;
+    const arrow = enlarged ? 2.4 : 1;
 
     // ── 정적 레이어(도면)를 오프스크린에 1회 렌더 ──
     const bg = document.createElement("canvas");
-    bg.width = CSS_W;
-    bg.height = CSS_H;
+    bg.width = cssW;
+    bg.height = cssH;
     const b = bg.getContext("2d")!;
     b.fillStyle = "#0b0e14"; // 맵 밖(어두운 바탕)
-    b.fillRect(0, 0, CSS_W, CSS_H);
+    b.fillRect(0, 0, cssW, cssH);
     // 방 바닥(각자의 색을 옅게). 배열 순서대로 — 연병장은 남쪽이라 방과 겹치지 않는다.
     for (const f of FLOORS) {
       const { x0, z0, x1, z1 } = f.rect;
@@ -89,7 +112,7 @@ export default function Minimap() {
     let raf = 0;
     const draw = () => {
       raf = requestAnimationFrame(draw);
-      ctx.clearRect(0, 0, CSS_W, CSS_H);
+      ctx.clearRect(0, 0, cssW, cssH);
       ctx.drawImage(bg, 0, 0);
 
       // 다른 플레이어(정체는 숨김 — 무채색 점만). 봇도 일반 플레이어로 섞여 보인다.
@@ -101,7 +124,7 @@ export default function Minimap() {
         const t = worldState.sample(id, renderTime);
         if (!t) continue;
         ctx.beginPath();
-        ctx.arc(sx(t.x), sy(t.z), 2.4, 0, Math.PI * 2);
+        ctx.arc(sx(t.x), sy(t.z), dot, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -110,11 +133,13 @@ export default function Minimap() {
       const my = sy(localPos.z);
       const dx = Math.sin(localPos.rot);
       const dz = Math.cos(localPos.rot);
+      const tip = 6 * arrow;
+      const side = 3.2 * arrow;
       ctx.fillStyle = "#38bdf8";
       ctx.beginPath();
-      ctx.moveTo(mx - dx * 6, my - dz * 6); // 앞끝
-      ctx.lineTo(mx + dz * 3.2, my - dx * 3.2); // 좌
-      ctx.lineTo(mx - dz * 3.2, my + dx * 3.2); // 우
+      ctx.moveTo(mx - dx * tip, my - dz * tip); // 앞끝
+      ctx.lineTo(mx + dz * side, my - dx * side); // 좌
+      ctx.lineTo(mx - dz * side, my + dx * side); // 우
       ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = "rgba(0,0,0,0.55)";
@@ -126,21 +151,23 @@ export default function Minimap() {
     };
     draw();
     return () => cancelAnimationFrame(raf);
-  }, [visible]);
+  }, [enlarged]);
 
-  if (!visible) {
-    return (
-      <div className="absolute right-4 top-16 rounded-md bg-black/40 px-2 py-1 text-[11px] text-slate-400 backdrop-blur">
-        <kbd className="font-mono">M</kbd> 지도
-      </div>
-    );
-  }
+  const cssW = enlarged ? ENLARGED_W : NORMAL_W;
+  const cssH = aspectH(cssW);
 
   return (
-    <div className="absolute right-4 top-16 rounded-lg border border-white/10 bg-black/40 p-1.5 backdrop-blur">
+    <div
+      className={
+        // 우상단 모서리를 고정한 채 그 자리에서 커진다(왼쪽·아래로 확장).
+        enlarged
+          ? "absolute right-4 top-16 z-10 rounded-lg border border-white/10 bg-black/60 p-2 backdrop-blur"
+          : "absolute right-4 top-16 rounded-lg border border-white/10 bg-black/40 p-1.5 backdrop-blur"
+      }
+    >
       <canvas
         ref={canvasRef}
-        style={{ width: CSS_W, height: CSS_H }}
+        style={{ width: cssW, height: cssH }}
         className="block rounded"
       />
       <div className="pointer-events-none absolute left-2.5 top-2.5 text-[10px] font-semibold text-white/60">
@@ -149,6 +176,11 @@ export default function Minimap() {
       {onFloor2 && (
         <div className="pointer-events-none absolute right-2.5 top-2.5 rounded bg-sky-500/70 px-1 text-[10px] font-semibold text-white">
           2층
+        </div>
+      )}
+      {!enlarged && (
+        <div className="pointer-events-none absolute bottom-1 right-1.5 text-[9px] text-white/45">
+          <kbd className="font-mono">M</kbd> 확대
         </div>
       )}
     </div>
