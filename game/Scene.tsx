@@ -1,6 +1,7 @@
 "use client";
 import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
+import { Preload } from "@react-three/drei";
 import * as THREE from "three";
 import GameMap from "./Map";
 import LocalPlayer from "./LocalPlayer";
@@ -9,6 +10,7 @@ import StampCallouts from "./StampCallouts";
 import PatrolLight from "./PatrolLight";
 import PatrolGuards from "./PatrolGuards";
 import SceneEnvironment from "./SceneEnvironment";
+import { PerfProbe } from "@/components/PerfStats";
 
 // 조명은 밝은 기본값(2026-07-23 밤 톤 실험은 "너무 어둡다"로 롤백). 순찰 연출(PatrolLight)과
 // 단서 발광·비네트는 조명과 무관해 그대로 둔다.
@@ -91,6 +93,17 @@ export default function Scene() {
 
       {/* 표식 발견 말풍선 — 풀린 표식 퀴즈 아이템 머리 위에 몇 초간 깜빡인다 */}
       <StampCallouts />
+
+      {/* 성능 계기판 수집부(F3로 화면 표시). 아무것도 그리지 않는다. */}
+      <PerfProbe />
+
+      {/* ⚠️ 셰이더를 시작할 때 한 번에 컴파일해 둔다.
+          three는 재질을 **처음 화면에 그리는 순간** 컴파일하는데, 그 컴파일은 GPU 드라이버에서
+          동기로 일어나 그 프레임이 통째로 멈춘다(재질 하나에 수십 ms). 이 씬은 재질이 40종쯤
+          되고 방마다 다른 것을 쓰므로, 지금까지는 **새 구역에 처음 들어설 때마다 한 번씩 튀었다**
+          — "프레임이 갑자기 드랍된다"는 신고 중 평균 FPS는 멀쩡한데 순간만 멈추는 쪽이 이것이다.
+          Preload가 로딩 단계에서 미리 다 컴파일해 그 정지를 게임 밖으로 옮긴다. */}
+      <Preload all />
     </Canvas>
   );
 }

@@ -824,19 +824,31 @@ function YardWeeds() {
     addRun(-29, 4.5, 41.4, "z");
     return out;
   }, []);
+  // ⚠️ 잎 하나하나를 <mesh>로 두면 **잎 수만큼 드로우콜**이다(실측 134개, 그림자까지 268번).
+  //    담장 밑 3cm짜리 풀에 그만한 값을 치를 이유가 없어 인스턴싱으로 묶었다 — 드로우콜 1.
+  //    높이가 제각각인 건 단위 원뿔(높이 1)을 인스턴스 scale.y로 늘려 살린다.
+  //    (덤불 group의 scale은 균등 배율이라 회전과 교환 가능 → 위치·크기에 미리 곱해 둬도 같다.)
+  //    그림자는 그대로 둔다 — 인스턴싱한 뒤로는 전부 합쳐 드로우콜 하나라 값이 거의 안 든다.
+  const blades = useMemo(
+    () =>
+      clumps.flatMap((c) =>
+        c.blades.map((b) => ({
+          pos: [c.x + b.dx * c.sc, (b.h * c.sc) / 2, c.z + b.dz * c.sc] as [number, number, number],
+          rot: [b.tx, b.ry, b.tz] as [number, number, number],
+          scale: [c.sc, b.h * c.sc, c.sc] as [number, number, number],
+          c: b.c,
+        })),
+      ),
+    [clumps],
+  );
   return (
-    <group>
-      {clumps.map((c, i) => (
-        <group key={i} position={[c.x, 0, c.z]} scale={c.sc}>
-          {c.blades.map((b, j) => (
-            <mesh key={j} position={[b.dx, b.h / 2, b.dz]} rotation={[b.tx, b.ry, b.tz]} castShadow>
-              <coneGeometry args={[0.03, b.h, 5]} />
-              <meshStandardMaterial color={b.c} roughness={0.9} flatShading />
-            </mesh>
-          ))}
-        </group>
+    <Instances limit={256} range={blades.length} castShadow>
+      <coneGeometry args={[0.03, 1, 5]} />
+      <meshStandardMaterial roughness={0.9} flatShading />
+      {blades.map((b, i) => (
+        <Instance key={i} position={b.pos} rotation={b.rot} scale={b.scale} color={b.c} />
       ))}
-    </group>
+    </Instances>
   );
 }
 

@@ -350,9 +350,11 @@ function LockProp({ id, emissive, glow }: { id: string; emissive: string; glow: 
 }
 
 export default function Interactable({ data }: { data: InteractableData }) {
-  const nearId = useInteraction((s) => s.nearId);
+  // ⚠️ `s.nearId`를 그대로 구독하면 근접 대상이 바뀔 때마다 **오브젝트 전부(24개)가** 리렌더된다
+  //    — 각자 프리팹·발광 트리를 다시 만든다. 오브젝트 옆을 지날 때마다 프레임이 튀던 원인이다.
+  //    불리언으로 좁히면 실제로 값이 바뀐 둘(떠난 것·닿은 것)만 리렌더된다.
+  const near = useInteraction((s) => s.nearId === data.id);
   const solved = useInteraction((s) => s.solved[data.id] ?? false);
-  const near = nearId === data.id;
 
   const isLock = data.type === "lockbox";
   // 프리팹 자물쇠가 바라볼 방향. 데이터에 yaw가 있으면 그걸 쓰고, 없으면 벽을 등지도록

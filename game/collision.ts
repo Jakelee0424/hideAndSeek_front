@@ -28,6 +28,39 @@ interface Box {
   hz: number;
 }
 
+const inBounds = (x: number, z: number) =>
+  x >= -BOUND_X && x <= BOUND_X && z >= -BOUND_Z && z <= BOUND_Z;
+
+/**
+ * 맵 안에 남는 출구로 내보낸다. 네 면(±x·±z) 중 경계를 안 넘는 것 가운데 가장 가까운 쪽.
+ *
+ * ⚠️ 왜 필요한가 — **담장에 박힌 소품 뒤에는 반지름만큼의 여유가 담장 밖에만 있다.**
+ * 연병장 벤치 셋(남벽 둘 · 서벽 하나)이 그렇다: 벤치와 담장 사이로 밀린 원은 가장 가까운
+ * 면 기준으로 경계 밖(예: z −29.95, 경계는 −29.6)으로 나가는데, 다음 프레임의 경계 clamp가
+ * 그 자리를 도로 벤치 안으로 집어넣는다 → **밀림 ↔ clamp 무한 왕복**. 그동안 플레이어는
+ * 그 방향으로 한 발도 못 나간다("연병장에서 갇혀 이동이 안 된다"의 정체).
+ * 맵 전수 검사에서 이렇게 경계 밖으로 밀리는 칸은 **연병장 벤치 세 곳(397칸)뿐**이었다.
+ */
+function exitInBounds(x: number, z: number, b: Box, r: number): [number, number] {
+  let best: [number, number] | null = null;
+  let bestD = Infinity;
+  const cands: [number, number][] = [
+    [b.cx + b.hx + r, z],
+    [b.cx - b.hx - r, z],
+    [x, b.cz + b.hz + r],
+    [x, b.cz - b.hz - r],
+  ];
+  for (const c of cands) {
+    if (!inBounds(c[0], c[1])) continue;
+    const d = Math.hypot(c[0] - x, c[1] - z);
+    if (d < bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return best ?? [x, z]; // 어느 쪽도 맵 안이 아니면(이론상 없음) 그대로 둔다
+}
+
 // 원(반경 r)을 AABB 박스 밖으로 밀어낸다.
 function pushOut(x: number, z: number, b: Box, r: number): [number, number] {
   const nx = clamp(x, b.cx - b.hx, b.cx + b.hx);
@@ -36,16 +69,27 @@ function pushOut(x: number, z: number, b: Box, r: number): [number, number] {
   const dz = z - nz;
   const d2 = dx * dx + dz * dz;
   if (d2 >= r * r) return [x, z];
+  let px: number;
+  let pz: number;
   if (d2 > 1e-8) {
     const d = Math.sqrt(d2);
     const push = (r - d) / d;
-    return [x + dx * push, z + dz * push];
+    px = x + dx * push;
+    pz = z + dz * push;
+  } else {
+    // 중심이 박스 내부: 침투가 작은 축으로 밀어냄
+    const penX = b.hx + r - Math.abs(x - b.cx);
+    const penZ = b.hz + r - Math.abs(z - b.cz);
+    if (penX < penZ) {
+      px = x + Math.sign(x - b.cx) * penX;
+      pz = z;
+    } else {
+      px = x;
+      pz = z + Math.sign(z - b.cz) * penZ;
+    }
   }
-  // 중심이 박스 내부: 침투가 작은 축으로 밀어냄
-  const penX = b.hx + r - Math.abs(x - b.cx);
-  const penZ = b.hz + r - Math.abs(z - b.cz);
-  if (penX < penZ) return [x + Math.sign(x - b.cx) * penX, z];
-  return [x, z + Math.sign(z - b.cz) * penZ];
+  // 밀어낸 자리가 맵 밖이면 그쪽으로 내보내지 않는다(위 exitInBounds 주석 참고).
+  return inBounds(px, pz) ? [px, pz] : exitInBounds(x, z, b, r);
 }
 
 /**

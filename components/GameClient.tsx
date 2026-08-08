@@ -10,6 +10,7 @@ import EndingOverlay from "./EndingOverlay";
 import EscapeOverlay from "./EscapeOverlay";
 import HUD from "./HUD";
 import PatrolOverlay from "./PatrolOverlay";
+import PerfStats from "./PerfStats";
 import PuzzleOverlay from "./PuzzleOverlay";
 import Vignette from "./Vignette";
 import VoteOverlay from "./VoteOverlay";
@@ -65,6 +66,8 @@ export default function GameClient({ roomId }: { roomId: string }) {
         <EmoteControls />
         {/* 엔딩은 전부를 덮는다(z-40). 한 판의 마지막 화면이라 뒤가 보일 이유가 없다. */}
         <EndingOverlay />
+        {/* 성능 계기판(F3). 기본 꺼짐 — 프레임 드랍 신고를 숫자로 확인할 때만 켠다. */}
+        <PerfStats />
       </main>
     </WebGLGuard>
   );

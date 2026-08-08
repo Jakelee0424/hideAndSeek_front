@@ -78,6 +78,20 @@ const CAM_MIN = 0.4; // 카메라 최소 거리(등 뒤가 바로 벽이면 준1
 const CAM_BODY_HIDE = 1.2;
 const INPUT_HZ = 20;
 
+// ── 프레임 히치에도 벽을 뚫지 않게 ────────────────────────────────
+// 원-AABB 밀어내기는 "이번 프레임 도착점"만 본다 — 출발점과 도착점 사이는 보지 않는다.
+// 그래서 한 프레임이 길어지면(GC·탭 전환·에셋 로드로 인한 히치, 또는 그냥 낮은 FPS)
+// 이동 거리가 벽 두께(0.4m)를 넘어 **통째로 관통**한다. 관통한 뒤엔 밀어내기가 "가장 얕은
+// 면"으로 뱉으므로 엉뚱한 쪽 — 잠긴 방 안, 소품 뒤 좁은 틈 — 으로 튀어나오고,
+// 그 자리에서 서버와 어긋난 채 desync 가드가 8m를 채워 스냅할 때까지 **이동이 막힌다**.
+// (실측: 걷기 6m/s라도 0.25s 히치면 담장을 뚫었다. 달리기는 10 FPS만 돼도 뚫는다.)
+//
+// → ① dt 자체에 상한을 두고 ② 그 안에서도 이동을 짧은 조각으로 나눠 조각마다 충돌을 푼다.
+// ⚠️ 상한을 두면 히치 동안 서버보다 덜 움직인 셈이 되지만, 그 격차는 desync 가드의
+//    부드러운 끌어붙이기(DESYNC_PULL_M~)가 메운다 — 관통해서 갇히는 쪽이 훨씬 나쁘다.
+const MAX_DT = 0.1; // 프레임 시간 상한(s). 이보다 긴 프레임은 0.1초로 친다
+const MAX_STEP_M = 0.18; // 한 조각의 최대 이동 거리(m). 가장 얇은 벽(0.4m)의 절반 이하
+
 // 소음 게이지(0~100): 달리면 차오르고, 안 달리면(걷기·정지) 0으로 빠진다.
 const NOISE_MAX = 100;
 const NOISE_RISE = 40; // 달릴 때 초당 상승량 → 0→100 약 2.5초
@@ -172,9 +186,11 @@ export default function LocalPlayer() {
     return () => window.removeEventListener("mousedown", onDown);
   }, []);
 
-  useFrame((state, dt) => {
+  useFrame((state, rawDt) => {
     const g = ref.current;
     if (!g) return;
+    // 히치가 난 프레임을 그대로 적분하면 벽을 관통한다(위 MAX_DT 주석).
+    const dt = Math.min(rawDt, MAX_DT);
 
     // 서버 권위 반영. 첫 스냅샷에서 배정 감방으로 스냅하고(예측은 그 뒤 이어받는다),
     // 그 뒤로도 너무 벌어지면 되돌린다 — 예전엔 첫 1회뿐이라 한 번 어긋나면 영영 어긋났다.
@@ -283,25 +299,50 @@ export default function LocalPlayer() {
     }
     const knocked = kx.current !== 0 || kz.current !== 0;
 
+    // 이번 프레임의 XZ 변위를 이동·넉백에서 한 번에 모은다(아래에서 조각내 적용).
+    let stepX = 0;
+    let stepZ = 0;
     if (moving) {
       mx /= len;
       mz /= len;
       const speed = sprinting ? SPEED * SPRINT_MULT : SPEED;
-      g.position.x += mx * speed * dt;
-      g.position.z += mz * speed * dt;
+      stepX += mx * speed * dt;
+      stepZ += mz * speed * dt;
       g.rotation.y = Math.atan2(mx, mz); // 캐릭터는 이동 방향을 바라봄
     }
 
     // 넉백 적분 + 지수 감쇠(서버 Room.tick과 동일 식 → 결정론적 복제). 아주 작아지면 0으로 끊는다.
     if (knocked) {
-      g.position.x += kx.current * dt;
-      g.position.z += kz.current * dt;
+      stepX += kx.current * dt;
+      stepZ += kz.current * dt;
       const decay = Math.exp(-dt / KNOCKBACK_TAU);
       kx.current *= decay;
       kz.current *= decay;
       if (Math.abs(kx.current) < 0.01 && Math.abs(kz.current) < 0.01) {
         kx.current = 0;
         kz.current = 0;
+      }
+    }
+
+    // 벽/소품 충돌 해석(서버와 동일 로직). 미션을 푼 방의 감방문은 통과.
+    // 충돌은 XZ 밀어내기 + 발높이 층 판정 — 점프해도 장애물은 못 넘는다(서버 Room.tick과 같은 규약).
+    // ⚠️ 이동을 MAX_STEP_M 이하 조각으로 나눠 **조각마다** 푼다 — 한 번에 밀어 넣으면
+    //    긴 프레임에서 벽을 관통한다(위 MAX_STEP_M 주석).
+    const st = useInteraction.getState();
+    const openDoors = openDoorsFromSolved(st.solved);
+    // 자유 토글 문(철창 게이트)은 solved 파생이 아니라 서버 openDoors가 권위 — 병합한다.
+    // (openDoorsFromSolved는 매 프레임 재사용 객체라 게이트 키를 명시적으로 덮어써야 한다.)
+    openDoors[CELLBLOCK_GATE.id] = !!st.serverDoors[CELLBLOCK_GATE.id];
+    openDoors[ENTRANCE_GATE.id] = !!st.serverDoors[ENTRANCE_GATE.id];
+    {
+      const dist = Math.hypot(stepX, stepZ);
+      const n = Math.max(1, Math.ceil(dist / MAX_STEP_M));
+      for (let i = 0; i < n; i++) {
+        g.position.x += stepX / n;
+        g.position.z += stepZ / n;
+        const [sx, sz] = resolveCollision(g.position.x, g.position.z, g.position.y, openDoors);
+        g.position.x = sx;
+        g.position.z = sz;
       }
     }
 
@@ -318,15 +359,8 @@ export default function LocalPlayer() {
       g.position.z = pz;
     }
 
-    // 벽/소품 충돌 해석(서버와 동일 로직). 미션을 푼 방의 감방문은 통과.
-    // 충돌은 XZ 밀어내기 + 발높이 층 판정 — 점프해도 장애물은 못 넘는다(서버 Room.tick과 같은 규약).
+    // 사람끼리 밀어낸 결과가 벽 안일 수 있으니 한 번 더 푼다(위 조각 루프와 같은 openDoors).
     {
-      const st = useInteraction.getState();
-      const openDoors = openDoorsFromSolved(st.solved);
-      // 자유 토글 문(철창 게이트)은 solved 파생이 아니라 서버 openDoors가 권위 — 병합한다.
-      // (openDoorsFromSolved는 매 프레임 재사용 객체라 게이트 키를 명시적으로 덮어써야 한다.)
-      openDoors[CELLBLOCK_GATE.id] = !!st.serverDoors[CELLBLOCK_GATE.id];
-      openDoors[ENTRANCE_GATE.id] = !!st.serverDoors[ENTRANCE_GATE.id];
       const [rx, rz] = resolveCollision(g.position.x, g.position.z, g.position.y, openDoors);
       g.position.x = rx;
       g.position.z = rz;
