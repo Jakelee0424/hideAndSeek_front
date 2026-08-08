@@ -166,8 +166,13 @@ export function resolveCollision(
 
 /**
  * 플레이어끼리의 원-원 충돌: (x,z)를 상대(ox,oz) 밖으로 민다. 층이 다르면(발높이 차가 크면)
- * 호출부에서 거른다. 서버 Room.tick의 플레이어 충돌과 같은 규약 — 서버는 둘을 반씩 밀지만
- * 클라 예측은 내 쪽만 민다(상대는 보간 재생이라 어차피 서버 좌표를 따른다).
+ * 호출부에서 거른다. 서버 Room.resolvePlayerOverlaps와 같은 규약 — 겹침의 **절반**만 민다.
+ *
+ * ⚠️ 예전엔 내 쪽을 전체(min)만큼 밀었다("상대는 보간 재생이라 서버 좌표를 따른다"는 논리).
+ *    하지만 서버는 나를 절반만 밀고(나머지 절반은 상대를 민다) 상대는 그 결과 좌표로 보간돼
+ *    온다. 그래서 내 쪽을 전체로 밀면 서버보다 **2배** 밀려나, 봇이 나를 벽으로 밀 때
+ *    (과밀림 ↔ 벽 되밀림)이 반복돼 제자리에서 뛰다가 desync 가드가 8m를 채워 봇 자리로
+ *    순간이동했다. 서버와 같은 절반 밀기로 맞추면 예측이 서버 권위값과 수렴한다.
  */
 export function pushOutOfPlayer(
   x: number,
@@ -182,7 +187,8 @@ export function pushOutOfPlayer(
   if (d2 >= min * min) return [x, z];
   if (d2 > 1e-8) {
     const d = Math.sqrt(d2);
-    return [ox + (dx / d) * min, oz + (dz / d) * min];
+    const push = (min - d) / 2; // 서버와 동일: 겹침의 절반만
+    return [x + (dx / d) * push, z + (dz / d) * push];
   }
-  return [x + min, z]; // 완전히 겹침: 아무 방향으로나
+  return [x + min / 2, z]; // 완전히 겹침: 아무 방향으로나(절반)
 }

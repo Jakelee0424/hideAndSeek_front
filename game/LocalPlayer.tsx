@@ -101,6 +101,29 @@ const NOISE_HZ = 15; // 게이지 표시 갱신 주기(매 프레임 setState �
 const _camDesired = new THREE.Vector3();
 const _lookAt = new THREE.Vector3();
 
+// 내 예측 위치 히스토리 보관 상한(ms). 서버 표본 시각(스냅샷 지연 ≤ INTERP+지터)을 되짚기
+// 충분하면 된다. 매 프레임 한 점씩 쌓고 이보다 오래된 건 버린다(최소 2개는 남긴다).
+const POS_HIST_MS = 600;
+interface PosSample { t: number; x: number; z: number }
+
+/** 히스토리에서 시각 t의 예측 위치를 선형 보간. 범위 밖이면 양 끝으로 고정. 비었으면 null. */
+function samplePosHist(hist: PosSample[], t: number): PosSample | null {
+  if (hist.length === 0) return null;
+  if (t <= hist[0].t) return hist[0];
+  const last = hist[hist.length - 1];
+  if (t >= last.t) return last;
+  for (let i = 0; i < hist.length - 1; i++) {
+    const a = hist[i];
+    const b = hist[i + 1];
+    if (t >= a.t && t <= b.t) {
+      const span = b.t - a.t;
+      const al = span > 0 ? (t - a.t) / span : 0;
+      return { t, x: a.x + (b.x - a.x) * al, z: a.z + (b.z - a.z) * al };
+    }
+  }
+  return last;
+}
+
 export default function LocalPlayer() {
   const ref = useRef<THREE.Group>(null);
   const keys = useKeyboard();
@@ -125,6 +148,7 @@ export default function LocalPlayer() {
   const [emote, setEmote] = useState<EmoteId | null>(null); // 내 머리 위 감정표현
   const spawned = useRef(false); // 첫 서버 스냅샷 때 배정된 감방 위치로 스냅
   const desyncSince = useRef(0); // 서버와 벌어지기 시작한 시각(초, clock 기준). 0이면 정상
+  const posHist = useRef<PosSample[]>([]); // 내 예측 위치 히스토리(desync를 시각 맞춰 비교하려고)
   // 프론트 단독 실행 시 초기 위치: 랜덤 감방 안. 서버 연결 시 첫 스냅샷이 덮어쓴다.
   const initPos = useMemo(() => {
     const [x, z] = randomCellSpawn();
@@ -196,13 +220,15 @@ export default function LocalPlayer() {
     // 그 뒤로도 너무 벌어지면 되돌린다 — 예전엔 첫 1회뿐이라 한 번 어긋나면 영영 어긋났다.
     {
       const myId = useGameStore.getState().myId;
-      // 최신 표본으로 본다(보간 지연을 빼면 내 예측이 늘 그만큼 앞서 보여 오차가 부풀려진다).
+      // ⚠️ 서버 표본을 **그 표본의 수신 시각**으로 본다(nowMs가 아니라). sample()은 최신 시각
+      //    이후엔 마지막 스냅샷으로 고정하므로, 현재 예측 위치와 nowMs 표본을 비교하면
+      //    **정상적인 client-side prediction 리드(스냅샷 지연만큼 늘 앞선다)가 오차로 잡혀**
+      //    끌어붙이기가 상시 작동한다 — 달릴 때 비스듬히 걸리고 멈추면 혼자 미끄러지는 정체.
+      //    그래서 "그 스냅샷 시각에 내가 예측했던 위치"(posHist)와 비교해 리드를 상쇄한다.
+      const lastAt = myId ? worldState.latestSampleAt(myId) : null;
       const nowMs = performance.now();
-      const t = myId ? worldState.sample(myId, nowMs) : null;
-      // 신선도: 표본이 낡았으면(스냅샷 정체) 과거 좌표와 비교하는 꼴이라 판정을 쉰다.
-      const fresh =
-        myId != null &&
-        (worldState.latestSampleAt(myId) ?? -Infinity) >= nowMs - DESYNC_FRESH_MS;
+      const fresh = lastAt != null && lastAt >= nowMs - DESYNC_FRESH_MS;
+      const t = lastAt != null ? worldState.sample(myId!, lastAt) : null;
       if (t) {
         let snap = false;
         if (!spawned.current) {
@@ -211,8 +237,12 @@ export default function LocalPlayer() {
         } else if (!fresh) {
           desyncSince.current = 0; // 낡은 표본으로 잰 격차는 증거가 아니다
         } else {
-          const dx = g.position.x - t.x;
-          const dz = g.position.z - t.z;
+          // 서버 표본 시각에 내가 예측했던 위치. 없으면(히스토리 부족) 현재 위치로 대체.
+          const past = samplePosHist(posHist.current, lastAt);
+          const refX = past ? past.x : g.position.x;
+          const refZ = past ? past.z : g.position.z;
+          const dx = refX - t.x; // 시각을 맞춘 진짜 오차(예측 리드 제거)
+          const dz = refZ - t.z;
           const d2 = dx * dx + dz * dz;
           if (d2 > DESYNC_SNAP_M * DESYNC_SNAP_M) {
             // 벌어진 상태가 이어질 때만 되돌린다. 이 유예는 순간적인 튐만 걸러 내고
@@ -222,7 +252,7 @@ export default function LocalPlayer() {
           } else {
             desyncSince.current = 0;
             // 중간 구간(3~8m): 하드 스냅 대신 서버 쪽으로 은근히 끌어붙여 격차를 메운다.
-            // 히치 한 번으로 생긴 지속 오프셋이 다음 히치에 8m를 넘겨 순간이동하는 것을 막는다.
+            // 오차 벡터는 시각을 맞춘 값이라 현재 위치에 그대로 빼도 유효하다(오프셋이 거의 일정).
             if (d2 > DESYNC_PULL_M * DESYNC_PULL_M) {
               const pull = 1 - Math.exp(-dt / DESYNC_PULL_TAU);
               g.position.x -= dx * pull;
@@ -239,6 +269,7 @@ export default function LocalPlayer() {
           vy.current = 0;
           kx.current = 0;
           kz.current = 0;
+          posHist.current.length = 0; // 스냅 뒤 낡은 히스토리로 다시 오차를 재지 않게 비운다
           // 서버가 배정한 감방으로 내 감방 기록을 확정한다(로컬 스폰 추정을 덮는다).
           const cell = cellIdAt(t.x, t.z);
           if (cell) useGameStore.getState().setMyCell(cell);
@@ -471,6 +502,15 @@ export default function LocalPlayer() {
     localPos.y = g.position.y;
     localPos.z = g.position.z;
     localPos.rot = g.rotation.y;
+
+    // 예측 위치 히스토리 기록(desync를 서버 표본 시각에 맞춰 비교하려고). 오래된 건 버린다.
+    {
+      const h = posHist.current;
+      const now = performance.now();
+      h.push({ t: now, x: g.position.x, z: g.position.z });
+      const cutoff = now - POS_HIST_MS;
+      while (h.length > 2 && h[0].t < cutoff) h.shift();
+    }
 
     // 근접 오브젝트 감지(사거리 내 최근접). 남의 감방 자물쇠는 후보에서 뺀다 —
     // 사거리만 보면 복도에서 창살 너머로 닿는다(canInteract 참고). 단 협동 구제가 열리면
