@@ -215,7 +215,7 @@ export const INTERACTABLES: Interactable[] = [
     type: "lockbox",
     position: [20.5, 0.9, 25.9], // 조리실 안 냉장고 앞(북끝 출입구로 들어가 닿는다. Map.CafeteriaDecor 냉장고와 같은 자리)
     label: "냉장고 잠금장치",
-    hint: "식단표로 반찬 1g당 칼로리를 구해 식판 실제량에 곱하고, 반찬 넷을 더하라. 간식은 뺀다.",
+    hint: "식단표로 반찬 1g당 칼로리를 구해 식판 실제량에 곱하고, 반찬 넷을 더하라. 간식은 계산에서 제외한다.",
     puzzle: { kind: "fridgecode" },
   },
 
