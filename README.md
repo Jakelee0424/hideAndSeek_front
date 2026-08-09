@@ -125,7 +125,7 @@ flowchart LR
 sequenceDiagram
     participant K as 키보드/마우스
     participant L as LocalPlayer
-    participant S as 서버 (20Hz tick)
+    participant S as 서버 · 20Hz tick
     participant R as RemotePlayers
 
     K->>L: 입력 (ref 플래그)
